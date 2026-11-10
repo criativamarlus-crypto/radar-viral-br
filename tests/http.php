@@ -471,6 +471,13 @@ try {
     $httpConfig['admin_password_hash'] = password_hash(bin2hex(random_bytes(20)), PASSWORD_DEFAULT);
     $writeHttpConfig();
     $revoked = localRequest('api.php?action=stats');
+    if ($revoked['status'] !== 401) {
+        echo "  diagnóstico (revogação): status={$revoked['status']} corpo=" . substr($revoked['body'], 0, 200) . "
+";
+        echo '  log do servidor: ' . substr(str_replace("
+", ' | ', trim((string)file_get_contents($httpRoot . '/server.log'))), -600) . "
+";
+    }
     check('changing the admin password revokes existing sessions', static fn(): bool => $revoked['status'] === 401);
     $httpConfig['admin_password_hash'] = password_hash($password, PASSWORD_DEFAULT);
     $writeHttpConfig();
@@ -480,7 +487,12 @@ try {
     $dashboardAgain = localRequest('');
     preg_match('/name="csrf-token" content="([a-f0-9]+)"/', $dashboardAgain['body'], $csrfAgainMatch);
     $logout = localRequest('logout.php', 'POST', formBody(['csrf' => $csrfAgainMatch[1] ?? '']), FORM);
-    check('valid POST logout destroys the authenticated session', static fn(): bool => $relogin['status'] === 303 && $logout['status'] === 303 && localRequest('api.php?action=stats')['status'] === 401);
+    $afterLogout = localRequest('api.php?action=stats');
+    if ($relogin['status'] !== 303 || $logout['status'] !== 303 || $afterLogout['status'] !== 401) {
+        echo "  diagnóstico (logout): relogin={$relogin['status']} dashboard={$dashboardAgain['status']} logout={$logout['status']} depois={$afterLogout['status']} corpoLogout=" . substr($logout['body'], 0, 160) . "
+";
+    }
+    check('valid POST logout destroys the authenticated session', static fn(): bool => $relogin['status'] === 303 && $logout['status'] === 303 && $afterLogout['status'] === 401);
     @unlink($httpRoot . '/storage/limits/' . hash('sha256', 'login:127.0.0.1') . '.json');
     $limitedLogin = localRequest('login.php');
     preg_match('/name="csrf" value="([a-f0-9]+)"/', $limitedLogin['body'], $limitedLoginMatch);
