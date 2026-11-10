@@ -4,15 +4,16 @@ Estado: workflow preparado, produção desativada por padrão. Os testes locais 
 
 ## Caminho rápido (primeira publicação)
 
-1. **No servidor**, como o usuário do site, num terminal: clone o repositório e rode **um comando**. Ele confere PHP e extensões, cria as pastas privadas, pede a senha do painel, autoriza a chave de deploy (sem encaminhamentos), agenda a coleta de 30 min e imprime um bloco sem segredos (usuário, caminho e impressão digital do servidor):
+1. **Chave de deploy:** no CloudPanel, *Sites > seu site > Settings > Site User Settings > SSH Keys*, cole a chave **pública** (`radar_deploy.pub`) e salve. É o CloudPanel que mantém o `authorized_keys` desse usuário.
+2. **Um comando do seu computador** (o `-t` permite digitar a senha do painel no servidor). Ele baixa o repositório, confere PHP e extensões, cria as pastas privadas em `~/htdocs/radar-viral-br`, pede a **senha do painel**, agenda a coleta de 30 min e imprime um bloco sem segredos (usuário, caminho e impressão digital do servidor). Na primeira conexão, compare a impressão digital que o `ssh` mostra com a do bloco impresso:
 
    ```bash
-   git clone --depth 1 --branch feat/painel-cloudpanel https://github.com/criativamarlus-crypto/radar-viral-br /tmp/radar-setup && bash /tmp/radar-setup/bin/provision-server.sh "CHAVE_PUBLICA_DE_DEPLOY"
+   ssh -t -i ~/.ssh/radar_deploy USUARIO_DO_SITE@IP_DA_VPS 'rm -rf /tmp/radar-setup && git clone --depth 1 --branch feat/painel-cloudpanel https://github.com/criativamarlus-crypto/radar-viral-br /tmp/radar-setup && bash /tmp/radar-setup/bin/provision-server.sh'
    ```
 
-2. **Secrets** do Environment `production` (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`), usando o bloco impresso. Compare a impressão digital do bloco com a que o `ssh-keyscan` mostra pela rede antes de aceitar a linha `known_hosts`.
-3. **CloudPanel:** *Root Directory* do site = `apps/radar-viral-br/current/public` e SSL Let’s Encrypt.
-4. **GitHub:** merge do PR, variável `PRODUCTION_DEPLOY_ENABLED=true` e *Review deployments > Approve*.
+3. **Secrets** do Environment `production` (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`), usando o bloco impresso. Compare a impressão digital do bloco com a que o `ssh-keyscan` mostra pela rede antes de aceitar a linha `known_hosts`.
+4. **CloudPanel:** *Root Directory* do site = `radar-viral-br/current/public` (é relativo a `htdocs`) e SSL Let’s Encrypt.
+5. **GitHub:** merge do PR, variável `PRODUCTION_DEPLOY_ENABLED=true` e *Review deployments > Approve*.
 
 As seções abaixo detalham cada ponto e os diagnósticos.
 
@@ -36,7 +37,7 @@ As seções abaixo detalham cada ponto e os diagnósticos.
 
 Crie/revise um PHP Site no CloudPanel para `viral.netnewsltda.online`, com PHP 8.2+ e as extensões **cURL, SimpleXML, fileinfo, mbstring, pdo_sqlite** e **sodium ou openssl** (o banco é SQLite; não é preciso criar banco MySQL). Confirme a versão e as extensões tanto no CLI quanto no pool PHP-FPM: `php -m | grep -Ei 'curl|simplexml|fileinfo|mbstring|pdo_sqlite|sodium|openssl'`. O painel (Integrações > Diagnóstico) e o `/health.php` acusam o que faltar. É preciso ter `bash`, `tar`, `flock`, `curl`, SSH e SCP no servidor.
 
-Use o usuário do site ou outro usuário exclusivo de deploy com acesso somente aos arquivos desse site. Não use root no workflow. A pasta de deploy deve ser absoluta, sem espaços e sem barra final, por exemplo `/home/USUARIO/apps/radar-viral-br`. O script recusa caminhos suspeitos e não cria nem substitui a configuração do CloudPanel.
+Use o usuário do site ou outro usuário exclusivo de deploy com acesso somente aos arquivos desse site. Não use root no workflow. A pasta de deploy deve ser absoluta, sem espaços e sem barra final, por exemplo `/home/USUARIO/htdocs/radar-viral-br`. O script recusa caminhos suspeitos e não cria nem substitui a configuração do CloudPanel.
 
 O usuário SSH e o usuário PHP-FPM precisam ter permissões compatíveis. No layout fornecido, `config.php` tem modo 0600 e `storage/` modo 0700: use como `DEPLOY_USER` o usuário do site, que também executa o pool PHP-FPM. Um usuário SSH como `chatgpt`, diferente do dono do site, não ganha acesso aos arquivos privados apenas por conseguir conectar à VPS. Não execute este deploy com ele antes de confirmar a identidade e a propriedade dos arquivos. Prefira instalar a chave no usuário do site; se a infraestrutura exigir usuários distintos, um administrador deverá projetar e revisar a delegação restrita antes de adaptar o fluxo. Não conceda sudo irrestrito nem use `chmod 777`.
 
@@ -56,15 +57,15 @@ radar-viral-br/
   incoming/             # 0700; pacote temporário removido após deploy
 ```
 
-A raiz web no CloudPanel é **`/home/USUARIO/apps/radar-viral-br/current/public`**. Nunca aponte o site para `shared/`, `releases/` ou a raiz do repositório.
+A raiz web no CloudPanel é **`/home/USUARIO/htdocs/radar-viral-br/current/public`**. Nunca aponte o site para `shared/`, `releases/` ou a raiz do repositório.
 
 Para o primeiro setup, obtenha uma cópia revisada do código no servidor, em uma pasta privada temporária, e execute como usuário do site (substitua todos os caminhos de exemplo):
 
 ```bash
 umask 077
-mkdir -p /home/USUARIO/apps/radar-viral-br/shared/storage
-chmod 700 /home/USUARIO/apps/radar-viral-br/shared /home/USUARIO/apps/radar-viral-br/shared/storage
-php /CAMINHO/PRIVADO/DO/CODIGO/bin/setup.php --config=/home/USUARIO/apps/radar-viral-br/shared/config.php
+mkdir -p /home/USUARIO/htdocs/radar-viral-br/shared/storage
+chmod 700 /home/USUARIO/htdocs/radar-viral-br/shared /home/USUARIO/htdocs/radar-viral-br/shared/storage
+php /CAMINHO/PRIVADO/DO/CODIGO/bin/setup.php --config=/home/USUARIO/htdocs/radar-viral-br/shared/config.php
 ```
 
 Use `--help` para consultar o assistente. A senha é processada no servidor e o arquivo guarda somente seu hash. Guarde o token de leitura em um cofre de segredos; ele não é uma chave SSH nem uma chave OpenAI. Configure `storage_path` com o caminho absoluto de `shared/storage`, `site_url` com `https://viral.netnewsltda.online` e `secure_cookies` como `true`. O usuário PHP-FPM deve ser o mesmo usuário do site, ou ter permissões restritas equivalentes; não resolva diferenças de usuário com `chmod 777`.
@@ -122,7 +123,7 @@ O pacote contém somente `app/`, `public/`, `bin/` e `config.example.php`. O dep
 Cadastre no CloudPanel um cron **a cada 30 minutos**, como o mesmo usuário do site:
 
 ```cron
-*/30 * * * * /usr/bin/flock -n /home/USUARIO/apps/radar-viral-br/.feeds.lock /usr/bin/php /home/USUARIO/apps/radar-viral-br/current/bin/update.php >> /home/USUARIO/apps/radar-viral-br/shared/storage/cron.log 2>&1
+*/30 * * * * /usr/bin/flock -n /home/USUARIO/htdocs/radar-viral-br/.feeds.lock /usr/bin/php /home/USUARIO/htdocs/radar-viral-br/current/bin/update.php >> /home/USUARIO/htdocs/radar-viral-br/shared/storage/cron.log 2>&1
 ```
 
 Confirme os caminhos reais de `php` e `flock`. O script coleta todas as fontes ativas em paralelo, grava o histórico (visível em *Histórico de coleta*), reclassifica e recalcula o ranking, busca imagens Open Graph das melhores matérias sem capa, limpa sessões/limites expirados e remove matérias antigas não salvas (14 dias). Saída `0` = coletou (mesmo com fontes falhando; os erros aparecem no log e no painel); `1` = todas as fontes falharam ou a aplicação não iniciou. **Sem o cron o painel ainda se atualiza sozinho**: ao ser aberto com dados de mais de 30 minutos, dispara a coleta (manual ou automática; nunca duas ao mesmo tempo, há trava).
@@ -130,7 +131,7 @@ Confirme os caminhos reais de `php` e `flock`. O script coleta todas as fontes a
 O banco é `shared/storage/radar.sqlite` (modo WAL: aparecem também `-wal` e `-shm`). **Faça backup** de `shared/storage/radar.sqlite` e de `shared/storage/app.key` (sem a chave mestra, as chaves de IA salvas no banco não podem ser lidas e precisarão ser digitadas de novo). Backup consistente com o site no ar:
 
 ```bash
-sqlite3 /home/USUARIO/apps/radar-viral-br/shared/storage/radar.sqlite ".backup '/home/USUARIO/backups/radar-$(date +%F).sqlite'"
+sqlite3 /home/USUARIO/htdocs/radar-viral-br/shared/storage/radar.sqlite ".backup '/home/USUARIO/backups/radar-$(date +%F).sqlite'"
 ```
 
 Configure rotação para `cron.log` e para os logs PHP/Nginx do site. Não coloque tokens ou dados de login nos logs. Para rollback manual, execute como usuário do site uma troca atômica para uma release anterior já validada, confira `/health.php` e o login. Nunca apague a release atual ou a anterior durante um deploy; o workflow mantém releases anteriores (programe a retenção depois).

@@ -15,7 +15,8 @@ fail() { printf '\n\033[31mERRO:\033[0m %s\n' "$1" >&2; exit 1; }
 [[ $(id -u) -ne 0 ]] || fail 'Não rode como root. Entre como o usuário do site (veja o nome no CloudPanel).'
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 [[ -f $REPO/bin/setup.php ]] || fail 'Rode este script de dentro de uma cópia do repositório (bin/setup.php não encontrado).'
-BASE="$HOME/apps/radar-viral-br"
+# O Root Directory do CloudPanel é relativo a htdocs: por isso o padrão fica dentro dele.
+BASE="${RADAR_BASE:-$HOME/htdocs/radar-viral-br}"
 DEPLOY_PUBKEY=${1:-}
 
 say '1/5  PHP e extensões'
@@ -92,6 +93,12 @@ if [[ -n $host_pub ]]; then
   host_line=$(awk '{print $1" "$2}' "$host_pub")
 fi
 
+if [[ $BASE == "$HOME/htdocs/"* ]]; then
+  ROOT_REL="${BASE#"$HOME/htdocs/"}/current/public"
+else
+  ROOT_REL='(use um caminho dentro de htdocs para o CloudPanel aceitar)'
+fi
+
 cat <<RESUMO
 
 ==================== COPIE ESTE BLOCO E ENVIE AO CLAUDE ====================
@@ -104,6 +111,6 @@ linha_host=$host_line
 ============================================================================
 
 Falta só uma coisa no CloudPanel (Sites > seu site > Settings):
-  Root Directory = apps/radar-viral-br/current/public
+  Root Directory = $ROOT_REL
 Até o primeiro deploy, essa página fica fora do ar: é o esperado.
 RESUMO
