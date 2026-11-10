@@ -4,7 +4,7 @@
 Site privado de curadoria de notícias para vídeos curtos de react em português brasileiro, hospedado em CloudPanel/Nginx no domínio https://viral.netnewsltda.online. O usuário utiliza um personagem fixo: brasileiro negro, homem adulto robusto, óculos, corrente de ouro, relógio, sorriso marcante, linguagem espontânea e bem-humorada. O site deve localizar pautas em alta, oferecer manchete, fontes, imagem/capa quando permitida, proposta de headline fiel aos fatos e prompt/roteiro para gerar vídeo com o personagem.
 
 ## Estado e fonte do código
-Existe um pacote completo criado no ChatGPT com o nome `Radar_Viral_BR_Codex_GitHub.zip`. O código do pacote **ainda não foi importado ao repositório**. Pedir ao usuário que forneça esse pacote no ambiente Codex, ou importar os arquivos do pacote quando estiverem disponíveis. Nunca dizer que o site está publicado sem verificar implantação e resposta HTTP.
+O código inicial foi enviado diretamente ao GitHub pelo ChatGPT e passou a ser a base de desenvolvimento deste repositório. Continue a partir dos arquivos existentes; não bloqueie o trabalho pedindo novamente o ZIP original. O pacote `Radar_Viral_BR_Codex_GitHub.zip` e a imagem original do personagem não fazem parte dessa base. Preserve o visual escuro/dourado, as categorias e a descrição do personagem; o administrador pode enviar sua imagem autorizada no painel. Nunca dizer que o site está publicado sem verificar implantação e resposta HTTP.
 
 ## Estrutura prevista do pacote PHP
 - `public/`: raiz pública do site, `index.php`, `login.php`, `api.php`, `mcp.php`, JS, CSS, assets do personagem.
@@ -33,4 +33,4 @@ Existe um pacote completo criado no ChatGPT com o nome `Radar_Viral_BR_Codex_Git
 - Não criar automações de publicação em redes sociais sem confirmação separada.
 
 ## Próximo passo para o Codex
-Importar o pacote ZIP original ao repositório, revisar a aplicação, validar testes e preparar o primeiro deploy no CloudPanel. Se o ZIP não estiver acessível ao Codex, solicitar que o usuário o anexe antes de dizer que o código está importado.
+Continuar a revisão dos arquivos existentes, executar `php tests/run.php` e validar o primeiro deploy no CloudPanel somente após conferir a identidade SSH por canal confiável e a configuração do servidor. O workflow permanece bloqueado até configuração explícita. Não tratar a página genérica “Hello World” como publicação da aplicação. Não afirmar que a VPS foi validada quando ainda não houver acesso SSH funcional.
