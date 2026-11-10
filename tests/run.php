@@ -991,6 +991,24 @@ check('the one-command server provisioning script is valid bash', static functio
 check('provisioning refuses root, checks PHP 8.2+ and every required extension, and needs no sudo', static fn(): bool => str_contains($provision, '-ne 0') && str_contains($provision, 'PHP_VERSION_ID >= 80200') && str_contains($provision, 'pdo_sqlite') && str_contains($provision, 'mbstring') && preg_match('/^[^#\n]*\bsudo\s+\S/m', $provision) === 0);
 check('provisioning validates the deploy key strictly and installs it without agent/port/X11 forwarding', static fn(): bool => str_contains($provision, 'ssh-ed25519\ ') && str_contains($provision, 'no-agent-forwarding,no-port-forwarding,no-X11-forwarding') && !str_contains($provision, 'PermitRootLogin'));
 check('provisioning never prints or stores secrets: the password goes only to setup.php, and the summary block has no keys', static fn(): bool => str_contains($provision, 'bin/setup.php') && !str_contains($provision, 'PRIVATE KEY') && str_contains($provision, 'nada aqui é segredo') && !preg_match('/\bpassword\s*=/i', $provision));
+$deployLocal = (string)file_get_contents($root . '/bin/deploy-local.sh');
+check('the loopback health check ignores the origin certificate chain, the public one validates it', static function () use ($deploy): bool {
+    preg_match_all('/check_health ([^|;]*?)https:\/\/viral\.netnewsltda\.online\/health\.php/', $deploy, $m);
+    return count($m[1]) === 2 && str_contains($m[1][0], '--insecure') && str_contains($m[1][0], '127.0.0.1') && !str_contains($m[1][1], '--insecure');
+});
+check('direct deploy script is valid bash and keeps keys, host identity and server details outside the repository', static function () use ($root, $deployLocal): bool {
+    exec('bash --version 2>&1', $out, $code);
+    if ($code === 0) {
+        exec('bash -n ' . escapeshellarg($root . '/bin/deploy-local.sh') . ' 2>&1', $output, $status);
+        if ($status !== 0) {
+            return false;
+        }
+    }
+    return str_contains($deployLocal, '$HOME/.ssh/radar_deploy') && str_contains($deployLocal, 'known_hosts_radar') && str_contains($deployLocal, 'radar-deploy.env')
+        && !preg_match('/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/', $deployLocal) && !str_contains($deployLocal, 'PRIVATE KEY');
+});
+check('direct deploy refuses uncommitted changes and failing tests, and reuses the CI deploy script', static fn(): bool => str_contains($deployLocal, 'git status --porcelain') && str_contains($deployLocal, 'Os testes falharam') && str_contains($deployLocal, 'bash bin/deploy.sh') && str_contains($deployLocal, 'RELEASE_ID="$COMMIT-'));
+check('provisioning supports unattended password input without printing the initial token, and switches the docroot only after the link exists', static fn(): bool => str_contains($provision, 'RADAR_PASSWORD_STDIN') && str_contains($provision, '--password-stdin') && str_contains($provision, "grep -Ev '^[a-f0-9]{64}$'") && strpos($provision, 'ln -s "$TARGET" "$SITE_ROOT.novo"') < strpos($provision, 'mv "$SITE_ROOT" "$SITE_ROOT.original"'));
 check('private deploy keys cannot be committed by accident', static fn(): bool => str_contains((string)file_get_contents($root . '/.gitignore'), 'radar_deploy') && str_contains((string)file_get_contents($root . '/.gitignore'), '*.pem'));
 $nginx = (string)file_get_contents($root . '/deploy/nginx-hardening.conf');
 check('the Nginx snippet denies private directories, dotfiles and config files', static fn(): bool => str_contains($nginx, 'app|storage|bin|tests|deploy|docs|vendor') && str_contains($nginx, 'config') && str_contains($nginx, 'well-known') && str_contains($nginx, 'HTTP_AUTHORIZATION'));

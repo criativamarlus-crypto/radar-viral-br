@@ -129,7 +129,9 @@ check_health() {
   curl --fail --silent --show-error --connect-timeout 5 --max-time 20 "$@" --output "$health" || return 1
   php -r '$v=json_decode(file_get_contents($argv[1]),true); exit(is_array($v) && ($v["status"] ?? null) === "ok" ? 0 : 1);' "$health"
 }
-if ! check_health --resolve viral.netnewsltda.online:443:127.0.0.1 https://viral.netnewsltda.online/health.php || ! check_health https://viral.netnewsltda.online/health.php; then
+# Loopback only: the origin certificate may be self-signed (CloudPanel default, Cloudflare terminates public TLS).
+# The public check below still validates the certificate presented to visitors.
+if ! check_health --insecure --resolve viral.netnewsltda.online:443:127.0.0.1 https://viral.netnewsltda.online/health.php || ! check_health https://viral.netnewsltda.online/health.php; then
   exit 1
 fi
 complete=true

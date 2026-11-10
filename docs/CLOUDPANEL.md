@@ -4,16 +4,10 @@ Estado: workflow preparado, produção desativada por padrão. Os testes locais 
 
 ## Caminho rápido (primeira publicação)
 
-1. **Chave de deploy:** no CloudPanel, *Sites > seu site > Settings > Site User Settings > SSH Keys*, cole a chave **pública** (`radar_deploy.pub`) e salve. É o CloudPanel que mantém o `authorized_keys` desse usuário.
-2. **Um comando do seu computador** (o `-t` permite digitar a senha do painel no servidor). Ele baixa o repositório, confere PHP e extensões, cria as pastas privadas em `~/htdocs/radar-viral-br`, pede a **senha do painel**, agenda a coleta de 30 min e imprime um bloco sem segredos (usuário, caminho e impressão digital do servidor). Na primeira conexão, compare a impressão digital que o `ssh` mostra com a do bloco impresso:
-
-   ```bash
-   ssh -t -i ~/.ssh/radar_deploy USUARIO_DO_SITE@IP_DA_VPS 'rm -rf /tmp/radar-setup && git clone --depth 1 --branch feat/painel-cloudpanel https://github.com/criativamarlus-crypto/radar-viral-br /tmp/radar-setup && bash /tmp/radar-setup/bin/provision-server.sh'
-   ```
-
-3. **Secrets** do Environment `production` (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`), usando o bloco impresso. Compare a impressão digital do bloco com a que o `ssh-keyscan` mostra pela rede antes de aceitar a linha `known_hosts`.
-4. **CloudPanel:** *Root Directory* do site = `radar-viral-br/current/public` (é relativo a `htdocs`) e SSL Let’s Encrypt.
-5. **GitHub:** merge do PR, variável `PRODUCTION_DEPLOY_ENABLED=true` e *Review deployments > Approve*.
+1. **Chave de deploy:** no CloudPanel, *Sites > seu site > Settings > Site User Settings > SSH Keys*, cole a chave **pública** (`radar_deploy.pub`) e salve. É o único gesto manual: autorizar acesso ao servidor é uma decisão de segurança sua.
+2. **Instalação (automática, do computador do mantenedor):** `bin/provision-server.sh` confere PHP e extensões, cria `~/htdocs/radar-viral-br/shared/storage` (0700), cria o `config.php` com a senha do painel, agenda a coleta de 30 min, e aponta `htdocs/<domínio>` para `radar-viral-br/current/public` por um link simbólico (a página antiga fica em `<domínio>.original`), **sem trocar o Root Directory no CloudPanel**. Sem terminal interativo, a senha vai por stdin: `RADAR_PASSWORD_STDIN=1`. Com terminal: `ssh -t -i ~/.ssh/radar_deploy USUARIO@IP 'git clone --depth 1 https://github.com/criativamarlus-crypto/radar-viral-br /tmp/radar-setup && bash /tmp/radar-setup/bin/provision-server.sh'`.
+3. **Publicar:** `bash bin/deploy-local.sh` roda os testes, empacota o commit atual e usa o mesmo `bin/deploy.sh` do CI (release imutável, troca atômica, health check e rollback). Lê a chave e o `known_hosts` de `~/.ssh` e `DEPLOY_HOST/USER/PATH` de `~/.ssh/radar-deploy.env`, tudo **fora do repositório**. Não usa GitHub Secrets.
+4. **Alternativa pelo GitHub Actions** (com aprovação por deploy): Secrets do Environment `production` (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`), variável `PRODUCTION_DEPLOY_ENABLED=true` e *Review deployments > Approve*.
 
 As seções abaixo detalham cada ponto e os diagnósticos.
 
@@ -22,7 +16,7 @@ As seções abaixo detalham cada ponto e os diagnósticos.
 `viral.netnewsltda.online` resolve para IPs da **Cloudflare** (proxy ligado) e a raiz mostrava “Hello World :-)”: DNS e SSL da borda funcionam, o Radar ainda não estava implantado. Isso exige quatro cuidados:
 
 1. **SSH não passa pela Cloudflare.** `DEPLOY_HOST` deve ser o IP da VPS ou um nome DNS **sem proxy** (nuvem cinza), nunca `viral.netnewsltda.online`. A linha de `DEPLOY_KNOWN_HOSTS` precisa usar exatamente o mesmo texto de `DEPLOY_HOST`.
-2. **Certificado na origem.** O deploy confere `/health.php` direto no Nginx local, validando o certificado do domínio. Use **Let’s Encrypt pelo CloudPanel** (ou outro certificado confiável pelo sistema) e o modo SSL **Full (strict)** na Cloudflare. Um certificado de origem da Cloudflare não é confiável para o `curl` do servidor e faria o health check falhar e a release ser revertida.
+2. **Certificado na origem.** O CloudPanel usa um certificado autoassinado até você instalar outro, e **isso não é problema**: a Cloudflare termina o HTTPS público (use o modo SSL **Full**; **Full (strict)** exige um certificado válido na origem, como o Let’s Encrypt do CloudPanel). O `deploy.sh` confere `/health.php` no Nginx local sem validar a cadeia do certificado (é a própria máquina, em `127.0.0.1`) e, em seguida, pelo endereço público, **este sim validando o certificado**.
 3. **IP real do visitante.** Atrás do proxy o PHP vê o IP da Cloudflare, e os limites de tentativa de login/API passariam a valer para todos os visitantes daquela borda. No `server {}` do vhost, confie na Cloudflare e só nela (faixas oficiais em https://www.cloudflare.com/ips/, IPv4 e IPv6):
 
    ```nginx
