@@ -2,6 +2,36 @@
 
 Estado: workflow preparado, produção desativada por padrão. Os testes locais e o CI não comprovam que a VPS, a identidade SSH, o DNS ou o certificado estão configurados. A configuração do servidor e o primeiro deploy exigem verificação com acesso ao servidor.
 
+## Caminho rápido (primeira publicação)
+
+1. **No servidor**, como o usuário do site, num terminal: clone o repositório e rode **um comando**. Ele confere PHP e extensões, cria as pastas privadas, pede a senha do painel, autoriza a chave de deploy (sem encaminhamentos), agenda a coleta de 30 min e imprime um bloco sem segredos (usuário, caminho e impressão digital do servidor):
+
+   ```bash
+   git clone --depth 1 --branch feat/painel-cloudpanel https://github.com/criativamarlus-crypto/radar-viral-br /tmp/radar-setup && bash /tmp/radar-setup/bin/provision-server.sh "CHAVE_PUBLICA_DE_DEPLOY"
+   ```
+
+2. **Secrets** do Environment `production` (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`), usando o bloco impresso. Compare a impressão digital do bloco com a que o `ssh-keyscan` mostra pela rede antes de aceitar a linha `known_hosts`.
+3. **CloudPanel:** *Root Directory* do site = `apps/radar-viral-br/current/public` e SSL Let’s Encrypt.
+4. **GitHub:** merge do PR, variável `PRODUCTION_DEPLOY_ENABLED=true` e *Review deployments > Approve*.
+
+As seções abaixo detalham cada ponto e os diagnósticos.
+
+## 0. Domínio atrás da Cloudflare (situação verificada em 2026-11-10)
+
+`viral.netnewsltda.online` resolve para IPs da **Cloudflare** (proxy ligado) e a raiz mostrava “Hello World :-)”: DNS e SSL da borda funcionam, o Radar ainda não estava implantado. Isso exige quatro cuidados:
+
+1. **SSH não passa pela Cloudflare.** `DEPLOY_HOST` deve ser o IP da VPS ou um nome DNS **sem proxy** (nuvem cinza), nunca `viral.netnewsltda.online`. A linha de `DEPLOY_KNOWN_HOSTS` precisa usar exatamente o mesmo texto de `DEPLOY_HOST`.
+2. **Certificado na origem.** O deploy confere `/health.php` direto no Nginx local, validando o certificado do domínio. Use **Let’s Encrypt pelo CloudPanel** (ou outro certificado confiável pelo sistema) e o modo SSL **Full (strict)** na Cloudflare. Um certificado de origem da Cloudflare não é confiável para o `curl` do servidor e faria o health check falhar e a release ser revertida.
+3. **IP real do visitante.** Atrás do proxy o PHP vê o IP da Cloudflare, e os limites de tentativa de login/API passariam a valer para todos os visitantes daquela borda. No `server {}` do vhost, confie na Cloudflare e só nela (faixas oficiais em https://www.cloudflare.com/ips/, IPv4 e IPv6):
+
+   ```nginx
+   set_real_ip_from 173.245.48.0/20;   # …repita para TODAS as faixas atuais da Cloudflare
+   real_ip_header CF-Connecting-IP;
+   ```
+
+   Confira depois de publicar: o IP que aparece em `storage/limits` ou nos logs deve ser o seu, não o da Cloudflare. Sem isso, não habilite a produção.
+4. **Painel da Cloudflare.** Desative *Rocket Loader*, *Auto Minify* e *Email Address Obfuscation* para este host (injetam JavaScript e quebrariam a CSP estrita), e não crie regra de cache para `/api.php`, `/mcp.php`, `/oauth-*.php` nem `/media.php`.
+
 ## 1. Servidor e layout
 
 Crie/revise um PHP Site no CloudPanel para `viral.netnewsltda.online`, com PHP 8.2+ e as extensões **cURL, SimpleXML, fileinfo, mbstring, pdo_sqlite** e **sodium ou openssl** (o banco é SQLite; não é preciso criar banco MySQL). Confirme a versão e as extensões tanto no CLI quanto no pool PHP-FPM: `php -m | grep -Ei 'curl|simplexml|fileinfo|mbstring|pdo_sqlite|sodium|openssl'`. O painel (Integrações > Diagnóstico) e o `/health.php` acusam o que faltar. É preciso ter `bash`, `tar`, `flock`, `curl`, SSH e SCP no servidor.

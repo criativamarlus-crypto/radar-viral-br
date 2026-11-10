@@ -979,6 +979,19 @@ check('SSH host identity is verified strictly and password logins are impossible
 check('release packages exclude configuration, logs, env files and uploads; config and storage live in shared/', static fn(): bool => str_contains($deploy, "--exclude='config.php'") && str_contains($deploy, "--exclude='.env'") && str_contains($deploy, "--exclude='*.log'") && str_contains($deploy, 'shared/config.php') && str_contains($deploy, 'shared/storage'));
 check('deployment is atomic, health-checked and rolls back', static fn(): bool => str_contains($deploy, 'mv -Tf') && str_contains($deploy, '/health.php') && str_contains($deploy, 'Previous current symlink restored'));
 check('deploy preflight requires the extensions the application needs, including SQLite', static fn(): bool => str_contains($deploy, 'pdo_sqlite') && str_contains($deploy, 'mbstring'));
+$provision = (string)file_get_contents($root . '/bin/provision-server.sh');
+check('the one-command server provisioning script is valid bash', static function () use ($root): bool {
+    exec('bash --version 2>&1', $out, $code);
+    if ($code !== 0) {
+        return true;
+    }
+    exec('bash -n ' . escapeshellarg($root . '/bin/provision-server.sh') . ' 2>&1', $output, $status);
+    return $status === 0;
+});
+check('provisioning refuses root, checks PHP 8.2+ and every required extension, and needs no sudo', static fn(): bool => str_contains($provision, '-ne 0') && str_contains($provision, 'PHP_VERSION_ID >= 80200') && str_contains($provision, 'pdo_sqlite') && str_contains($provision, 'mbstring') && preg_match('/^[^#\n]*\bsudo\s+\S/m', $provision) === 0);
+check('provisioning validates the deploy key strictly and installs it without agent/port/X11 forwarding', static fn(): bool => str_contains($provision, 'ssh-ed25519\ ') && str_contains($provision, 'no-agent-forwarding,no-port-forwarding,no-X11-forwarding') && !str_contains($provision, 'PermitRootLogin'));
+check('provisioning never prints or stores secrets: the password goes only to setup.php, and the summary block has no keys', static fn(): bool => str_contains($provision, 'bin/setup.php') && !str_contains($provision, 'PRIVATE KEY') && str_contains($provision, 'nada aqui é segredo') && !preg_match('/\bpassword\s*=/i', $provision));
+check('private deploy keys cannot be committed by accident', static fn(): bool => str_contains((string)file_get_contents($root . '/.gitignore'), 'radar_deploy') && str_contains((string)file_get_contents($root . '/.gitignore'), '*.pem'));
 $nginx = (string)file_get_contents($root . '/deploy/nginx-hardening.conf');
 check('the Nginx snippet denies private directories, dotfiles and config files', static fn(): bool => str_contains($nginx, 'app|storage|bin|tests|deploy|docs|vendor') && str_contains($nginx, 'config') && str_contains($nginx, 'well-known') && str_contains($nginx, 'HTTP_AUTHORIZATION'));
 check('no private keys, tokens or real credentials are committed', static function () use ($root): bool {

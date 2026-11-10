@@ -7,3 +7,7 @@
 /vendor/
 /.DS_Store
 /.claude/
+/radar_deploy*
+/known_hosts_radar
+*.pem
+*.key
