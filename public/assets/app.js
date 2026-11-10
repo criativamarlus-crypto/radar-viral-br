@@ -111,6 +111,7 @@
         news_id: reactNewsId,
         duration: Number($('#react-duration').value),
         tone: $('#react-tone').value,
+        layout: $('#react-layout')?.value || 'split',
         context: $('#react-context').value,
       });
       location.href = 'roteiro.php?id=' + result.item.id;

@@ -81,6 +81,7 @@ radar_page_start('Roteiro de react', 'roteiros.php');
             <div class="field-row">
                 <label>Expressão do personagem<select name="expression"><?php foreach ($expressions as $key => $info): ?><option value="<?= radar_h($key) ?>"<?= $script['expression'] === $key ? ' selected' : '' ?>><?= radar_h($info['label']) ?></option><?php endforeach; ?></select></label>
                 <label>Cenário<select name="scene"><?php foreach ($scenes as $key => $label): ?><option value="<?= radar_h($key) ?>"<?= $script['scene'] === $key ? ' selected' : '' ?>><?= radar_h($label) ?></option><?php endforeach; ?></select></label>
+                <label>Modelo do vídeo<select name="layout"><?php foreach (radar_video_templates() as $key => $template): ?><option value="<?= radar_h($key) ?>"<?= $script['layout'] === $key ? ' selected' : '' ?>><?= radar_h($template['label']) ?></option><?php endforeach; ?></select></label>
             </div>
             <button class="btn primary" type="submit">Salvar alterações e refazer o prompt</button>
         </div>

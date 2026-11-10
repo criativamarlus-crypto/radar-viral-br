@@ -273,6 +273,24 @@ try {
     check('editing a script through the form redirects back and rebuilds the prompt', static fn(): bool => $edit['status'] === 303 && str_contains(radar_script_get($scriptId)['video_prompt'], 'Gancho editado pelo usuário'));
     $editNoCsrf = localRequest('roteiro.php', 'POST', formBody(['id' => $scriptId, 'hook' => 'Invasor']), FORM);
     check('the script form without CSRF changes nothing', static fn(): bool => $editNoCsrf['status'] === 303 && !str_contains(radar_script_get($scriptId)['hook'], 'Invasor'));
+    $generatedCard = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'duration' => 25, 'tone' => 'direto', 'layout' => 'caption_card']);
+    $generatedCardData = json_decode($generatedCard['body'], true);
+    check('GERAR REACT accepts the video template and returns the matching prompt', static fn(): bool => $generatedCard['status'] === 201 && ($generatedCardData['item']['layout'] ?? '') === 'caption_card' && str_contains($generatedCardData['item']['video_prompt'] ?? '', 'caption band') && ($generatedData['item']['layout'] ?? '') === 'split');
+    $promptCard = $post(['action' => 'video_prompt', 'spoken' => 'Fala', 'expression' => 'serio', 'scene' => 'carro', 'duration' => 20, 'headline' => 'H', 'source' => 'S', 'layout' => 'caption_card']);
+    check('the Studio rebuilds the prompt for the chosen template', static fn(): bool => $promptCard['status'] === 200 && str_contains(json_decode($promptCard['body'], true)['prompt'], 'chest up') && str_contains(json_decode($promptCard['body'], true)['prompt'], 'caption band'));
+    $projectCard = $post(['action' => 'project_save', 'title' => 'Projeto card', 'headline' => 'MANCHETE', 'template' => 'caption_card', 'caption' => 'FRASE DE IMPACTO', 'news_id' => $firstNewsId]);
+    $projectCardId = json_decode($projectCard['body'], true)['item']['id'] ?? 0;
+    $studioPage = localRequest('estudio.php?projeto=' . $projectCardId);
+    check('the Studio page offers both templates, the impact phrase field and the transparent overlay export', static fn(): bool => $projectCard['status'] === 201 && $studioPage['status'] === 200 && str_contains($studioPage['body'], 'id="st-template"') && str_contains($studioPage['body'], 'id="st-caption"') && str_contains($studioPage['body'], 'id="st-export-overlay"')
+        && str_contains($studioPage['body'], 'caption_card') && str_contains($studioPage['body'], 'FRASE DE IMPACTO') && str_contains($studioPage['body'], 'Notícia em cima, personagem embaixo'));
+    $newsWithDialog = localRequest('noticias.php?janela=24');
+    check('the "Gerar react" dialog lists the video templates', static fn(): bool => str_contains($newsWithDialog['body'], 'id="react-layout"') && str_contains($newsWithDialog['body'], 'Vídeo em tela cheia, frase de impacto no topo e card da notícia'));
+    $scriptCardPage = localRequest('roteiro.php?id=' . ($generatedCardData['item']['id'] ?? 0));
+    check('the script page lets you change the template and shows the matching prompt', static fn(): bool => str_contains($scriptCardPage['body'], 'name="layout"') && str_contains($scriptCardPage['body'], 'caption band is composed'));
+    $reactTemplate = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'modelo_video' => 'caption_card']);
+    $reactTemplateData = json_decode(json_decode($reactTemplate['body'], true)['result']['content'][0]['text'] ?? '{}', true);
+    $reactBadTemplate = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'modelo_video' => 'inventado']);
+    check('the MCP prepares a react for a chosen template and refuses an unknown one', static fn(): bool => str_contains($reactTemplateData['prompt_de_video'] ?? '', 'caption band') && (json_decode($reactBadTemplate['body'], true)['error']['code'] ?? 0) === -32602);
     $collectFresh = $post(['action' => 'collect', 'trigger' => 'auto']);
     check('automatic collection does nothing while data is fresh (no useless requests to the sources)', static fn(): bool => $collectFresh['status'] === 200 && (json_decode($collectFresh['body'], true)['status'] ?? '') === 'fresh');
     $project = $post(['action' => 'project_save', 'title' => 'Projeto HTTP', 'headline' => 'Headline', 'script' => 'Falado', 'news_id' => $firstNewsId, 'cover_x' => 30, 'cover_zoom' => 1.5]);

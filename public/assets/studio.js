@@ -1,4 +1,4 @@
-/* Radar Viral BR — Estúdio de React. The preview and the PNG export use the same draw routine. */
+/* Radar Viral BR — Estúdio de React. The preview and the PNG exports share one draw routine. */
 (() => {
   'use strict';
   const dataEl = document.getElementById('studio-data');
@@ -9,12 +9,15 @@
   const toast = window.RadarToast || (() => {});
 
   const project = data.project;
+  const initialScript = !project && data.scriptId ? data.scripts.find((s) => s.id === data.scriptId) : null;
   const state = {
     newsId: data.news ? data.news.id : null,
     scriptId: data.scriptId,
     projectId: project ? project.id : null,
+    template: project ? project.template : (initialScript ? initialScript.layout : 'split'),
     title: project ? project.title : '',
     headline: project ? project.headline : (data.news ? data.news.title : ''),
+    caption: project ? project.caption : '',
     spoken: project ? project.script : '',
     expression: project ? project.expression : 'sorriso-largo',
     scene: 'carro',
@@ -26,6 +29,7 @@
     zoom: project ? project.cover_zoom : 1,
     prompt: project ? project.video_prompt : '',
   };
+  if (!data.templates[state.template]) state.template = 'split';
   if (!state.characterId) {
     const primary = data.characters.find((c) => c.primary) || data.characters[0];
     state.characterId = primary ? primary.id : null;
@@ -33,7 +37,6 @@
   if (!state.coverId && data.media.length) state.coverId = data.media[0].id;
 
   const canvas = $('st-canvas');
-  const ctx = canvas.getContext('2d');
   const images = new Map();
 
   function loadImage(id) {
@@ -49,6 +52,19 @@
     return promise;
   }
 
+  /* Heavy condensed lettering like the reference. Only system fonts (strict CSP): Impact when present. */
+  const hasImpact = (() => {
+    const probe = document.createElement('canvas').getContext('2d');
+    const sample = 'WWWWiiii';
+    probe.font = '40px monospace';
+    const fallback = probe.measureText(sample).width;
+    probe.font = '40px Impact, monospace';
+    return probe.measureText(sample).width !== fallback;
+  })();
+  const heavy = (px) => (hasImpact
+    ? `${px}px Impact, "Arial Narrow", sans-serif`
+    : `800 ${Math.round(px * 0.82)}px "Arial Narrow", system-ui, -apple-system, "Segoe UI", sans-serif`);
+
   function wrap(context, text, maxWidth) {
     const words = text.split(/\s+/).filter(Boolean);
     const lines = [];
@@ -61,25 +77,44 @@
     return lines;
   }
 
+  /** Wrap and, if needed, shrink the type until it fits `maxLines`; ellipsis as a last resort. */
+  function fitText(context, text, fontFor, startSize, maxWidth, maxLines) {
+    let size = startSize;
+    let lines = [];
+    for (let i = 0; i < 12; i++) {
+      context.font = fontFor(size);
+      lines = wrap(context, text, maxWidth);
+      if (lines.length <= maxLines) return { lines, size };
+      size *= 0.93;
+    }
+    lines = lines.slice(0, maxLines);
+    lines[maxLines - 1] = lines[maxLines - 1].replace(/\s*\S*$/, '') + '…';
+    return { lines, size };
+  }
+
   function drawCover(context, img, x, y, w, h) {
     // "cover" fit with user zoom and anchor: identical maths for preview and export.
     const base = Math.max(w / img.width, h / img.height);
     const scale = base * state.zoom;
     const dw = img.width * scale;
     const dh = img.height * scale;
-    const dx = x + (w - dw) * (state.x / 100);
-    const dy = y + (h - dh) * (state.y / 100);
-    context.drawImage(img, dx, dy, dw, dh);
+    context.drawImage(img, x + (w - dw) * (state.x / 100), y + (h - dh) * (state.y / 100), dw, dh);
   }
 
-  async function render(target, W, H) {
-    const c = target.getContext('2d');
-    const half = H / 2;
-    const [cover, character] = await Promise.all([loadImage(state.coverId), loadImage(state.characterId)]);
-    c.fillStyle = '#0b0c10';
-    c.fillRect(0, 0, W, H);
+  function sourceLine() {
+    if (!data.news) return 'FONTE';
+    let line = data.news.source;
+    if (data.news.published_at) {
+      const date = new Date(data.news.published_at);
+      if (!Number.isNaN(date.getTime())) line += ' • ' + date.toLocaleDateString('pt-BR');
+    }
+    return line.toUpperCase();
+  }
 
-    // top: news image
+  /* ---- template 1: news on top, character below ---- */
+  function renderSplit(c, W, H, assets, overlay) {
+    const half = H / 2;
+    const { cover, character } = assets;
     c.save();
     c.beginPath(); c.rect(0, 0, W, half); c.clip();
     if (cover) {
@@ -114,8 +149,8 @@
       c.fillStyle = '#fff'; c.fillText(label, W * 0.06, W * 0.04 + W * 0.04);
     }
     c.restore();
+    if (overlay) return;
 
-    // bottom: character
     c.save();
     c.beginPath(); c.rect(0, half, W, half); c.clip();
     c.fillStyle = '#101216'; c.fillRect(0, half, W, half);
@@ -130,6 +165,98 @@
     }
     c.restore();
     c.fillStyle = '#ffc233'; c.fillRect(0, half - 2, W, 4);
+  }
+
+  /* ---- template 2: full-screen video, impact phrase on a black band, news card below ---- */
+  function renderCaptionCard(c, W, H, assets, overlay) {
+    const { cover, character } = assets;
+    c.textBaseline = 'alphabetic';
+    if (!overlay) {
+      if (character) {
+        const scale = Math.max(W / character.width, H / character.height);
+        const dw = character.width * scale; const dh = character.height * scale;
+        c.drawImage(character, (W - dw) / 2, 0, dw, dh); // anchored to the top: keeps the face
+      } else {
+        const g = c.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, H * 0.6);
+        g.addColorStop(0, '#6b6b6b'); g.addColorStop(1, '#202020');
+        c.fillStyle = g; c.fillRect(0, 0, W, H);
+        c.fillStyle = 'rgba(255,255,255,.55)'; c.textAlign = 'center'; c.font = heavy(W * 0.05);
+        c.fillText('SEU VÍDEO EM TELA CHEIA', W / 2, H * 0.43);
+      }
+    }
+
+    // top band with the impact phrase
+    const pad = W * 0.045;
+    const phrase = (state.caption || '').trim().toUpperCase();
+    const capText = phrase || 'SUA FRASE DE IMPACTO SOBRE A NOTÍCIA AQUI';
+    const cap = fitText(c, capText, heavy, W * (hasImpact ? 0.098 : 0.09), W - pad * 2, 3);
+    const capLine = cap.size * (hasImpact ? 1.12 : 1.18);
+    const bandH = Math.max(H * 0.13, pad * 1.6 + cap.lines.length * capLine);
+    c.fillStyle = '#000'; c.fillRect(0, 0, W, bandH);
+    const fade = c.createLinearGradient(0, bandH, 0, bandH + H * 0.035);
+    fade.addColorStop(0, 'rgba(0,0,0,.85)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = fade; c.fillRect(0, bandH, W, H * 0.035);
+    c.textAlign = 'center';
+    c.fillStyle = phrase ? '#fff' : 'rgba(255,255,255,.45)';
+    c.font = heavy(cap.size);
+    let ty = (bandH - cap.lines.length * capLine) / 2 + cap.size * (hasImpact ? 0.92 : 0.86);
+    for (const line of cap.lines) { c.fillText(line, W / 2, ty); ty += capLine; }
+
+    // news card: image on top, black info bar glued below
+    const cw = W * 0.71;
+    const ch = cw * 0.82;
+    const cx = (W - cw) / 2;
+    const cy = H - H * 0.056 - ch;
+    const ip = cw * 0.045;
+    const headline = (state.headline || '').trim().toUpperCase() || 'MANCHETE DA NOTÍCIA EM DUAS OU TRÊS LINHAS';
+    let size = cw * (hasImpact ? 0.088 : 0.074);
+    let fit;
+    let barH;
+    const labelSize = cw * 0.042;
+    for (let i = 0; i < 8; i++) {
+      fit = fitText(c, headline, heavy, size, cw - ip * 2, 3);
+      barH = ip + labelSize * 1.15 + ip * 0.45 + fit.lines.length * fit.size * 1.1 + ip;
+      if (barH <= ch * 0.6) break;
+      size *= 0.92;
+    }
+    const imageH = ch - barH;
+
+    c.save();
+    c.shadowColor = 'rgba(0,0,0,.55)'; c.shadowBlur = W * 0.03; c.shadowOffsetY = W * 0.008;
+    c.fillStyle = '#000'; c.fillRect(cx, cy, cw, ch);
+    c.restore();
+    c.save();
+    c.beginPath(); c.rect(cx, cy, cw, imageH); c.clip();
+    if (cover) {
+      drawCover(c, cover, cx, cy, cw, imageH);
+    } else {
+      const g = c.createLinearGradient(cx, cy, cx, cy + imageH);
+      g.addColorStop(0, '#4a4a4a'); g.addColorStop(1, '#2b2b2b');
+      c.fillStyle = g; c.fillRect(cx, cy, cw, imageH);
+      c.fillStyle = 'rgba(255,255,255,.55)'; c.textAlign = 'center'; c.font = heavy(cw * 0.065);
+      c.fillText('IMAGEM DA NOTÍCIA', cx + cw / 2, cy + imageH / 2 + cw * 0.02);
+    }
+    c.restore();
+    c.fillStyle = '#000'; c.fillRect(cx, cy + imageH, cw, barH);
+    c.textAlign = 'left';
+    c.fillStyle = '#ffe600'; c.font = heavy(labelSize);
+    c.fillText(sourceLine(), cx + ip, cy + imageH + ip + labelSize * 0.95);
+    c.fillStyle = '#fff'; c.font = heavy(fit.size);
+    let hy = cy + imageH + ip + labelSize * 1.15 + ip * 0.45 + fit.size * 0.92;
+    for (const line of fit.lines) { c.fillText(line, cx + ip, hy); hy += fit.size * 1.1; }
+    c.strokeStyle = 'rgba(255,255,255,.92)'; c.lineWidth = Math.max(2, cw * 0.005);
+    c.strokeRect(cx, cy, cw, ch);
+  }
+
+  /** Draw the composition. `overlay` skips the character video so only caption band and news card remain (transparent PNG). */
+  async function render(target, W, H, options = {}) {
+    const c = target.getContext('2d');
+    const overlay = Boolean(options.overlay);
+    const [cover, character] = await Promise.all([loadImage(state.coverId), loadImage(state.characterId)]);
+    c.clearRect(0, 0, W, H);
+    if (!overlay) { c.fillStyle = '#0b0c10'; c.fillRect(0, 0, W, H); }
+    if (state.template === 'caption_card') renderCaptionCard(c, W, H, { cover, character }, overlay);
+    else renderSplit(c, W, H, { cover, character }, overlay);
   }
 
   let drawTimer = 0;
@@ -168,6 +295,7 @@
   }
   fillSelect($('st-expression'), data.expressions, state.expression);
   fillSelect($('st-scene'), data.scenes, state.scene);
+  fillSelect($('st-template'), Object.fromEntries(Object.entries(data.templates).map(([k, t]) => [k, t.label])), state.template);
 
   function renderPickers() {
     const covers = $('st-covers');
@@ -230,12 +358,56 @@
       try {
         const result = await api({
           action: 'video_prompt', spoken: state.spoken, expression: state.expression, scene: state.scene,
-          duration: state.duration, headline: state.headline, source: data.news ? data.news.source : '',
+          duration: state.duration, headline: data.news ? data.news.title : state.headline, source: data.news ? data.news.source : '', layout: state.template,
         });
         state.prompt = result.prompt;
         $('st-prompt').value = state.prompt;
       } catch (_) { /* keep the previous prompt */ }
     }, 450);
+  }
+
+  /** Caption suggestions: the script's viral headlines and its hook (all faithful to the story). */
+  function fillCaptionOptions() {
+    const select = $('st-caption-options');
+    select.replaceChildren(new Option('Escolher uma headline ou o gancho…', ''));
+    const script = data.scripts.find((s) => s.id === state.scriptId);
+    const options = [];
+    if (script) {
+      (script.headlines || []).forEach((h, i) => options.push(['Headline ' + (i + 1) + ': ' + h, h]));
+      if (script.hook) options.push(['Gancho: ' + script.hook, script.hook]);
+    }
+    if (data.news) options.push(['Manchete da fonte: ' + data.news.title, data.news.title]);
+    for (const [label, value] of options) select.append(new Option(label.slice(0, 110), value));
+  }
+
+  function applyTemplateUi() {
+    const card = state.template === 'caption_card';
+    $('st-caption-box').hidden = !card;
+    $('st-headline-label').textContent = card ? 'Manchete no card (a real, da fonte)' : 'Headline na imagem';
+    $('st-template-hint').textContent = data.templates[state.template].description;
+    $('st-export-overlay').textContent = card ? 'Exportar camada de legenda e card (PNG transparente)' : 'Exportar camada da notícia (PNG transparente)';
+  }
+
+  /** The impact phrase should differ from the real headline on the card: first other headline, else the hook. */
+  function pickCaption(script) {
+    if (!script) return '';
+    const real = data.news ? data.news.title.trim().toLowerCase() : '';
+    const own = (script.headlines || []).find((h) => h.trim().toLowerCase() !== real);
+    return own || script.hook || (script.headlines && script.headlines[0]) || '';
+  }
+
+  /** Sensible defaults when a template or script is chosen; never overwrites text the user typed. */
+  function seedCaption(force) {
+    if (state.template !== 'caption_card') return;
+    const script = data.scripts.find((s) => s.id === state.scriptId);
+    if (force || !state.caption.trim()) {
+      state.caption = pickCaption(script) || state.caption || '';
+      $('st-caption').value = state.caption;
+    }
+    // In the card template the headline is the REAL one from the source.
+    if (data.news && (!state.headline.trim() || script)) {
+      if (!project) { state.headline = data.news.title; $('st-headline').value = state.headline; }
+    }
   }
 
   function bindText(id, key, after) {
@@ -245,7 +417,16 @@
   }
   bindText('st-title', 'title');
   bindText('st-headline', 'headline', () => redraw());
+  bindText('st-caption', 'caption', () => redraw());
   bindText('st-script', 'spoken', () => { words(); refreshPrompt(); });
+  $('st-caption-options').addEventListener('change', (e) => {
+    if (!e.target.value) return;
+    state.caption = e.target.value; $('st-caption').value = state.caption; redraw();
+  });
+  $('st-template').addEventListener('change', (e) => {
+    state.template = e.target.value;
+    applyTemplateUi(); seedCaption(false); fillCaptionOptions(); refreshPrompt(); redraw();
+  });
   $('st-expression').addEventListener('change', (e) => { state.expression = e.target.value; refreshPrompt(); });
   $('st-scene').addEventListener('change', (e) => { state.scene = e.target.value; refreshPrompt(); });
   for (const [id, key] of [['st-x', 'x'], ['st-y', 'y'], ['st-zoom', 'zoom']]) {
@@ -254,31 +435,30 @@
     el.addEventListener('input', () => { state[key] = Number(el.value); redraw(); });
   }
 
+  function applyScript(script) {
+    state.scriptId = script.id;
+    state.spoken = script.spoken; state.expression = script.expression; state.scene = script.scene;
+    state.duration = script.duration; state.prompt = script.video_prompt; state.template = data.templates[script.layout] ? script.layout : state.template;
+    state.headline = state.template === 'caption_card' && data.news ? data.news.title : script.headline;
+    state.caption = state.template === 'caption_card' ? pickCaption(script) : state.caption;
+    if (!state.title) state.title = script.headline.slice(0, 80);
+    $('st-title').value = state.title; $('st-headline').value = state.headline; $('st-script').value = state.spoken; $('st-caption').value = state.caption;
+    $('st-expression').value = state.expression; $('st-scene').value = state.scene; $('st-template').value = state.template; $('st-prompt').value = state.prompt;
+    applyTemplateUi(); fillCaptionOptions(); words(); redraw();
+  }
+
   scriptSelect.addEventListener('change', () => {
     const script = data.scripts.find((s) => String(s.id) === scriptSelect.value);
-    state.scriptId = script ? script.id : null;
-    if (!script) return;
-    state.headline = script.headline; state.spoken = script.spoken; state.expression = script.expression;
-    state.scene = script.scene; state.duration = script.duration; state.prompt = script.video_prompt;
-    $('st-headline').value = state.headline; $('st-script').value = state.spoken;
-    $('st-expression').value = state.expression; $('st-scene').value = state.scene; $('st-prompt').value = state.prompt;
-    if (!state.title) { state.title = script.headline.slice(0, 80); $('st-title').value = state.title; }
-    words(); redraw();
+    if (!script) { state.scriptId = null; return; }
+    applyScript(script);
   });
 
-  // Initial values from a chosen script (when opened from "Abrir no Estúdio").
-  if (!project && state.scriptId) {
-    const script = data.scripts.find((s) => s.id === state.scriptId);
-    if (script) {
-      state.headline = script.headline; state.spoken = script.spoken; state.expression = script.expression;
-      state.scene = script.scene; state.duration = script.duration; state.prompt = script.video_prompt;
-      state.title = script.headline.slice(0, 80);
-      $('st-title').value = state.title; $('st-headline').value = state.headline; $('st-script').value = state.spoken;
-      $('st-expression').value = state.expression; $('st-scene').value = state.scene;
-    }
-  }
+  if (initialScript) applyScript(initialScript);
   $('st-prompt').value = state.prompt;
   if (!state.prompt && state.spoken) refreshPrompt();
+  applyTemplateUi();
+  seedCaption(false);
+  fillCaptionOptions();
 
   /* ---------- save / export ---------- */
   $('st-save').addEventListener('click', async (event) => {
@@ -287,7 +467,7 @@
     try {
       const result = await api({
         action: 'project_save', id: state.projectId || 0, script_id: state.scriptId || 0, news_id: state.newsId || 0,
-        title: state.title, headline: state.headline, script: state.spoken, video_prompt: state.prompt,
+        title: state.title, headline: state.headline, caption: state.caption, template: state.template, script: state.spoken, video_prompt: state.prompt,
         cover_media_id: state.coverId || '', character_media_id: state.characterId || '',
         cover_x: state.x, cover_y: state.y, cover_zoom: state.zoom, expression: state.expression,
       });
@@ -305,26 +485,32 @@
     setTimeout(() => URL.revokeObjectURL(url), 2000);
   }
 
-  $('st-export-png').addEventListener('click', async () => {
+  async function exportPng(overlay) {
     if (!state.coverId && !window.confirm('Não há imagem da notícia escolhida. Exportar assim mesmo?')) return;
     const out = document.createElement('canvas');
     out.width = 1080; out.height = 1920;
-    await render(out, 1080, 1920);
+    await render(out, 1080, 1920, { overlay });
     out.toBlob((blob) => {
       if (!blob) { toast('Não foi possível gerar a imagem.', true); return; }
-      download(blob, 'radar-referencia-' + (state.projectId || 'novo') + '.png');
+      download(blob, (overlay ? 'radar-overlay-' : 'radar-referencia-') + (state.projectId || 'novo') + '.png');
     }, 'image/png');
-  });
+  }
+  $('st-export-png').addEventListener('click', () => exportPng(false));
+  $('st-export-overlay').addEventListener('click', () => exportPng(true));
 
   $('st-export-txt').addEventListener('click', () => {
     const lines = [
       'RADAR VIRAL BR · PROJETO DE REACT', '='.repeat(40),
       'Título: ' + (state.title || '—'),
+      'Modelo: ' + data.templates[state.template].label,
       data.news ? 'Notícia: ' + data.news.title : '', data.news ? 'Fonte: ' + data.news.source + ' — ' + data.news.url : '',
-      '', 'HEADLINE NA IMAGEM', state.headline, '', 'ROTEIRO FALADO', state.spoken, '', 'PROMPT DE VÍDEO', state.prompt, '',
-    ].filter((l, i, a) => l !== '' || a[i - 1] !== '');
+      state.template === 'caption_card' ? '' : null, state.template === 'caption_card' ? 'FRASE DE IMPACTO (TOPO)' : null, state.template === 'caption_card' ? state.caption : null,
+      '', state.template === 'caption_card' ? 'MANCHETE NO CARD' : 'HEADLINE NA IMAGEM', state.headline, '', 'ROTEIRO FALADO', state.spoken, '', 'PROMPT DE VÍDEO', state.prompt, '',
+    ].filter((l, i, a) => l !== null && (l !== '' || a[i - 1] !== ''));
     download(new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' }), 'radar-roteiro-' + (state.projectId || 'novo') + '.txt');
   });
 
+  // Small hook for diagnostics and automated checks.
+  window.RadarStudio = { state, render, redraw, hasImpact };
   renderPickers(); words(); redraw();
 })();

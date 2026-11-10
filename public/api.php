@@ -127,7 +127,7 @@ try {
             @set_time_limit(120);
             $script = radar_react_generate(api_int($input['news_id'] ?? 0), [
                 'duration' => api_int($input['duration'] ?? 25), 'tone' => (string)($input['tone'] ?? 'bem-humorado'), 'context' => (string)($input['context'] ?? ''),
-                'expression' => (string)($input['expression'] ?? ''), 'scene' => (string)($input['scene'] ?? ''),
+                'expression' => (string)($input['expression'] ?? ''), 'scene' => (string)($input['scene'] ?? ''), 'layout' => radar_str($input['layout'] ?? ''),
             ]);
             radar_json(['item' => $script], 201);
 
@@ -197,6 +197,7 @@ try {
                 'duration' => max(15, min(35, api_int($input['duration'] ?? 25) ?: 25)),
                 'headline' => mb_substr((string)($input['headline'] ?? ''), 0, 200),
                 'source' => mb_substr((string)($input['source'] ?? ''), 0, 100),
+                'layout' => radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : 'split',
             ])]);
 
         case 'source_test':

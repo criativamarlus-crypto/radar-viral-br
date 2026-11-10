@@ -167,6 +167,10 @@ function radar_react_dialog(): string
     foreach (RADAR_TONES as $key => $label) {
         $tones .= '<option value="' . radar_h($key) . '">' . radar_h($label) . '</option>';
     }
+    $layouts = '';
+    foreach (radar_video_templates() as $key => $template) {
+        $layouts .= '<option value="' . radar_h($key) . '">' . radar_h($template['label']) . '</option>';
+    }
     $config = radar_ai_config();
     $mode = $config['provider'] !== 'none' && $config['has_key']
         ? 'A IA configurada (' . RADAR_AI_PROVIDERS[$config['provider']] . ') escreverá o roteiro.'
@@ -176,6 +180,7 @@ function radar_react_dialog(): string
         . '<p class="muted" id="react-news-title"></p><p class="hint">' . radar_h($mode) . '</p>'
         . '<div class="field-row"><label>Duração<select id="react-duration"><option>15</option><option>20</option><option selected>25</option><option>30</option><option>35</option></select></label>'
         . '<label>Tom<select id="react-tone">' . $tones . '</select></label></div>'
+        . '<label>Modelo do vídeo<select id="react-layout">' . $layouts . '</select></label>'
         . '<label>O que você já conferiu? <span class="optional">opcional</span><textarea id="react-context" rows="3" maxlength="2000" placeholder="Fatos confirmados na matéria. Sem isso, o roteiro usa só a manchete e o resumo do veículo."></textarea></label>'
         . '<p class="error-text" id="react-error" role="alert" hidden></p>'
         . '<div class="dialog-actions"><button type="button" class="btn ghost" data-close>Cancelar</button><button type="submit" class="btn primary" id="react-submit">Gerar react</button></div>'

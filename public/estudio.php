@@ -27,8 +27,8 @@ $newsOptions = array_values(array_map(static fn(array $n): array => [
 
 $scriptOptions = array_map(static fn(array $s): array => [
     'id' => $s['id'], 'news_id' => $s['news_id'], 'news_title' => $s['news_title'], 'news_source' => $s['news_source'],
-    'headline' => $s['headlines'][0] ?? $s['news_title'], 'spoken' => $s['spoken'], 'expression' => $s['expression'], 'scene' => $s['scene'],
-    'duration' => $s['duration'], 'video_prompt' => $s['video_prompt'],
+    'headline' => $s['headlines'][0] ?? $s['news_title'], 'headlines' => $s['headlines'], 'hook' => $s['hook'], 'spoken' => $s['spoken'], 'expression' => $s['expression'], 'scene' => $s['scene'],
+    'layout' => $s['layout'], 'duration' => $s['duration'], 'video_prompt' => $s['video_prompt'],
 ], radar_scripts_list(100));
 
 $media = $news !== null ? $news['media'] : [];
@@ -36,13 +36,14 @@ $mediaOptions = array_map(static fn(array $m): array => ['id' => $m['id'], 'labe
 $characters = array_map(static fn(array $m): array => ['id' => $m['id'], 'label' => $m['label'], 'primary' => (int)$m['is_primary'] === 1], radar_character_images());
 
 $state = [
-    'news' => $news === null ? null : ['id' => $news['id'], 'title' => $news['title'], 'source' => $news['source'], 'url' => $news['url'], 'image' => $news['image'], 'image_credit' => $news['image_credit']],
+    'news' => $news === null ? null : ['id' => $news['id'], 'title' => $news['title'], 'source' => $news['source'], 'url' => $news['url'], 'image' => $news['image'], 'image_credit' => $news['image_credit'], 'published_at' => $news['published_known'] ? $news['published_at'] : null],
     'newsOptions' => $newsOptions,
     'scripts' => $scriptOptions,
     'media' => $mediaOptions,
     'characters' => $characters,
     'expressions' => array_map(static fn(array $e): string => $e['label'], radar_character_expressions()),
     'scenes' => radar_character_scenes(),
+    'templates' => array_map(static fn(array $t): array => ['label' => $t['label'], 'description' => $t['description']], radar_video_templates()),
     'project' => $project,
     'scriptId' => $script['id'] ?? null,
     'preselectCover' => preg_match('/\A[a-f0-9]{32}\.(?:jpg|png|webp)\z/D', radar_str($_GET['cover'] ?? '')) === 1 ? $_GET['cover'] : null,
@@ -52,13 +53,18 @@ $json = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JS
 radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js'], 'wide' => true]);
 ?>
 <div class="page-head">
-    <div><h1>Estúdio de React</h1><p>Monte a composição vertical 9:16: notícia no topo, personagem embaixo. Prepara os materiais para a ferramenta de vídeo; não gera o vídeo final.</p></div>
+    <div><h1>Estúdio de React</h1><p>Monte a composição vertical 9:16 em um dos modelos. Prepara a imagem de referência, a camada de legenda/card e o prompt para a ferramenta de vídeo; não gera o vídeo final.</p></div>
     <a class="btn ghost" href="roteiros.php">Projetos e roteiros</a>
 </div>
 <script type="application/json" id="studio-data"><?= $json ?></script>
 
 <div class="studio" id="studio">
     <section class="stack" aria-label="Material">
+        <div class="panel form-grid">
+            <h2>Modelo do vídeo</h2>
+            <label>Layout<select id="st-template"></select></label>
+            <p class="hint" id="st-template-hint"></p>
+        </div>
         <div class="panel form-grid">
             <h2>1 · Notícia e roteiro</h2>
             <label>Notícia<select id="st-news"><option value="">Escolha uma notícia…</option></select></label>
@@ -100,7 +106,12 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js']
         <div class="panel form-grid">
             <h2>4 · Texto</h2>
             <label>Título do projeto<input id="st-title" maxlength="160" placeholder="Ex.: React do Paulistão"></label>
-            <label>Headline na imagem<input id="st-headline" maxlength="200" placeholder="Headline fiel à notícia"></label>
+            <div id="st-caption-box" hidden class="form-grid">
+                <label>Frase de impacto (faixa preta do topo)<textarea id="st-caption" rows="2" maxlength="200" placeholder="Ex.: Senado vai gastar R$ 6 milhões com iPhones"></textarea></label>
+                <label>Sugestões do roteiro<select id="st-caption-options"><option value="">Escolher uma headline ou o gancho…</option></select></label>
+                <p class="hint">A frase de impacto pode ser mais chamativa, mas não pode mudar os fatos. A manchete real da fonte fica no card.</p>
+            </div>
+            <label><span id="st-headline-label">Headline na imagem</span><input id="st-headline" maxlength="200" placeholder="Headline fiel à notícia"></label>
             <label>Roteiro falado<textarea id="st-script" rows="7" maxlength="4000" placeholder="O texto que o personagem fala"></textarea><span class="hint" id="st-words"></span></label>
         </div>
         <div class="panel script-block">
@@ -111,6 +122,7 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js']
             <button type="button" class="btn primary" id="st-save">Salvar projeto</button>
             <div class="row-actions">
                 <button type="button" class="btn ghost" id="st-export-png">Exportar imagem de referência (PNG)</button>
+                <button type="button" class="btn ghost" id="st-export-overlay">Exportar camada de legenda e card (PNG transparente)</button>
                 <button type="button" class="btn ghost" id="st-export-txt">Exportar roteiro (.txt)</button>
             </div>
             <p class="hint">O projeto guarda texto, enquadramento e imagens escolhidas. Nenhum vídeo é gerado nem publicado automaticamente.</p>

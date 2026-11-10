@@ -244,6 +244,11 @@ CREATE TABLE oauth_codes (
     used_at INTEGER
 );
 SQL,
+        4 => <<<'SQL'
+ALTER TABLE projects ADD COLUMN template TEXT NOT NULL DEFAULT 'split';
+ALTER TABLE projects ADD COLUMN caption TEXT NOT NULL DEFAULT '';
+ALTER TABLE scripts ADD COLUMN layout TEXT NOT NULL DEFAULT 'split';
+SQL,
     ];
 }
 

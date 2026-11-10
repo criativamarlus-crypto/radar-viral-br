@@ -793,6 +793,61 @@ check('Studio projects save, update and delete with validated media', static fun
     return $project['cover_x'] === 100.0 && $project['cover_zoom'] === 3.0 && $project['expression'] === 'sorriso-largo' && $project['headline'] === 'Headline x'
         && $updated['title'] === 'Renomeado' && $updated['cover_media_id'] === null && $badMedia && $empty && $deleted && radar_project_get($project['id']) === null;
 });
+check('two video templates exist: the original split and the full-screen caption + news card', static function (): bool {
+    $templates = radar_video_templates();
+    foreach (['split', 'caption_card'] as $key) {
+        if (!isset($templates[$key]) || !radar_video_template_valid($key)) {
+            return false;
+        }
+        foreach (['label', 'description', 'framing', 'layout'] as $field) {
+            if (!is_string($templates[$key][$field]) || $templates[$key][$field] === '') {
+                return false;
+            }
+        }
+    }
+    return array_keys($templates) === ['split', 'caption_card'] && !radar_video_template_valid('inventado') && !radar_video_template_valid('');
+});
+check('the caption-card prompt frames the face between the caption band and the news card, and keeps every standard', static function (): bool {
+    $parts = ['spoken' => 'Fala de teste.', 'expression' => 'rindo', 'scene' => 'carro', 'duration' => 25, 'headline' => 'H', 'source' => 'S'];
+    $card = radar_video_prompt($parts + ['layout' => 'caption_card']);
+    $split = radar_video_prompt($parts + ['layout' => 'split']);
+    return str_contains($card, 'filling the whole frame') && str_contains($card, 'chest up') && str_contains($card, 'caption band is composed over the top 22%') && str_contains($card, 'between 22% and 62% of the height')
+        && !str_contains($card, 'lower half of the frame') && str_contains($card, radar_video_standards()['no_smile_after_speech']['rule']) && str_contains($card, radar_character_master_prompt('en'))
+        && str_contains($split, 'lower half of the frame') && !str_contains($split, 'caption band') && $card !== $split;
+});
+check('an unknown or missing layout falls back to the original split layout', static function (): bool {
+    $parts = ['spoken' => 'x', 'expression' => 'serio', 'scene' => 'casa', 'duration' => 20, 'headline' => 'h', 'source' => 's'];
+    return radar_video_prompt($parts) === radar_video_prompt($parts + ['layout' => 'split']) && radar_video_prompt($parts + ['layout' => 'nope']) === radar_video_prompt($parts);
+});
+check('a react is generated for the chosen template, stored with the script and reflected in its prompt', static function (): bool {
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (601, 'tpl1', 'Fonte T', 'Senado fornecerá 95 iPhones para parlamentares', 'https://t.example.com/1', 'Resumo do veículo para o teste do modelo de vídeo.', ?, ?, ?, 'Política', 60, 1)", [time() - 900, time() - 900, time()]);
+    $card = radar_react_generate(601, ['duration' => 25, 'layout' => 'caption_card']);
+    $default = radar_react_generate(601, ['duration' => 25]);
+    $invalid = radar_react_generate(601, ['duration' => 25, 'layout' => 'xyz']);
+    return $card['layout'] === 'caption_card' && str_contains($card['video_prompt'], 'caption band') && $default['layout'] === 'split' && $invalid['layout'] === 'split' && !str_contains($default['video_prompt'], 'caption band')
+        && radar_script_get($card['id'])['layout'] === 'caption_card';
+});
+check('changing a script template rebuilds its prompt; an invalid template is ignored', static function (): bool {
+    $script = radar_react_generate(601, ['duration' => 20]);
+    $changed = radar_script_update($script['id'], ['layout' => 'caption_card']);
+    $ignored = radar_script_update($script['id'], ['layout' => 'bogus']);
+    $back = radar_script_update($script['id'], ['layout' => 'split']);
+    return $changed['layout'] === 'caption_card' && str_contains($changed['video_prompt'], 'caption band') && $ignored['layout'] === 'caption_card' && $back['layout'] === 'split' && !str_contains($back['video_prompt'], 'caption band');
+});
+check('scripts created before templates existed default to the split layout', static function (): bool {
+    radar_db_exec("INSERT INTO scripts (news_title, news_url, news_source, mode, duration, tone, hook, script, expression, scene, created_at, updated_at) VALUES ('Antiga', 'https://o.example.com/x', 'F', 'rascunho', 25, 'direto', 'g', 's', 'serio', 'casa', ?, ?)", [time(), time()]);
+    $script = radar_script_get((int)radar_db()->lastInsertId());
+    return $script['layout'] === 'split' && str_contains($script['video_prompt'], 'lower half of the frame');
+});
+check('Studio projects keep the template and the impact phrase, sanitised and capped; unknown templates fall back', static function (): bool {
+    $project = radar_project_save(null, ['title' => 'Com card', 'headline' => 'MANCHETE REAL', 'template' => 'caption_card', 'caption' => "  Senado <b>vai</b> gastar\n R$ 6 milhões  "]);
+    $long = radar_project_save(null, ['title' => 'Longa', 'template' => 'caption_card', 'caption' => str_repeat('palavra ', 80)]);
+    $bad = radar_project_save(null, ['title' => 'Ruim', 'template' => 'hack', 'caption' => 'x']);
+    $reloaded = radar_project_get($project['id']);
+    $updated = radar_project_save($project['id'], ['title' => 'Com card', 'template' => 'split', 'caption' => '']);
+    return $project['template'] === 'caption_card' && $project['caption'] === 'Senado vai gastar R$ 6 milhões' && $reloaded['caption'] === $project['caption']
+        && mb_strlen($long['caption']) <= 200 && $bad['template'] === 'split' && $updated['template'] === 'split' && $updated['caption'] === '';
+});
 check('deleting a news item keeps the scripts made from it (they store their own copy)', static function (): bool {
     $before = count(radar_scripts_list(100));
     radar_news_delete(500);

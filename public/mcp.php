@@ -81,7 +81,7 @@ $tools = [
     ['name' => 'listar_reacts', 'description' => 'Lista os roteiros de react já preparados (headlines, gancho, roteiro, comentário, CTA e prompt de vídeo com o personagem fixo). Opcionalmente de uma notícia.',
         'inputSchema' => ['type' => 'object', 'properties' => ['noticia_id' => ['type' => 'integer', 'minimum' => 1], 'limite' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 30]], 'additionalProperties' => false], 'annotations' => ['readOnlyHint' => true]],
     ['name' => 'preparar_react', 'description' => 'Prepara um react para uma notícia: 3 headlines, gancho, roteiro de 15 a 35 s, comentário (opinião), CTA e prompt de vídeo com o personagem fixo. Usa a IA configurada no servidor; sem IA, gera um rascunho conservador. Requer token com acesso "preparar react". Cria um roteiro salvo.',
-        'inputSchema' => ['type' => 'object', 'properties' => ['noticia_id' => ['type' => 'integer', 'minimum' => 1], 'duracao_segundos' => ['type' => 'integer', 'minimum' => 15, 'maximum' => 35], 'tom' => ['type' => 'string', 'enum' => array_keys(RADAR_TONES)], 'contexto_confirmado' => ['type' => 'string', 'maxLength' => 2000, 'description' => 'Fatos que o usuário já conferiu na matéria.']], 'required' => ['noticia_id'], 'additionalProperties' => false],
+        'inputSchema' => ['type' => 'object', 'properties' => ['noticia_id' => ['type' => 'integer', 'minimum' => 1], 'duracao_segundos' => ['type' => 'integer', 'minimum' => 15, 'maximum' => 35], 'tom' => ['type' => 'string', 'enum' => array_keys(RADAR_TONES)], 'modelo_video' => ['type' => 'string', 'enum' => array_keys(radar_video_templates()), 'description' => '"split" = notícia em cima e personagem embaixo; "caption_card" = vídeo em tela cheia com frase de impacto no topo e card da notícia embaixo.'], 'contexto_confirmado' => ['type' => 'string', 'maxLength' => 2000, 'description' => 'Fatos que o usuário já conferiu na matéria.']], 'required' => ['noticia_id'], 'additionalProperties' => false],
         'annotations' => ['readOnlyHint' => false, 'destructiveHint' => false, 'idempotentHint' => false]],
 ];
 
@@ -115,7 +115,7 @@ $allowed = [
     'consultar_tendencias' => [],
     'obter_noticia' => ['id'], 'obter_imagens' => ['id'],
     'listar_reacts' => ['noticia_id', 'limite'],
-    'preparar_react' => ['noticia_id', 'duracao_segundos', 'tom', 'contexto_confirmado'],
+    'preparar_react' => ['noticia_id', 'duracao_segundos', 'tom', 'modelo_video', 'contexto_confirmado'],
 ];
 if (!isset($allowed[$name]) || array_diff(array_keys($arguments), $allowed[$name]) !== []) {
     $fail(-32602, 'Ferramenta ou argumentos inválidos.');
@@ -194,12 +194,15 @@ try {
             if (!$positiveInt($arguments['noticia_id'] ?? null)) {
                 $fail(-32602, 'Informe noticia_id.');
             }
+            if (isset($arguments['modelo_video']) && (!is_string($arguments['modelo_video']) || !radar_video_template_valid($arguments['modelo_video']))) {
+                $fail(-32602, 'modelo_video inválido.');
+            }
             if (!radar_rate_limit('mcp-react:' . radar_client_ip(), 15, 600)) {
                 $reply(['content' => [['type' => 'text', 'text' => 'Limite de reacts preparados atingido. Tente em alguns minutos.']], 'isError' => true]);
             }
             @set_time_limit(120);
             $script = radar_react_generate($arguments['noticia_id'], [
-                'duration' => $arguments['duracao_segundos'] ?? 25, 'tone' => $arguments['tom'] ?? 'bem-humorado', 'context' => $arguments['contexto_confirmado'] ?? '',
+                'duration' => $arguments['duracao_segundos'] ?? 25, 'tone' => $arguments['tom'] ?? 'bem-humorado', 'context' => $arguments['contexto_confirmado'] ?? '', 'layout' => $arguments['modelo_video'] ?? 'split',
             ]);
             $data = [
                 'id' => $script['id'], 'origem' => $script['mode_label'], 'noticia' => $script['news_title'], 'fonte' => $script['news_source'], 'link' => $script['news_url'],

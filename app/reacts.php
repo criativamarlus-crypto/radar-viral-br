@@ -20,7 +20,7 @@ function radar_script_spoken(array $script): string
 /**
  * Generate and store a react package for one news item.
  *
- * @param array{duration?:int,tone?:string,context?:string,expression?:string,scene?:string} $options
+ * @param array{duration?:int,tone?:string,context?:string,expression?:string,scene?:string,layout?:string} $options
  * @return array<string,mixed> saved script (decoded)
  */
 function radar_react_generate(int $newsId, array $options = []): array
@@ -66,15 +66,16 @@ function radar_react_generate(int $newsId, array $options = []): array
     if ($estimated > $duration + 6) {
         $generated['warnings'][] = "O texto falado dura cerca de {$estimated}s, acima dos {$duration}s pedidos. Edite para encurtar.";
     }
-    $prompt = radar_video_prompt(['spoken' => $spoken, 'expression' => $expression, 'scene' => $scene, 'duration' => $duration, 'headline' => $news['title'], 'source' => $news['source']]);
+    $layout = radar_video_template_valid((string)($options['layout'] ?? '')) ? (string)$options['layout'] : 'split';
+    $prompt = radar_video_prompt(['spoken' => $spoken, 'expression' => $expression, 'scene' => $scene, 'duration' => $duration, 'headline' => $news['title'], 'source' => $news['source'], 'layout' => $layout]);
     $now = time();
     $id = radar_db_insert(
-        'INSERT INTO scripts (news_id, news_title, news_url, news_source, mode, provider, model, duration, tone, context, headlines, hook, script, commentary, cta, expression, scene, video_prompt, warnings, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO scripts (news_id, news_title, news_url, news_source, mode, provider, model, duration, tone, context, headlines, hook, script, commentary, cta, expression, scene, layout, video_prompt, warnings, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             $newsId, $news['title'], $news['url'], $news['source'], $mode, $mode === 'ia' ? $config['provider'] : null, $mode === 'ia' ? $config['model'] : null,
             $duration, $tone, $context, json_encode($generated['headlines'], JSON_UNESCAPED_UNICODE), $generated['hook'], $generated['script'],
-            $generated['commentary'], $generated['cta'], $expression, $scene, $prompt,
+            $generated['commentary'], $generated['cta'], $expression, $scene, $layout, $prompt,
             json_encode(['warnings' => $generated['warnings'], 'fact_check' => $generated['fact_check_notes']], JSON_UNESCAPED_UNICODE), $now, $now,
         ]
     );
@@ -106,11 +107,13 @@ function radar_script_decode(array $row): array
         'estimated_seconds' => radar_speech_seconds($spoken),
         'expression' => (string)$row['expression'],
         'scene' => (string)$row['scene'],
+        'layout' => radar_video_template_valid((string)$row['layout']) ? (string)$row['layout'] : 'split',
         // Rebuilt on every read from the stored fields, so scripts created before a prompt standard
         // existed (e.g. "no smile after speech") get it too. The stored column is legacy.
         'video_prompt' => radar_video_prompt([
             'spoken' => $spoken, 'expression' => (string)$row['expression'], 'scene' => (string)$row['scene'], 'duration' => (int)$row['duration'],
             'headline' => (string)$row['news_title'], 'source' => (string)$row['news_source'],
+            'layout' => radar_video_template_valid((string)$row['layout']) ? (string)$row['layout'] : 'split',
         ]),
         'warnings' => is_array($meta) ? ($meta['warnings'] ?? []) : [],
         'fact_check' => is_array($meta) ? ($meta['fact_check'] ?? []) : [],
@@ -150,14 +153,15 @@ function radar_script_update(int $id, array $input): array
     }
     $expression = isset(radar_character_expressions()[(string)($input['expression'] ?? '')]) ? (string)$input['expression'] : $current['expression'];
     $scene = isset(radar_character_scenes()[(string)($input['scene'] ?? '')]) ? (string)$input['scene'] : $current['scene'];
+    $layout = radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : $current['layout'];
     $row = ['hook' => $text('hook', 200), 'script' => $text('script', 1800), 'commentary' => $text('commentary', 600), 'cta' => $text('cta', 250)];
     $prompt = radar_video_prompt([
         'spoken' => radar_script_spoken($row), 'expression' => $expression, 'scene' => $scene, 'duration' => $current['duration'],
-        'headline' => $current['news_title'], 'source' => $current['news_source'],
+        'headline' => $current['news_title'], 'source' => $current['news_source'], 'layout' => $layout,
     ]);
     radar_db_exec(
-        'UPDATE scripts SET headlines = ?, hook = ?, script = ?, commentary = ?, cta = ?, expression = ?, scene = ?, video_prompt = ?, updated_at = ? WHERE id = ?',
-        [json_encode(array_values($headlines), JSON_UNESCAPED_UNICODE), $row['hook'], $row['script'], $row['commentary'], $row['cta'], $expression, $scene, $prompt, time(), $id]
+        'UPDATE scripts SET headlines = ?, hook = ?, script = ?, commentary = ?, cta = ?, expression = ?, scene = ?, layout = ?, video_prompt = ?, updated_at = ? WHERE id = ?',
+        [json_encode(array_values($headlines), JSON_UNESCAPED_UNICODE), $row['hook'], $row['script'], $row['commentary'], $row['cta'], $expression, $scene, $layout, $prompt, time(), $id]
     );
     return radar_script_get($id) ?? [];
 }
@@ -204,6 +208,8 @@ function radar_project_decode(array $row): array
         'cover_media_id' => $row['cover_media_id'], 'character_media_id' => $row['character_media_id'],
         'cover_x' => (float)$row['cover_x'], 'cover_y' => (float)$row['cover_y'], 'cover_zoom' => (float)$row['cover_zoom'],
         'expression' => (string)$row['expression'],
+        'template' => radar_video_template_valid((string)$row['template']) ? (string)$row['template'] : 'split',
+        'caption' => (string)$row['caption'],
         'created_at' => gmdate(DATE_ATOM, (int)$row['created_at']), 'updated_at' => gmdate(DATE_ATOM, (int)$row['updated_at']),
     ];
 }
@@ -245,12 +251,14 @@ function radar_project_save(?int $id, array $input): array
         mb_substr(trim((string)($input['video_prompt'] ?? '')), 0, 8000), $coverId !== '' ? $coverId : null, $characterId !== '' ? $characterId : null,
         max(0.0, min(100.0, (float)($input['cover_x'] ?? 50))), max(0.0, min(100.0, (float)($input['cover_y'] ?? 50))),
         max(1.0, min(3.0, (float)($input['cover_zoom'] ?? 1))), $expression,
+        radar_video_template_valid(radar_str($input['template'] ?? '')) ? radar_str($input['template']) : 'split',
+        mb_substr(trim(preg_replace('/\s+/u', ' ', strip_tags(radar_str($input['caption'] ?? ''))) ?? ''), 0, 200),
     ];
     $now = time();
     if ($id === null) {
         $id = radar_db_insert(
-            'INSERT INTO projects (script_id, news_id, title, headline, script, video_prompt, cover_media_id, character_media_id, cover_x, cover_y, cover_zoom, expression, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO projects (script_id, news_id, title, headline, script, video_prompt, cover_media_id, character_media_id, cover_x, cover_y, cover_zoom, expression, template, caption, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [...$values, $now, $now]
         );
     } else {
@@ -258,7 +266,7 @@ function radar_project_save(?int $id, array $input): array
             throw new InvalidArgumentException('Projeto não encontrado.');
         }
         radar_db_exec(
-            'UPDATE projects SET script_id = ?, news_id = ?, title = ?, headline = ?, script = ?, video_prompt = ?, cover_media_id = ?, character_media_id = ?, cover_x = ?, cover_y = ?, cover_zoom = ?, expression = ?, updated_at = ? WHERE id = ?',
+            'UPDATE projects SET script_id = ?, news_id = ?, title = ?, headline = ?, script = ?, video_prompt = ?, cover_media_id = ?, character_media_id = ?, cover_x = ?, cover_y = ?, cover_zoom = ?, expression = ?, template = ?, caption = ?, updated_at = ? WHERE id = ?',
             [...$values, $now, $id]
         );
     }

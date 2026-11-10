@@ -84,6 +84,35 @@ function radar_character_set_primary(string $mediaId): bool
 }
 
 /**
+ * Video layouts. "split" is news on top / character below; "caption_card" is the character filling the
+ * frame with a big caption on top and the news cover as a card at the bottom (the reference template).
+ *
+ * @return array<string,array{label:string,description:string,framing:string,layout:string}>
+ */
+function radar_video_templates(): array
+{
+    return [
+        'split' => [
+            'label' => 'Notícia em cima, personagem embaixo',
+            'description' => 'Metade de cima com a imagem da notícia e a headline; metade de baixo com o personagem.',
+            'framing' => 'character framed from the chest up, centered',
+            'layout' => 'LAYOUT NOTE: the character occupies the lower half of the frame; keep the upper half visually calm because a real news screenshot will be composed there afterwards.',
+        ],
+        'caption_card' => [
+            'label' => 'Vídeo em tela cheia, frase de impacto no topo e card da notícia',
+            'description' => 'O vídeo do personagem ocupa o quadro inteiro. Uma faixa preta no topo traz a frase de impacto em maiúsculas; embaixo, no centro, um card com a imagem da notícia e, colada nela, a barra com FONTE • DATA e a manchete real.',
+            'framing' => 'character filling the whole frame, framed from the chest up with his face centered at about 40% of the frame height (between the caption band and the news card), centered',
+            'layout' => 'LAYOUT NOTE: full-frame vertical shot. A black caption band is composed over the top 22% of the frame and a news card over the bottom 38% (from about 62% of the height down), so keep his face and gestures inside the middle area, between 22% and 62% of the height. Nothing important in the top and bottom areas. Gestures never cover the face.',
+        ],
+    ];
+}
+
+function radar_video_template_valid(string $key): bool
+{
+    return isset(radar_video_templates()[$key]);
+}
+
+/**
  * Fixed rules appended to EVERY video prompt (shown read-only in "Meu Personagem").
  * Video models tend to add a closing grin when the speech ends; the character must not.
  *
@@ -114,14 +143,16 @@ function radar_video_prompt(array $parts): string
     $scene = radar_character_scene_visual($parts['scene']);
     $spoken = trim(preg_replace('/\s+/u', ' ', $parts['spoken']) ?? '');
     $seconds = max(15, min(35, $parts['duration']));
+    $templates = radar_video_templates();
+    $template = $templates[(string)($parts['layout'] ?? 'split')] ?? $templates['split'];
     return implode("\n", [
         'CHARACTER (use the attached reference images, do not change identity):',
         radar_character_master_prompt('en'),
         '',
-        'SHOT: vertical 9:16, ' . $seconds . ' seconds, handheld smartphone selfie style, character framed from the chest up and looking straight at the camera, centered. Slight natural camera shake, no cinematic filters.',
+        'SHOT: vertical 9:16, ' . $seconds . ' seconds, handheld smartphone selfie style, ' . $template['framing'] . ' and looking straight at the camera. Slight natural camera shake, no cinematic filters.',
         'SETTING: ' . $scene . '.',
         'EXPRESSION AND ENERGY: ' . $expression['visual'] . '. Spontaneous, funny and expressive body language, natural hand gestures.',
-        'LAYOUT NOTE: the character occupies the lower half of the frame; keep the upper half visually calm because a real news screenshot will be composed there afterwards.',
+        $template['layout'],
         '',
         'DIALOGUE (spoken in natural, colloquial Brazilian Portuguese, with lip-sync, exactly as written):',
         '"' . $spoken . '"',
