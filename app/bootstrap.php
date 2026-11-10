@@ -199,7 +199,7 @@ function radar_require_csrf(): void
     }
 }
 
-/** Fixed-window limit, per trusted REMOTE_ADDR; proxy-provided IP headers are ignored. */
+/** Fixed-window limit per visitor IP (REMOTE_ADDR; CF-Connecting-IP only when the peer is Cloudflare, see clientip.php). */
 function radar_rate_limit(string $key, int $max, int $seconds): bool
 {
     $max = max(1, min($max, 10000));
@@ -285,11 +285,6 @@ function radar_cleanup_private_storage(): void
             error_log('Radar private maintenance failed: ' . get_class($error));
         }
     }
-}
-
-function radar_client_key(string $prefix): string
-{
-    return $prefix . ':' . (is_string($_SERVER['REMOTE_ADDR'] ?? null) ? $_SERVER['REMOTE_ADDR'] : 'unknown');
 }
 
 function radar_escape(string $text): string

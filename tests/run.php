@@ -942,6 +942,52 @@ check('OAuth tokens are listed in the panel only while active', static function 
     return count($listed) === 1 && array_values($listed)[0]['name'] === 'ChatGPT' && radar_token_authenticate($pair['access_token']) !== null;
 });
 
+/* ======================= visitor IP behind Cloudflare ======================= */
+check('CIDR matching works for IPv4 and IPv6, on and off byte boundaries, and never across families', static fn(): bool => radar_ip_in_cidr('173.245.48.5', '173.245.48.0/20') && radar_ip_in_cidr('173.245.63.255', '173.245.48.0/20')
+    && !radar_ip_in_cidr('173.245.64.0', '173.245.48.0/20') && radar_ip_in_cidr('2400:cb00::1', '2400:cb00::/32') && !radar_ip_in_cidr('2400:cb01::1', '2400:cb00::/32')
+    && radar_ip_in_cidr('104.16.0.1', '104.16.0.0/13') && radar_ip_in_cidr('104.23.255.255', '104.16.0.0/13') && !radar_ip_in_cidr('104.24.0.0', '104.16.0.0/13')
+    && !radar_ip_in_cidr('173.245.48.5', '2400:cb00::/32') && !radar_ip_in_cidr('not-an-ip', '173.245.48.0/20') && !radar_ip_in_cidr('1.2.3.4', 'garbage') && !radar_ip_in_cidr('1.2.3.4', '1.2.3.0/99'));
+check('every published Cloudflare range is a valid CIDR and both families are present', static function (): bool {
+    $v4 = $v6 = 0;
+    foreach (radar_cloudflare_ranges() as $range) {
+        [$network, $bits] = explode('/', $range) + [1 => ''];
+        if (@inet_pton($network) === false || !ctype_digit($bits)) {
+            return false;
+        }
+        str_contains($network, ':') ? $v6++ : $v4++;
+    }
+    return $v4 >= 14 && $v6 >= 6;
+});
+$withServer = static function (array $server, callable $run): mixed {
+    $saved = $_SERVER;
+    $_SERVER = array_merge(array_diff_key($saved, ['REMOTE_ADDR' => 1, 'HTTP_CF_CONNECTING_IP' => 1]), $server);
+    try {
+        return $run();
+    } finally {
+        $_SERVER = $saved;
+    }
+};
+check('a Cloudflare peer lets the real visitor IP through, so visitors behind one edge no longer share limits', static function () use ($withServer): bool {
+    $alice = $withServer(['REMOTE_ADDR' => '173.245.48.9', 'HTTP_CF_CONNECTING_IP' => '203.0.113.7'], static fn(): string => radar_client_key('login'));
+    $bob = $withServer(['REMOTE_ADDR' => '173.245.48.9', 'HTTP_CF_CONNECTING_IP' => '198.51.100.20'], static fn(): string => radar_client_key('login'));
+    return $alice === 'login:203.0.113.7' && $bob === 'login:198.51.100.20' && $alice !== $bob;
+});
+check('IPv6 visitors behind a Cloudflare IPv6 edge are recognised too', static fn(): bool => $withServer(['REMOTE_ADDR' => '2606:4700::1111', 'HTTP_CF_CONNECTING_IP' => '2001:db8::5'], static fn(): string => radar_client_ip()) === '2001:db8::5');
+check('a forged CF-Connecting-IP from a non-Cloudflare peer is ignored (no bypass of the login limit)', static function () use ($withServer): bool {
+    return $withServer(['REMOTE_ADDR' => '198.51.100.9', 'HTTP_CF_CONNECTING_IP' => '203.0.113.7'], static fn(): string => radar_client_ip()) === '198.51.100.9'
+        && $withServer(['REMOTE_ADDR' => '127.0.0.1', 'HTTP_CF_CONNECTING_IP' => '203.0.113.7'], static fn(): string => radar_client_ip()) === '127.0.0.1';
+});
+check('a malformed or multi-value CF-Connecting-IP is ignored even from Cloudflare', static function () use ($withServer): bool {
+    foreach (['not-an-ip', '203.0.113.7, 10.0.0.1', '', "203.0.113.7\r\nX-Evil: 1", '999.1.1.1'] as $bad) {
+        if ($withServer(['REMOTE_ADDR' => '173.245.48.9', 'HTTP_CF_CONNECTING_IP' => $bad], static fn(): string => radar_client_ip()) !== '173.245.48.9') {
+            return false;
+        }
+    }
+    return true;
+});
+check('without a usable peer address the visitor is "unknown", never a header value', static fn(): bool => $withServer(['HTTP_CF_CONNECTING_IP' => '203.0.113.7'], static fn(): string => radar_client_ip()) === 'unknown'
+    && $withServer(['REMOTE_ADDR' => 'garbage', 'HTTP_CF_CONNECTING_IP' => '203.0.113.7'], static fn(): string => radar_client_ip()) === 'unknown');
+
 /* ======================= HTML safety and diagnostics ======================= */
 check('news cards escape hostile headlines, sources and image URLs', static function (): bool {
     $card = radar_news_card(radar_news_decode(['id' => 1, 'title' => '<script>alert(1)</script>"><img src=x onerror=alert(1)>', 'url' => 'https://x.example.com/', 'source_name' => '<b>Fonte</b>', 'category' => 'Geral', 'summary' => '', 'published_at' => null, 'first_seen_at' => time(), 'image_url' => 'https://i.example.com/a.jpg" onerror="alert(1)', 'image_credit' => null, 'image_note' => null, 'score' => 10, 'score_reasons' => '[]', 'source_count' => 1, 'trend_hits' => '[]', 'trend_origin' => null, 'related' => '[]', 'cluster_id' => null, 'saved' => 0, 'note' => '']));

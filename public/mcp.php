@@ -194,7 +194,7 @@ try {
             if (!$positiveInt($arguments['noticia_id'] ?? null)) {
                 $fail(-32602, 'Informe noticia_id.');
             }
-            if (!radar_rate_limit('mcp-react:' . ($_SERVER['REMOTE_ADDR'] ?? ''), 15, 600)) {
+            if (!radar_rate_limit('mcp-react:' . radar_client_ip(), 15, 600)) {
                 $reply(['content' => [['type' => 'text', 'text' => 'Limite de reacts preparados atingido. Tente em alguns minutos.']], 'isError' => true]);
             }
             @set_time_limit(120);
