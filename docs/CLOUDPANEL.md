@@ -11,7 +11,7 @@ Estado: workflow preparado, produção desativada por padrão. Os testes locais 
 3. **Publicar:** `bash bin/deploy-local.sh` roda os testes, empacota o commit atual e usa o mesmo `bin/deploy.sh` do CI (release imutável, troca atômica, health check e rollback). Lê a chave e o `known_hosts` de `~/.ssh` e `DEPLOY_HOST/USER/PATH` de `~/.ssh/radar-deploy.env`, tudo **fora do repositório**. Não usa GitHub Secrets.
 4. **Alternativa pelo GitHub Actions** (com aprovação por deploy): Secrets do Environment `production` (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`), variável `PRODUCTION_DEPLOY_ENABLED=true` e *Review deployments > Approve*.
 
-**Estado em 2026-11-10:** instalado e publicado (PHP 8.3, release imutável em `~/htdocs/radar-viral-br`). Falta apenas o que exige o vhost do Nginx, que é do root: cole o conteúdo de [`deploy/nginx-vhost-snippet.conf`](../deploy/nginx-vhost-snippet.conf) em *Sites > domínio > Vhost*, logo depois da linha `server {`. Ele traz (1) o `rewrite` da descoberta OAuth, sem o qual `/.well-known/oauth-*` dá 404 e o ChatGPT não conecta, e (2) o IP real do visitante atrás da Cloudflare.
+**Estado em 2026-11-10:** instalado e publicado (PHP 8.3, release imutável em `~/htdocs/radar-viral-br`). Falta apenas uma linha no vhost do Nginx, que é do root: cole o conteúdo de [`deploy/nginx-vhost-snippet.conf`](../deploy/nginx-vhost-snippet.conf) em *Sites > domínio > Vhost*, logo depois da linha `server {`. É o `rewrite` da descoberta OAuth, sem o qual `/.well-known/oauth-*` dá 404 e o ChatGPT não conecta. O IP real do visitante atrás da Cloudflare já é tratado pelo próprio app.
 
 As seções abaixo detalham cada ponto e os diagnósticos.
 
@@ -21,14 +21,7 @@ As seções abaixo detalham cada ponto e os diagnósticos.
 
 1. **SSH não passa pela Cloudflare.** `DEPLOY_HOST` deve ser o IP da VPS ou um nome DNS **sem proxy** (nuvem cinza), nunca `viral.netnewsltda.online`. A linha de `DEPLOY_KNOWN_HOSTS` precisa usar exatamente o mesmo texto de `DEPLOY_HOST`.
 2. **Certificado na origem.** O CloudPanel usa um certificado autoassinado até você instalar outro, e **isso não é problema**: a Cloudflare termina o HTTPS público (use o modo SSL **Full**; **Full (strict)** exige um certificado válido na origem, como o Let’s Encrypt do CloudPanel). O `deploy.sh` confere `/health.php` no Nginx local sem validar a cadeia do certificado (é a própria máquina, em `127.0.0.1`) e, em seguida, pelo endereço público, **este sim validando o certificado**.
-3. **IP real do visitante.** Atrás do proxy o PHP vê o IP da Cloudflare, e os limites de tentativa de login/API passariam a valer para todos os visitantes daquela borda. No `server {}` do vhost, confie na Cloudflare e só nela (faixas oficiais em https://www.cloudflare.com/ips/, IPv4 e IPv6):
-
-   ```nginx
-   set_real_ip_from 173.245.48.0/20;   # …repita para TODAS as faixas atuais da Cloudflare
-   real_ip_header CF-Connecting-IP;
-   ```
-
-   Confira depois de publicar: o IP que aparece em `storage/limits` ou nos logs deve ser o seu, não o da Cloudflare. Sem isso, não habilite a produção.
+3. **IP real do visitante.** Atrás do proxy o PHP vê o IP da Cloudflare, e os limites de tentativa (login, API) valeriam para todos de uma mesma borda: um bloqueio “Muitas tentativas de acesso” apareceu na prática. O app resolve sozinho (`app/clientip.php`): usa o `CF-Connecting-IP` **somente** quando o par TCP está nas faixas oficiais da Cloudflare, e ignora o cabeçalho de qualquer outra origem. Se a Cloudflare publicar faixas novas (raro), atualize `radar_cloudflare_ranges()`. Configurar `real_ip` no Nginx é opcional e compatível.
 4. **Painel da Cloudflare.** Desative *Rocket Loader*, *Auto Minify* e *Email Address Obfuscation* para este host (injetam JavaScript e quebrariam a CSP estrita), e não crie regra de cache para `/api.php`, `/mcp.php`, `/oauth-*.php` nem `/media.php`.
 
 ## 1. Servidor e layout
