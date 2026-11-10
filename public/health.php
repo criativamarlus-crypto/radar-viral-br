@@ -15,9 +15,11 @@ try {
         || ($url['scheme'] ?? '') === 'http' && in_array($url['host'] ?? '', ['localhost', '127.0.0.1'], true));
     $ready = radar_configured()
         && $secure
-        && extension_loaded('curl') && extension_loaded('simplexml') && extension_loaded('fileinfo')
+        && radar_missing_extensions() === []
         && is_dir($storage) && is_writable($storage)
         && (((int)fileperms($storage) & 0077) === 0);
+    // The database must open and be migrated for the panel to work.
+    $ready = $ready && radar_db_schema_version() >= 1;
 } catch (Throwable $error) {
     $ready = false;
 }

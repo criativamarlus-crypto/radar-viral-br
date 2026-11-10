@@ -1,25 +1,18 @@
 <?php
 declare(strict_types=1);
 
-/** Only these server-selected Google endpoints may be fetched. Article URLs are never fetched. */
-function radar_categories(): array
-{
-    return [
-        'Geral' => 'https://news.google.com/rss?hl=pt-BR&gl=BR&ceid=BR:pt-419',
-        'Brasil' => 'https://news.google.com/rss/headlines/section/topic/NATION?hl=pt-BR&gl=BR&ceid=BR:pt-419',
-        'Futebol' => 'https://news.google.com/rss/search?q=futebol&hl=pt-BR&gl=BR&ceid=BR:pt-419',
-        'Política' => 'https://news.google.com/rss/headlines/section/topic/POLITICS?hl=pt-BR&gl=BR&ceid=BR:pt-419',
-        'Famosos' => 'https://news.google.com/rss/search?q=celebridades&hl=pt-BR&gl=BR&ceid=BR:pt-419',
-        'Economia' => 'https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=pt-BR&gl=BR&ceid=BR:pt-419',
-        'Mundo' => 'https://news.google.com/rss/headlines/section/topic/WORLD?hl=pt-BR&gl=BR&ceid=BR:pt-419',
-        'Tecnologia' => 'https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=pt-BR&gl=BR&ceid=BR:pt-419',
-    ];
-}
+/**
+ * Feed parsing only (RSS 2.0, RSS 1.0/RDF, Atom, Google Trends RSS).
+ * No network access happens here; fetching lives in net.php / collector.php.
+ * Nothing is invented: every field comes from the feed or stays empty.
+ */
 
-/** Validate links for display; this is deliberately not an arbitrary-URL HTTP client. */
+/** Validate links for display/storage; deliberately not an arbitrary-URL HTTP client. */
 function radar_feed_safe_url(string $url): ?string
 {
-    $url = trim($url);
+    $url = trim(html_entity_decode($url, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    // Publishers often leave accents unescaped in paths (…/estado-alemão/…).
+    $url = preg_replace_callback('/[\x80-\xff]+/', static fn(array $m): string => rawurlencode($m[0]), $url) ?? $url;
     if (strlen($url) > 4096 || preg_match('/[\x00-\x20\x7f\\\\]/', $url)) {
         return null;
     }
@@ -31,7 +24,7 @@ function radar_feed_safe_url(string $url): ?string
     }
     $host = strtolower($parts['host'] ?? '');
     if ($host === '' || strlen($host) > 253 || filter_var($host, FILTER_VALIDATE_IP)
-        || !preg_match('/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/D', $host)
+        || !preg_match('/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$/D', $host)
         || preg_match('/\.(?:localhost|local|internal|test|invalid|onion)$/D', $host)
         || !filter_var($url, FILTER_VALIDATE_URL)) {
         return null;
@@ -53,14 +46,24 @@ function radar_feed_xml(string $data): SimpleXMLElement
     if (!function_exists('simplexml_load_string')) {
         throw new RuntimeException('A extensão SimpleXML não está instalada.');
     }
-    if ($data === '' || str_contains($data, "\0") || strlen($data) > 2_000_000 || preg_match('/<!\s*(?:DOCTYPE|ENTITY)\b/i', $data)) {
-        throw new RuntimeException('O feed ultrapassou o limite ou contém XML não permitido.');
+    $data = ltrim($data, "\xEF\xBB\xBF \t\r\n");
+    // Several Brazilian publishers (UOL, Folha) still send Latin-1 without a usable declaration.
+    if ($data !== '' && function_exists('mb_check_encoding') && !mb_check_encoding($data, 'UTF-8')) {
+        $converted = mb_convert_encoding($data, 'UTF-8', 'Windows-1252');
+        $converted = preg_replace('/^(<\?xml[^>]*?)\s+encoding=["\'][^"\']*["\']/i', '$1', $converted, 1) ?? $converted;
+        $data = $converted;
+    }
+    // A DTD (the only place entities can be declared) must precede the root element, so only
+    // the prolog needs inspecting. Article HTML inside CDATA may legitimately mention <!DOCTYPE>.
+    $rootAt = preg_match('/<(?:rss|feed|rdf:RDF|RDF)[\s>]/i', $data, $root, PREG_OFFSET_CAPTURE) === 1 ? (int)$root[0][1] : strlen($data);
+    if ($data === '' || str_contains($data, "\0") || strlen($data) > 3_000_000 || preg_match('/<!\s*(?:DOCTYPE|ENTITY)\b/i', substr($data, 0, $rootAt))) {
+        throw new RuntimeException('O feed está vazio, ultrapassou o limite ou contém XML não permitido.');
     }
     $previous = libxml_use_internal_errors(true);
     try {
         $xml = simplexml_load_string($data, 'SimpleXMLElement', LIBXML_NONET | LIBXML_NOCDATA);
-        if ($xml === false || $xml->getName() !== 'rss' || !isset($xml->channel)) {
-            throw new RuntimeException('O provedor retornou um feed RSS inválido.');
+        if ($xml === false || !in_array($xml->getName(), ['rss', 'feed', 'RDF'], true)) {
+            throw new RuntimeException('O endereço não devolveu um feed RSS/Atom válido.');
         }
         return $xml;
     } finally {
@@ -69,39 +72,86 @@ function radar_feed_xml(string $data): SimpleXMLElement
     }
 }
 
-function radar_feed_date(string $value): ?string
+/** @return array<int,SimpleXMLElement> */
+function radar_xml_children(SimpleXMLElement $node, string $localName): array
+{
+    $found = $node->xpath("*[local-name()='" . $localName . "']");
+    return is_array($found) ? $found : [];
+}
+
+function radar_xml_text(SimpleXMLElement $node, string $localName): string
+{
+    $children = radar_xml_children($node, $localName);
+    return $children === [] ? '' : trim((string)$children[0]);
+}
+
+function radar_feed_date(string $value): ?int
 {
     $value = trim($value);
-    if (strlen($value) > 100 || !preg_match('/^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{4}-\d{2}-\d{2}T)/', $value)) {
+    if (strlen($value) > 100 || !preg_match('/^(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Seg|Ter|Qua|Qui|Sex|S[áa]b|Dom),?\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{4}-\d{2}-\d{2}T)/u', $value)) {
         return null;
     }
+    // Some Brazilian feeds use Portuguese day/month abbreviations.
+    $value = strtr($value, ['Seg' => 'Mon', 'Ter' => 'Tue', 'Ter,' => 'Tue,', 'Qua' => 'Wed', 'Qui' => 'Thu', 'Sex' => 'Fri', 'Sáb' => 'Sat', 'Sab' => 'Sat', 'Dom' => 'Sun',
+        'Fev' => 'Feb', 'Abr' => 'Apr', 'Mai' => 'May', 'Ago' => 'Aug', 'Set' => 'Sep', 'Out' => 'Oct', 'Dez' => 'Dec']);
     try {
-        $date = new DateTimeImmutable($value);
-        $timestamp = $date->getTimestamp();
-        return $timestamp >= 946684800 && $timestamp <= time() + 300 ? gmdate(DATE_ATOM, $timestamp) : null;
+        $timestamp = (new DateTimeImmutable($value))->getTimestamp();
     } catch (Exception) {
         return null;
     }
+    return $timestamp >= 946684800 && $timestamp <= time() + 600 ? $timestamp : null;
 }
 
-/** Images must actually be declared in the RSS. No screenshots or scraped covers are invented. */
+/** Canonical form used for deduplication: no fragment, no tracking parameters. */
+function radar_feed_canonical_url(string $url): string
+{
+    $parts = parse_url($url);
+    if (!is_array($parts) || !isset($parts['host'])) {
+        return $url;
+    }
+    $query = '';
+    if (!empty($parts['query'])) {
+        parse_str($parts['query'], $params);
+        foreach (array_keys($params) as $key) {
+            if (preg_match('/^(?:utm_|fbclid|gclid|ref|cmpid|origem|xtor|at_)/i', (string)$key)) {
+                unset($params[$key]);
+            }
+        }
+        ksort($params);
+        $query = $params === [] ? '' : '?' . http_build_query($params);
+    }
+    $path = $parts['path'] ?? '/';
+    if ($path !== '/' && str_ends_with($path, '/')) {
+        $path = rtrim($path, '/');
+    }
+    return 'https://' . strtolower($parts['host']) . $path . $query;
+}
+
+function radar_feed_image_allowed(?string $url): ?string
+{
+    if ($url === null) {
+        return null;
+    }
+    $safe = radar_feed_safe_url($url);
+    if ($safe === null || preg_match('/(?:pixel|tracking|beacon|1x1|spacer|blank\.gif)/i', $safe)) {
+        return null;
+    }
+    return $safe;
+}
+
+/** Images must actually be declared by the feed. No screenshots or scraped covers are invented here. */
 function radar_feed_image(SimpleXMLElement $entry): ?string
 {
+    $imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/jpg'];
     $media = $entry->children('http://search.yahoo.com/mrss/');
     $containers = [$media];
     foreach ($media->group as $group) {
         $containers[] = $group->children('http://search.yahoo.com/mrss/');
     }
-    $imageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
     foreach ($containers as $container) {
         foreach ($container->thumbnail as $thumbnail) {
-            // MediaRSS elements are namespaced; their attributes normally are not.
             $attributes = $thumbnail->attributes();
-            $type = strtolower(trim((string)$attributes['type']));
-            if ($type !== '' && !in_array($type, $imageTypes, true)) {
-                continue;
-            }
-            $url = radar_feed_safe_url((string)$attributes['url']);
+            $url = radar_feed_image_allowed((string)$attributes['url']);
             if ($url !== null) {
                 return $url;
             }
@@ -109,259 +159,218 @@ function radar_feed_image(SimpleXMLElement $entry): ?string
         foreach ($container->content as $content) {
             $attributes = $content->attributes();
             $type = strtolower(trim((string)$attributes['type']));
-            if ($type !== '' && !in_array($type, $imageTypes, true)) {
+            $medium = strtolower(trim((string)$attributes['medium']));
+            if ($medium !== 'image' && !in_array($type, $imageTypes, true)) {
                 continue;
             }
-            if ((string)$attributes['medium'] !== 'image' && !in_array($type, $imageTypes, true)) {
-                continue;
-            }
-            $url = radar_feed_safe_url((string)$attributes['url']);
+            $url = radar_feed_image_allowed((string)$attributes['url']);
             if ($url !== null) {
                 return $url;
             }
         }
     }
-    foreach ($entry->enclosure as $enclosure) {
+    foreach (radar_xml_children($entry, 'enclosure') as $enclosure) {
         $attributes = $enclosure->attributes();
-        if (in_array(strtolower(trim((string)$attributes['type'])), $imageTypes, true)) {
-            $url = radar_feed_safe_url((string)$attributes['url']);
-            if ($url !== null) {
-                return $url;
+        $type = strtolower(trim((string)$attributes['type']));
+        // Standard: <enclosure url="…">. Exame nests <url> inside instead.
+        $candidate = (string)$attributes['url'] !== '' ? (string)$attributes['url'] : radar_xml_text($enclosure, 'url');
+        $url = radar_feed_image_allowed($candidate);
+        if ($url !== null && (in_array($type, $imageTypes, true) || preg_match('/\.(?:jpe?g|png|webp)(?:\?|$)/i', $url))) {
+            return $url;
+        }
+    }
+    $mediaUrl = radar_feed_image_allowed(radar_xml_text($entry, 'mediaurl'));
+    if ($mediaUrl !== null && preg_match('/\.(?:jpe?g|png|webp)(?:\?|$)/i', $mediaUrl)) {
+        return $mediaUrl;
+    }
+    // Last resort: an <img> that the publisher itself embedded in the item body.
+    foreach (['encoded', 'description', 'summary', 'content'] as $field) {
+        $html = radar_xml_text($entry, $field);
+        if ($html !== '' && preg_match_all('/<img\b[^>]*>/i', $html, $tags)) {
+            foreach ($tags[0] as $tag) {
+                if (preg_match('/\b(?:width|height)\s*=\s*["\']?1["\']?(?:\s|\/|>)/i', $tag)) {
+                    continue;
+                }
+                if (preg_match('/\bsrc\s*=\s*["\']([^"\']+)["\']/i', $tag, $source)) {
+                    $url = radar_feed_image_allowed($source[1]);
+                    if ($url !== null) {
+                        return $url;
+                    }
+                }
             }
         }
     }
     return null;
 }
 
-/** Return a list of normalized, deduplicated items. Also used by deterministic fixture tests. */
-function radar_parse_feed(string $data, string $category, int $limit = 24): array
+/** Google News packs "related coverage" into the description as a list of links. */
+function radar_feed_related(string $html): array
 {
-    $xml = radar_feed_xml($data);
-    $items = [];
-    foreach ($xml->channel->item as $entry) {
-        $title = radar_feed_text((string)$entry->title);
-        $url = radar_feed_safe_url((string)$entry->link);
-        if ($title === '' || $url === null) {
-            continue;
-        }
-        $id = hash('sha256', $url);
-        if (isset($items[$id])) {
-            continue;
-        }
-        $published = radar_feed_date((string)$entry->pubDate);
-        $ageHours = $published === null ? null : max(0, (time() - (int)strtotime($published)) / 3600);
-        $score = $ageHours === null ? 5 : max(5, 100 - (int)floor($ageHours * 2));
-        $source = radar_feed_text((string)$entry->source, 150) ?: 'Google Notícias — origem não informada';
-        $image = radar_feed_image($entry);
-        $items[$id] = [
-            'id' => $id,
-            'title' => $title,
-            'url' => $url,
-            'published' => $published,
-            'source' => $source,
-            'source_url' => radar_feed_safe_url((string)$entry->source['url']),
-            'category' => $category,
-            'image' => $image,
-            'image_credit' => $image === null ? null : $source,
-            'image_note' => $image === null ? 'Este feed não forneceu imagem.' : 'Miniatura fornecida pelo feed; confira os direitos antes de reutilizar.',
-            'verification' => 'headline_only',
-            'score' => $score,
-            'rank_reason' => $published === null
-                ? 'Data indisponível; prioridade mínima. Checagem editorial pendente.'
-                : 'Prioridade calculada pela recência informada no RSS. Checagem editorial pendente.',
-        ];
-        // Bound processing and memory even for a very large item count.
-        if (count($items) >= 100) {
-            break;
+    $related = [];
+    if (preg_match_all('/<a\s+[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>(?:&nbsp;|\s)*(?:<font[^>]*>(.*?)<\/font>)?/is', $html, $matches, PREG_SET_ORDER)) {
+        foreach ($matches as $match) {
+            $url = radar_feed_safe_url($match[1]);
+            $title = radar_feed_text($match[2], 200);
+            if ($url === null || $title === '') {
+                continue;
+            }
+            $related[] = ['title' => $title, 'source' => radar_feed_text($match[3] ?? '', 100), 'url' => $url];
+            if (count($related) >= 6) {
+                break;
+            }
         }
     }
-    $items = array_values($items);
-    usort($items, static fn(array $a, array $b): int => $b['score'] <=> $a['score']);
-    return array_slice($items, 0, max(1, min(100, $limit)));
+    return $related;
 }
 
-function radar_parse_trends(string $data): array
+/**
+ * Parse an RSS/Atom feed into normalised items.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function radar_parse_feed(string $data, string $defaultSource = '', int $limit = 100): array
 {
     $xml = radar_feed_xml($data);
+    $entries = $xml->xpath("//*[local-name()='item' or local-name()='entry']");
     $items = [];
-    foreach ($xml->channel->item as $entry) {
-        $title = radar_feed_text((string)$entry->title, 200);
-        $url = radar_feed_safe_url((string)$entry->link);
+    foreach (is_array($entries) ? $entries : [] as $entry) {
+        $title = radar_feed_text(radar_xml_text($entry, 'title'), 400);
+        $link = '';
+        foreach (radar_xml_children($entry, 'link') as $candidate) {
+            $attributes = $candidate->attributes();
+            $href = (string)$attributes['href'];
+            if ($href !== '') {
+                // Atom: prefer rel="alternate" (the default) over self/enclosure links.
+                $rel = (string)$attributes['rel'];
+                if ($rel === '' || $rel === 'alternate') {
+                    $link = $href;
+                    break;
+                }
+            } elseif (trim((string)$candidate) !== '') {
+                $link = trim((string)$candidate);
+                break;
+            }
+        }
+        if ($link === '') {
+            $guid = radar_xml_text($entry, 'guid');
+            $link = str_starts_with($guid, 'https://') ? $guid : '';
+        }
+        // Folha wraps links in a click redirector: …/rss091/*https://real-article-url
+        if (preg_match('/^https:\/\/[^*]+\*(https:\/\/.+)$/', $link, $wrapped)) {
+            $link = $wrapped[1];
+        }
+        $url = radar_feed_safe_url($link);
         if ($title === '' || $url === null) {
             continue;
         }
-        $namespaces = $entry->getDocNamespaces(true);
-        $traffic = null;
-        foreach ($namespaces as $uri) {
-            $children = $entry->children($uri);
-            if (isset($children->approx_traffic)) {
-                $candidate = radar_feed_text((string)$children->approx_traffic, 40);
-                if ($candidate !== '') {
-                    $traffic = $candidate;
+        $sourceNodes = radar_xml_children($entry, 'source');
+        $sourceName = $sourceNodes !== [] ? radar_feed_text((string)$sourceNodes[0], 150) : '';
+        if ($sourceName !== '') {
+            // Google News appends " - Veículo" to every title.
+            $suffix = ' - ' . $sourceName;
+            if (str_ends_with($title, $suffix)) {
+                $title = rtrim(substr($title, 0, -strlen($suffix)));
+            }
+        } else {
+            $sourceName = $defaultSource;
+        }
+        $rawDescription = radar_xml_text($entry, 'description');
+        if ($rawDescription === '') {
+            $rawDescription = radar_xml_text($entry, 'summary');
+        }
+        // Only Google News uses the description as a "related coverage" list.
+        $isGoogleNews = (string)parse_url($url, PHP_URL_HOST) === 'news.google.com';
+        $related = [];
+        if ($isGoogleNews) {
+            foreach (radar_feed_related($rawDescription) as $candidate) {
+                if ($candidate['url'] !== $url && mb_strtolower($candidate['title']) !== mb_strtolower($title)) {
+                    $related[] = $candidate;
                 }
             }
         }
-        $items[hash('sha256', $title)] = ['title' => $title, 'url' => $url, 'traffic' => $traffic];
-        if (count($items) >= 20) {
+        $summary = $isGoogleNews ? '' : radar_feed_text($rawDescription, 500);
+        // Boilerplate some publishers append: "Leia mais (11/10/2026 - 18h36)".
+        $summary = trim(preg_replace('/\s*Leia mais\b.*$/iu', '', $summary) ?? $summary);
+        // WordPress footers: "O post X apareceu primeiro em Y." / "The post X appeared first on Y."
+        $summary = trim(preg_replace('/\s*(?:O post|The post|A postagem)\s.+?\s(?:apareceu primeiro em|appeared first on)\s.*$/iu', '', $summary) ?? $summary);
+        if ($summary !== '' && (mb_strtolower($summary) === mb_strtolower($title) || mb_strlen($summary) < 25)) {
+            $summary = '';
+        }
+        $published = null;
+        foreach (['pubDate', 'published', 'updated', 'date'] as $field) {
+            $published = radar_feed_date(radar_xml_text($entry, $field));
+            if ($published !== null) {
+                break;
+            }
+        }
+        $image = radar_feed_image($entry);
+        $uid = hash('sha256', radar_feed_canonical_url($url));
+        if (isset($items[$uid])) {
+            continue;
+        }
+        $items[$uid] = [
+            'uid' => $uid,
+            'title' => $title,
+            'url' => $url,
+            'published_at' => $published,
+            'source_name' => $sourceName !== '' ? $sourceName : 'Fonte não informada',
+            'summary' => $summary,
+            'image_url' => $image,
+            'image_credit' => $image === null ? null : ($sourceName !== '' ? $sourceName : null),
+            'image_note' => $image === null ? 'O feed não forneceu imagem.' : 'Miniatura declarada pelo próprio feed; confira os direitos antes de reutilizar.',
+            'related' => $related,
+        ];
+        if (count($items) >= max(1, min(300, $limit))) {
             break;
         }
     }
     return array_values($items);
 }
 
-function radar_feed_download(string $url): string
+/**
+ * Google Trends daily RSS: each trend carries the news items Google associates with it,
+ * including direct article URLs. Those become first-class news candidates.
+ *
+ * @return array<int,array<string,mixed>>
+ */
+function radar_parse_trends(string $data): array
 {
-    // The allowlist contains complete URLs, not user-provided hostname substrings.
-    $allowed = [...array_values(radar_categories()), 'https://trends.google.com/trending/rss?geo=BR'];
-    if (!in_array($url, $allowed, true)) {
-        throw new RuntimeException('Endereço de feed não permitido.');
-    }
-    if (!function_exists('curl_init')) {
-        throw new RuntimeException('A extensão cURL não está instalada.');
-    }
-    $body = '';
-    $tooLarge = false;
-    $curl = curl_init($url);
-    curl_setopt_array($curl, [
-        CURLOPT_FOLLOWLOCATION => false,
-        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
-        CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_TIMEOUT => 12,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_SSL_VERIFYHOST => 2,
-        CURLOPT_USERAGENT => 'RadarViralBR/2.0 (+https://viral.netnewsltda.online)',
-        CURLOPT_HTTPHEADER => ['Accept: application/rss+xml, application/xml, text/xml'],
-        CURLOPT_WRITEFUNCTION => static function ($handle, string $chunk) use (&$body, &$tooLarge): int {
-            if (strlen($body) + strlen($chunk) > 2_000_000) {
-                $tooLarge = true;
-                return 0;
+    $xml = radar_feed_xml($data);
+    $trends = [];
+    $entries = $xml->xpath("//*[local-name()='item']");
+    foreach (is_array($entries) ? $entries : [] as $entry) {
+        $query = radar_feed_text(radar_xml_text($entry, 'title'), 200);
+        if ($query === '') {
+            continue;
+        }
+        $news = [];
+        foreach (radar_xml_children($entry, 'news_item') as $item) {
+            $url = radar_feed_safe_url(radar_xml_text($item, 'news_item_url'));
+            $title = radar_feed_text(radar_xml_text($item, 'news_item_title'), 400);
+            if ($url === null || $title === '') {
+                continue;
             }
-            $body .= $chunk;
-            return strlen($chunk);
-        },
-    ]);
-    try {
-        $ok = curl_exec($curl);
-        $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-        if ($tooLarge) {
-            throw new RuntimeException('O feed ultrapassou o limite de 2 MB.');
-        }
-        if ($ok === false || $status !== 200) {
-            throw new RuntimeException($status > 0
-                ? 'O provedor de notícias está indisponível (HTTP ' . $status . ').'
-                : 'Não foi possível conectar ao provedor de notícias.');
-        }
-        return $body;
-    } finally {
-        curl_close($curl);
-    }
-}
-
-function radar_feed_cache_dir(): ?string
-{
-    $config = function_exists('radar_config') ? radar_config() : [];
-    $storage = rtrim((string)($config['storage_path'] ?? dirname(__DIR__) . '/storage'), '/');
-    $directory = $storage . '/feeds';
-    if ((!is_dir($directory) && !@mkdir($directory, 0700, true)) || !is_writable($directory)) {
-        return null;
-    }
-    @chmod($directory, 0700);
-    return $directory;
-}
-
-function radar_feed_read_cache(string $filename): ?array
-{
-    if (!is_file($filename) || filesize($filename) > 4_000_000) {
-        return null;
-    }
-    $contents = @file_get_contents($filename);
-    $cache = is_string($contents) ? json_decode($contents, true) : null;
-    if (!is_array($cache) || !is_int($cache['fetched_at'] ?? null)
-        || $cache['fetched_at'] > time() + 300 || !is_array($cache['items'] ?? null)) {
-        return null;
-    }
-    return $cache;
-}
-
-/** Lock refreshes, save atomically and serve a labelled stale cache on upstream failure. */
-function radar_feed_cached_fetch(string $key, string $url, callable $parse): array
-{
-    $directory = radar_feed_cache_dir();
-    if ($directory === null) {
-        return ['items' => [], 'error' => 'O cache privado está indisponível. Verifique as permissões de storage.', 'updated' => null, 'stale' => false, 'warnings' => []];
-    }
-    $filename = $directory . '/' . hash('sha256', $key) . '.json';
-    $cache = radar_feed_read_cache($filename);
-    $config = function_exists('radar_config') ? radar_config() : [];
-    $ttl = max(30, min(3600, (int)($config['feed_ttl'] ?? 300)));
-    $cachedResponse = static fn(array $stored, bool $stale, array $warnings = []): array => [
-        'items' => $stored['items'], 'error' => null,
-        'updated' => gmdate(DATE_ATOM, $stored['fetched_at']), 'stale' => $stale, 'warnings' => $warnings,
-    ];
-    if ($cache !== null && time() - $cache['fetched_at'] < $ttl) {
-        return $cachedResponse($cache, false);
-    }
-    $lock = @fopen($filename . '.lock', 'c');
-    if ($lock === false) {
-        return $cache === null
-            ? ['items' => [], 'error' => 'Não foi possível bloquear o cache privado.', 'updated' => null, 'stale' => false, 'warnings' => []]
-            : $cachedResponse($cache, true, ['O cache não pôde ser atualizado; mostrando a última coleta disponível.']);
-    }
-    @chmod($filename . '.lock', 0600);
-    if (!flock($lock, LOCK_EX | LOCK_NB)) {
-        fclose($lock);
-        return $cache === null
-            ? ['items' => [], 'error' => 'Coleta em andamento. Tente novamente em alguns segundos.', 'updated' => null, 'stale' => false, 'warnings' => []]
-            : $cachedResponse($cache, true, ['Nova coleta em andamento; mostrando a última coleta disponível.']);
-    }
-    try {
-        // Another process may have finished between the initial read and this lock.
-        $newCache = radar_feed_read_cache($filename);
-        if ($newCache !== null && time() - $newCache['fetched_at'] < $ttl) {
-            return $cachedResponse($newCache, false);
-        }
-        $items = $parse(radar_feed_download($url));
-        $stored = ['fetched_at' => time(), 'items' => $items];
-        $temp = $filename . '.' . bin2hex(random_bytes(8)) . '.tmp';
-        $encoded = json_encode($stored, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
-        $warnings = [];
-        if (@file_put_contents($temp, $encoded, LOCK_EX) === false) {
-            $warnings[] = 'Notícias coletadas, mas o cache privado não pôde ser salvo.';
-        } else {
-            @chmod($temp, 0600);
-            if (!@rename($temp, $filename)) {
-                @unlink($temp);
-                $warnings[] = 'Notícias coletadas, mas o cache privado não pôde ser substituído.';
+            $news[] = [
+                'title' => $title,
+                'url' => $url,
+                'source' => radar_feed_text(radar_xml_text($item, 'news_item_source'), 100),
+                'image' => radar_feed_image_allowed(radar_xml_text($item, 'news_item_picture')),
+                'snippet' => radar_feed_text(radar_xml_text($item, 'news_item_snippet'), 300),
+            ];
+            if (count($news) >= 6) {
+                break;
             }
         }
-        return $cachedResponse($stored, false, $warnings);
-    } catch (Throwable $error) {
-        $message = $error instanceof RuntimeException ? $error->getMessage() : 'Falha ao processar o feed de notícias.';
-        if ($cache !== null) {
-            return $cachedResponse($cache, true, [$message . ' Mostrando a última coleta disponível; confira a data de atualização.']);
+        $trends[mb_strtolower($query)] = [
+            'rank' => count($trends) + 1,
+            'query' => $query,
+            'traffic' => radar_feed_text(radar_xml_text($entry, 'approx_traffic'), 40) ?: null,
+            'started_at' => radar_feed_date(radar_xml_text($entry, 'pubDate')),
+            'news' => $news,
+        ];
+        if (count($trends) >= 25) {
+            break;
         }
-        return ['items' => [], 'error' => $message, 'updated' => null, 'stale' => false, 'warnings' => []];
-    } finally {
-        flock($lock, LOCK_UN);
-        fclose($lock);
     }
-}
-
-function radar_fetch(string $category = 'Geral', int $limit = 24): array
-{
-    $feeds = radar_categories();
-    if (!isset($feeds[$category])) {
-        $category = 'Geral';
-    }
-    $result = radar_feed_cached_fetch('news:' . $category, $feeds[$category], static fn(string $xml): array => radar_parse_feed($xml, $category, 100));
-    $result['items'] = array_slice($result['items'], 0, max(1, min(100, $limit)));
-    $result['category'] = $category;
-    $result['ranking'] = 'Prioridade editorial por recência (heurística). Não mede viralização e não é ranking oficial do Google Trends.';
-    return $result;
-}
-
-function radar_trends(): array
-{
-    return radar_feed_cached_fetch('trends:BR', 'https://trends.google.com/trending/rss?geo=BR', 'radar_parse_trends');
+    return array_values($trends);
 }

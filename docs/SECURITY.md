@@ -1,15 +1,31 @@
-# Revisão e limites de segurança
+# Segurança: o que está implementado e seus limites
 
-O painel é privado. O código inicial tinha API pública e não tinha login, uploads ou isolamento de sessão. Esta versão acrescenta autenticação antes do painel e da API, sessões com cookies seguros, CSRF nas ações de escrita, limite de tentativas e armazenamento privado. A instalação fica indisponível até existir configuração válida.
+O painel é privado. Nada além de `/login.php` e `/health.php` (que só devolve `ok`/`unavailable`) responde sem autenticação.
 
-RSS é conteúdo não confiável: títulos e fontes são tratados como texto, URLs são validadas, XML não deve carregar entidades externas e a transferência deve ter limites de tempo/tamanho. A aplicação consulta somente os feeds pré-configurados; não oferece um proxy arbitrário de URLs. Imagens de feeds podem ser carregadas pelo navegador diretamente do publicador: isso revela ao servidor de imagem o endereço de rede e o agente do navegador. Sem imagem fornecida, mostra um estado vazio; não inventa fotografias ou direitos de uso.
+## Acesso
+- Login com senha em hash (`password_hash`), sessão em cookie `HttpOnly` + `SameSite=Strict` (+ `Secure` em produção), expiração por inatividade (1 h) e absoluta (8 h), rotação do ID ao entrar, revogação de todas as sessões ao trocar a senha.
+- CSRF em todo formulário e em toda ação de escrita. Tokens de API **nunca** escrevem.
+- Limite de tentativas de login (5 por 15 min) e limites por ação (coleta, geração de roteiro, upload, MCP…).
+- Tokens de API: aleatórios, só o SHA-256 é guardado, escopos (`read`, `react`), revogação imediata.
+- CSP estrita (`script-src 'self'`, `style-src 'self'`): o front-end não tem JavaScript nem CSS inline; saídas HTML são escapadas.
 
-Uploads são administrativos e passam por CSRF, limites de tamanho e verificação de formato. São armazenados fora de `public/` e servidos por endpoint autenticado, com tipo de conteúdo fixo e sem execução. Não habilite uma pasta pública de PHP/uploads no vhost. Preserve a imagem autorizada do personagem; o arquivo original ainda precisa ser fornecido se não existir no armazenamento do servidor.
+## Dados e segredos
+- Banco SQLite, sessões, imagens e chave mestra ficam em `storage/` (0700), **fora** da raiz pública. `config.php` (0600) também.
+- Chaves de IA e do serviço de captura são criptografadas no banco (libsodium `secretbox`, ou AES-256-GCM como alternativa) com chave mestra própria (`storage/app.key` ou `app_key`). Nunca vão ao navegador e só os 4 últimos caracteres são exibidos. Alternativa: variáveis de ambiente do PHP-FPM.
+- Erros de provedores de IA têm chaves e tokens mascarados antes de aparecer.
+- Segredos de deploy ficam só nos GitHub Secrets. O repositório não contém chaves (há teste automático que procura).
 
-Credenciais de administração e token de leitura pertencem a `config.php`, ignorado pelo Git. O token da API/MCP concede leitura, não sessão administrativa nem upload. Chaves de deploy pertencem ao cofre de Secrets do GitHub; nunca ao código, ao token MCP ou a variáveis de JavaScript do navegador. Se uma chave real já tiver sido exposta no histórico público, revogue-a; apagá-la no commit seguinte não elimina a exposição.
+## Entrada não confiável
+- **Feeds**: só HTTPS, tamanho e tempo limitados; DTD/entidades XML rejeitados (XXE/expansão); texto tratado como texto; URLs validadas.
+- **SSRF**: todo acesso de saída (feeds, imagens, páginas para Open Graph, IA, captura) exige HTTPS, porta 443 e IP **público**; o IP validado é fixado na conexão (sem *DNS rebinding*) e cada redirecionamento é revalidado; POST nunca é reenviado em redirecionamento.
+- **Uploads**: só JPEG/PNG/WebP, até 5 MB / 4096 px / 16 MP, tipo real verificado (não pelo nome), nome aleatório, servidos só por `media.php` autenticado com tipo fixo. SVG, HTML e PHP são recusados.
+- **IA**: o texto das notícias vai como dados citados, nunca como instruções; a saída é validada, limpa de HTML, e números/citações que não existem na fonte geram alerta. O prompt de vídeo é montado pelo sistema, não pelo modelo.
 
-O endpoint de health é público e mínimo para permitir checagem de disponibilidade. Não é um teste completo de penetração. Os testes automatizados devem verificar comportamento de autenticação, CSRF, parsing, geração conservadora e arquivos enviados, mas não certificam a infraestrutura da VPS.
+## Fidelidade editorial
+O Radar não verifica fatos e não afirma que verifica. A pontuação é estimativa própria. Imagens vêm da fonte (com crédito e aviso de direitos), de upload seu, ou de captura real por serviço configurado por você; **nunca são fabricadas**. Capas “emprestadas” de outra matéria do mesmo assunto são rotuladas como tal.
 
-Antes de habilitar produção, valide o isolamento do document root, permissões, SSL, PHP-FPM, acesso SSH com chave de host conhecida, proteção do Environment e os endpoints reais por HTTP. A VPS e a configuração remota permanecem **não verificadas até existir acesso SSH autorizado**. Não altere DNS nem realize a publicação enquanto esses requisitos estiverem pendentes.
+## Fontes e termos
+Usa feeds RSS/Atom públicos e o RSS do Google Trends. O feed do **Google Notícias** informa que é para leitura pessoal e não comercial: mantenha o painel privado ou desative essas fontes. Respeite os termos de cada veículo; confira direitos antes de reutilizar texto ou imagem.
 
-Nenhuma automação de publicação em redes sociais faz parte deste projeto. O roteiro usa o título e o contexto fornecido; checagem jornalística e autorização de uso de imagem continuam necessárias antes da publicação editorial.
+## O que NÃO está coberto
+Testes automáticos não certificam a infraestrutura: valide DNS, SSL, permissões, PHP-FPM e o acesso SSH no servidor real. Não há automação de postagem em redes sociais. OAuth para o ChatGPT ainda não existe ([CHATGPT.md](CHATGPT.md)).

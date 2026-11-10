@@ -152,16 +152,32 @@ function radar_require_read_access(): void
     }
     $authorization = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
     if (is_string($authorization) && $authorization !== '') {
-        $expected = radar_config()['api_token_hash'];
-        if (is_string($expected) && preg_match('/^[a-f0-9]{64}$/D', $expected)
-            && preg_match('/^Bearer ([A-Za-z0-9_-]{32,256})$/D', $authorization, $matches)
-            && hash_equals($expected, hash('sha256', $matches[1]))) {
-            return;
+        if (preg_match('/^Bearer ([A-Za-z0-9_-]{32,256})$/D', $authorization, $matches) === 1) {
+            // Legacy token created by bin/setup.php (hash in config.php): read-only.
+            $expected = radar_config()['api_token_hash'];
+            if (is_string($expected) && preg_match('/^[a-f0-9]{64}$/D', $expected) && hash_equals($expected, hash('sha256', $matches[1]))) {
+                $GLOBALS['radar_scopes'] = ['read'];
+                return;
+            }
+            // Tokens managed in the panel (Configurações de integração).
+            if (function_exists('radar_token_authenticate')) {
+                try {
+                    $scopes = radar_token_authenticate($matches[1]);
+                } catch (Throwable $error) {
+                    error_log('Radar token lookup failed: ' . get_class($error));
+                    radar_json(['error' => 'Armazenamento indisponível.'], 503);
+                }
+                if ($scopes !== null) {
+                    $GLOBALS['radar_scopes'] = $scopes;
+                    return;
+                }
+            }
         }
         header('WWW-Authenticate: Bearer realm="Radar Viral BR"');
         radar_json(['error' => 'Credencial de leitura inválida.'], 401);
     }
     radar_require_login(true);
+    $GLOBALS['radar_scopes'] = ['read', 'react', 'admin'];
 }
 
 function radar_csrf_token(): string
@@ -281,4 +297,8 @@ function radar_escape(string $text): string
     return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+date_default_timezone_set('America/Sao_Paulo');
+require_once __DIR__ . '/modules.php';
+require_once __DIR__ . '/tokens.php';
+require_once __DIR__ . '/layout.php';
 radar_security_headers();

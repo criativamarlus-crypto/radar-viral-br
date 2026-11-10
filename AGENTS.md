@@ -3,20 +3,18 @@
 ## Projeto
 Site privado de curadoria de notícias para vídeos curtos de react em português brasileiro, hospedado em CloudPanel/Nginx no domínio https://viral.netnewsltda.online. O usuário utiliza um personagem fixo: brasileiro negro, homem adulto robusto, óculos, corrente de ouro, relógio, sorriso marcante, linguagem espontânea e bem-humorada. O site deve localizar pautas em alta, oferecer manchete, fontes, imagem/capa quando permitida, proposta de headline fiel aos fatos e prompt/roteiro para gerar vídeo com o personagem.
 
-## Estado e fonte do código
-O código inicial foi enviado diretamente ao GitHub pelo ChatGPT e passou a ser a base de desenvolvimento deste repositório. Continue a partir dos arquivos existentes; não bloqueie o trabalho pedindo novamente o ZIP original. O pacote `Radar_Viral_BR_Codex_GitHub.zip` e a imagem original do personagem não fazem parte dessa base. Preserve o visual escuro/dourado, as categorias e a descrição do personagem; o administrador pode enviar sua imagem autorizada no painel. Nunca dizer que o site está publicado sem verificar implantação e resposta HTTP.
+## Estado do código
+Aplicação PHP 8.2+ completa (sem framework), com SQLite em `storage/`. Continue a partir dela; leia `README.md` e `docs/`. Visual: fundo escuro com destaques vermelho, amarelo e azul, cards com imagem grande, menu lateral no desktop e gaveta no celular. Preserve as categorias, a descrição do personagem e a regra de **nunca afirmar fatos que a fonte não traz**. Nunca dizer que o site está publicado sem verificar implantação e resposta HTTP.
 
-## Estrutura prevista do pacote PHP
-- `public/`: raiz pública do site, `index.php`, `login.php`, `api.php`, `mcp.php`, JS, CSS, assets do personagem.
-- `app/`: leitura de feeds RSS e bootstrap, **fora da raiz pública**.
-- `bin/`: instalação/CLI e atualização por cron.
-- `storage/`: cache privado, nunca expor via HTTP.
-- `.github/workflows/deploy.yml`: testes e implantação via SSH/SCP no CloudPanel.
-- `config.php`: credenciais criadas no servidor, nunca comitar.
-- `public/uploads/`: arquivos enviados pelo administrador, controlar extensão, conteúdo e tamanho.
+## Estrutura
+- `public/`: raiz web. Páginas (`index`, `noticias`, `noticia`, `fontes`, `salvas`, `estudio`, `personagem`, `roteiros`, `roteiro`, `config-ia`, `integracoes`, `coletas`), `login`/`logout`, `api.php`, `mcp.php`, `media.php`, `health.php`, `assets/` (CSS/JS sem inline: CSP estrita).
+- `app/`: lógica, **fora da raiz pública**: `net` (HTTP seguro/SSRF), `db` (SQLite, migrações, segredos criptografados), `feeds` (RSS/Atom/RDF/Trends), `sources`, `ranking`, `collector`, `og`, `news`, `media`, `character`, `ai`, `reacts`, `tokens`, `layout`, `diagnostics`, `bootstrap` (sessão/CSRF/limites).
+- `bin/`: `setup.php` (config privado), `update.php` (cron de 30 min), `deploy.sh`.
+- `tests/`: `php tests/run.php` (unitário + HTTP descartável). `.github/workflows/deploy.yml`: CI e deploy protegido.
+- `config.php` (0600) e `storage/` (0700): privados, nunca comitar.
 
-## Objetivos técnicos
-1. Importar os arquivos existentes, verificar o código e corrigir erros; manter arquitetura PHP 8.2+ compatível com CloudPanel/Nginx.
+## Regras técnicas
+1. Manter PHP 8.2+ compatível com CloudPanel/Nginx; toda mudança de esquema é uma migração nova em `app/db.php`.
 2. Exibir rankings editoriais e fontes (Google Trends/RSS, Google News, notícias brasileiras verificáveis). Não afirmar que pontuação heurística é ranking oficial do Google Trends.
 3. Buscar artigos com título, data, URL de origem, categoria, miniatura disponível, status de verificação e fontes. Apresentar erro/fonte indisponível quando necessário.
 4. Gerar prompts de react em português brasileiro (15–35s) com tom envolvente e natural, sem inventar fatos, acusações, números ou falas. Para política, distinguir informação de opinião e checar origem.
@@ -32,5 +30,7 @@ O código inicial foi enviado diretamente ao GitHub pelo ChatGPT e passou a ser 
 - Incluir documentação para configurar cron, SSL e logs, com diagnósticos de falha.
 - Não criar automações de publicação em redes sociais sem confirmação separada.
 
-## Próximo passo para o Codex
-Continuar a revisão dos arquivos existentes, executar `php tests/run.php` e validar o primeiro deploy no CloudPanel somente após conferir a identidade SSH por canal confiável e a configuração do servidor. O workflow permanece bloqueado até configuração explícita. Não tratar a página genérica “Hello World” como publicação da aplicação. Não afirmar que a VPS foi validada quando ainda não houver acesso SSH funcional.
+## Pendências conhecidas
+- **OAuth 2.1 para conectar o ChatGPT** (hoje só Bearer; ver `docs/CHATGPT.md`).
+- Primeiro deploy: acesso SSH, chave de host por canal confiável, DNS/SSL e Secrets ainda não verificados. Não tratar a página genérica do CloudPanel como publicação.
+- Chave de IA e (opcional) serviço de captura de tela: configurar no painel, nunca no código.

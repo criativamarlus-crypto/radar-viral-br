@@ -51,12 +51,13 @@ if (!$configured) {
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
     <title>Entrar · Radar Viral BR</title>
-    <link rel="stylesheet" href="/assets/style.css">
+    <link rel="stylesheet" href="/assets/app.css">
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
 </head>
 <body class="login-page">
-<main class="auth-shell">
+<main>
     <section class="auth-card" aria-labelledby="login-title">
-        <p class="eyebrow">CURADORIA · REACTS · BRASIL</p>
+        <p class="eyebrow">NOTÍCIAS · REACTS · BRASIL</p>
         <h1 id="login-title">Radar <span>Viral BR</span></h1>
         <p>Acesse seu painel privado de pautas e roteiros.</p>
         <?php if ($error !== ''): ?>
@@ -69,7 +70,7 @@ if (!$configured) {
             <input id="username" name="username" autocomplete="username" required maxlength="100" autofocus>
             <label for="password">Senha</label>
             <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
-            <button class="button primary" type="submit">Entrar no painel</button>
+            <button class="btn primary" type="submit">Entrar no painel</button>
         </form>
         <?php endif; ?>
         <p class="muted">Acesso restrito à equipe editorial.</p>

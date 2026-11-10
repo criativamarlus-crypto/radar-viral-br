@@ -40,7 +40,7 @@ base=$1
 [[ -s $base/shared/config.php && -d $base/shared/storage && -w $base/shared/storage ]] || { echo 'Provision private shared/config.php and writable shared/storage before deployment.' >&2; exit 1; }
 [[ ! -e $base/current || -L $base/current ]] || { echo 'The current path must be a release symlink, never an existing document root.' >&2; exit 1; }
 for command in php curl tar flock; do command -v "$command" >/dev/null || { echo "Missing server command: $command" >&2; exit 1; }; done
-php -r 'exit(PHP_VERSION_ID >= 80200 && extension_loaded("curl") && extension_loaded("simplexml") && extension_loaded("fileinfo") ? 0 : 1);'
+php -r 'exit(PHP_VERSION_ID >= 80200 && extension_loaded("curl") && extension_loaded("simplexml") && extension_loaded("fileinfo") && extension_loaded("pdo_sqlite") && extension_loaded("mbstring") && (extension_loaded("sodium") || extension_loaded("openssl")) ? 0 : 1);'
 php -r '
   $c = require $argv[1];
   $storage = is_array($c) ? ($c["storage_path"] ?? null) : null;

@@ -1,40 +1,44 @@
 # Radar Viral BR
 
-Painel privado, em português brasileiro, de curadoria de pautas para vídeos curtos de react. Domínio de destino: `https://viral.netnewsltda.online`.
+Painel **privado**, em português brasileiro, que busca notícias do Brasil e do mundo, estima o potencial de cada uma para vídeos curtos de *react* e prepara headlines, roteiro, comentário, CTA e um prompt de vídeo com o seu personagem fixo. Produção: https://viral.netnewsltda.online
 
-## O que o painel faz
+## O que faz
 
-- Consulta RSS do Google Notícias nas categorias Geral, Brasil, Futebol, Política, Famosos, Economia, Mundo e Tecnologia; consulta tendências por feed público quando disponível.
-- Exibe manchetes, fontes, links, datas e imagens fornecidas pelos feeds. A falta de imagem ou de resposta da fonte aparece explicitamente; nenhuma capa ou captura é apresentada como fotografia real sem origem.
-- Permite busca, ordenação e seleção de notícias. A pontuação editorial é uma heurística, não um ranking oficial do Google Trends.
-- Produz um roteiro conservador de react de 15 a 35 segundos e um prompt com o personagem do projeto. O título do feed não equivale à checagem dos fatos; abra as fontes e confirme os detalhes antes de gravar.
-- Oferece prévia vertical 9:16 e upload manual da imagem autorizada do personagem e de capa/print real. Não realiza captura automática de sites nem geração de vídeo.
-- Protege o painel com login, sessões, CSRF e limitação de requisições. API e MCP de leitura aceitam token próprio, separado das credenciais de implantação.
-- Mantém cache e imagens enviadas em armazenamento privado, fora de `public/`.
+- **Coleta** a cada 30 min (cron e/ou ao abrir o painel) de ~48 fontes RSS/Atom + Google Trends Brasil: Google Notícias, G1, UOL, CNN Brasil, Metrópoles, Terra, GE, Folha, Estadão, BBC, DW, Guardian e outras. Fontes podem ser adicionadas, editadas, ativadas e desativadas em *Fontes monitoradas*. Fonte fora do ar vira erro registrado em *Histórico de coleta*; nada é inventado.
+- **Ranking** 0–100 de potencial viral, *estimativa própria* (atualidade, presença em vários veículos, tendências, interesse, discussão, clareza, imagem, viabilidade), com o motivo de cada ponto. Agrupa a mesma história de vários veículos num card. Filtros: última hora, 3 h, 6 h, 24 h, mais recentes, maior potencial, categoria, busca.
+- **Imagens**: capa declarada pela fonte, Open Graph da matéria, anexo manual, captura real por serviço opcional. Sempre com crédito e aviso de direitos; nunca fabrica prints. Prévia 9:16.
+- **Roteiros**: botão *Gerar react com IA* (Anthropic, OpenAI ou API compatível; sem IA gera um rascunho conservador). Entrega 3 headlines, gancho, roteiro de 15–35 s, comentário (opinião separada de fato), CTA e prompt de vídeo com o personagem fixo. Alerta sobre números/citações que não estão na fonte.
+- **Estúdio de React**: composição vertical 9:16 (notícia em cima, personagem embaixo), enquadramento, headline, expressão, salvar projeto, exportar PNG 1080×1920 e `.txt`.
+- **Meu Personagem**: prompt mestre imutável + imagens de referência.
+- **API REST e MCP** com tokens (leitura / preparar react): [docs/API.md](docs/API.md) e [docs/CHATGPT.md](docs/CHATGPT.md).
 
-O repositório partiu do código inicial enviado diretamente ao GitHub. O ZIP original e o arquivo original do personagem não fazem parte dessa base; o painel permite fornecer a imagem autorizada pelo administrador.
+## Rodar localmente
 
-## Executar em desenvolvimento
-
-Requisitos: PHP 8.2 ou superior com cURL, SimpleXML, fileinfo e JSON; saída HTTPS para os feeds. Não há serviço OpenAI obrigatório nem dependências Composer.
+Requisitos: PHP 8.2+ com `curl`, `simplexml`, `fileinfo`, `mbstring`, `pdo_sqlite` e `sodium` ou `openssl`.
 
 ```bash
-php bin/setup.php --help
-php bin/setup.php --local-http --site-url=http://127.0.0.1:8080
-php tests/run.php
-php -S 127.0.0.1:8080 -t public
+cp config.example.php config.php
+# edite config.php: admin_user, admin_password_hash, storage_path, secure_cookies=false, site_url=http://localhost:8080
+php -r 'echo password_hash("SUA-SENHA-LONGA", PASSWORD_DEFAULT), PHP_EOL;'   # cole o hash em config.php
+php -S localhost:8080 -t public
 ```
 
-O assistente CLI solicita a senha e cria `config.php` fora da raiz pública. As opções acima habilitam cookies para HTTP somente no loopback local. Em produção, execute o setup sem `--local-http`, mantendo URL HTTPS e cookies seguros. Não publique o servidor de desenvolvimento do PHP na Internet.
+Abra http://localhost:8080 e entre. No primeiro acesso o painel faz a primeira coleta sozinho. No servidor use `php bin/setup.php`, que cria o `config.php` pedindo a senha no terminal.
 
-## Publicação pelo CloudPanel
+## Testes
 
-A implantação está **preparada e desativada por padrão**. Nenhum acesso SSH, configuração de VPS ou publicação é considerado validado apenas por existir um workflow.
+```bash
+php tests/run.php     # ~275 verificações; sobe um servidor PHP descartável; não usa rede nem credenciais reais
+```
 
-1. Siga [a configuração do CloudPanel](docs/CLOUDPANEL.md), com raiz web em `current/public/`, armazenamento compartilhado privado e certificado válido.
-2. Configure a chave SSH exclusiva de deploy e confira a fingerprint por uma fonte confiável, como o console do provedor.
-3. Configure os cinco Secrets obrigatórios do Environment `production`: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY` e `DEPLOY_KNOWN_HOSTS`. `DEPLOY_PORT` é opcional, com padrão 22.
-4. Exija aprovação no Environment e revisão da branch `main`. Valide primeiro em homologação.
-5. Somente após validar segurança e servidor, habilite a variável `PRODUCTION_DEPLOY_ENABLED=true`. Merges aprovados em `main` passam a executar os testes e preparar uma publicação sujeita à aprovação do Environment.
+## Publicar no CloudPanel
 
-O workflow não altera DNS, não configura o CloudPanel, não cria credenciais administrativas e não publica em redes sociais. Veja também [a revisão de segurança](docs/SECURITY.md).
+Siga [docs/CLOUDPANEL.md](docs/CLOUDPANEL.md): PHP Site 8.2+, raiz web em `current/public`, usuário de deploy sem root, chave de host SSH conferida, secrets no GitHub Environment `production`, cron de 30 min. O workflow `Validate and deploy` roda em PRs (sem segredos) e só publica a partir da `main`, com a variável `PRODUCTION_DEPLOY_ENABLED=true` e aprovação do Environment.
+
+## Documentação
+
+[API e MCP](docs/API.md) · [ChatGPT](docs/CHATGPT.md) · [CloudPanel](docs/CLOUDPANEL.md) · [Segurança](docs/SECURITY.md) · [AGENTS.md](AGENTS.md)
+
+## Limites honestos
+
+O Radar lê manchetes e metadados; **não verifica fatos**. A nota não é audiência nem ranking oficial do Google Trends. O feed do Google Notícias é para uso pessoal e não comercial. Nenhum vídeo é gerado nem publicado automaticamente.

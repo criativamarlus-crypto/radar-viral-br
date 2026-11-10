@@ -4,7 +4,7 @@ Estado: workflow preparado, produção desativada por padrão. Os testes locais 
 
 ## 1. Servidor e layout
 
-Crie/revise um PHP Site no CloudPanel para `viral.netnewsltda.online`, com PHP 8.2+ e extensões cURL, SimpleXML e fileinfo. Confirme a versão do PHP tanto no CLI quanto no pool PHP-FPM. JSON faz parte do PHP. É preciso ter `bash`, `tar`, `flock`, `curl`, SSH e SCP no servidor.
+Crie/revise um PHP Site no CloudPanel para `viral.netnewsltda.online`, com PHP 8.2+ e as extensões **cURL, SimpleXML, fileinfo, mbstring, pdo_sqlite** e **sodium ou openssl** (o banco é SQLite; não é preciso criar banco MySQL). Confirme a versão e as extensões tanto no CLI quanto no pool PHP-FPM: `php -m | grep -Ei 'curl|simplexml|fileinfo|mbstring|pdo_sqlite|sodium|openssl'`. O painel (Integrações > Diagnóstico) e o `/health.php` acusam o que faltar. É preciso ter `bash`, `tar`, `flock`, `curl`, SSH e SCP no servidor.
 
 Use o usuário do site ou outro usuário exclusivo de deploy com acesso somente aos arquivos desse site. Não use root no workflow. A pasta de deploy deve ser absoluta, sem espaços e sem barra final, por exemplo `/home/USUARIO/apps/radar-viral-br`. O script recusa caminhos suspeitos e não cria nem substitui a configuração do CloudPanel.
 
@@ -60,7 +60,7 @@ Teste manualmente o acesso com chave e a chave de host conferida. Confira que o 
 
 Instale um certificado válido no CloudPanel; confirme que o DNS aponta para o servidor correto e que HTTP redireciona para HTTPS no host canônico. Esta alteração de DNS/configuração de produção requer autorização do proprietário e não é feita pelo workflow.
 
-Revise [o snippet Nginx](../deploy/nginx-hardening.conf) no vhost existente. Preserve a configuração PHP-FPM gerenciada pelo painel, adicione as negativas de acesso e mantenha a raiz em `current/public`. Use `nginx -t` antes de recarregar Nginx. Faça backup do vhost existente. No PHP, use `display_errors=Off`, `log_errors=On`, `expose_php=Off`, `upload_max_filesize=5M` e `post_max_size=6M`.
+Revise [o snippet Nginx](../deploy/nginx-hardening.conf) no vhost existente. Preserve a configuração PHP-FPM gerenciada pelo painel, adicione as negativas de acesso e mantenha a raiz em `current/public`. Use `nginx -t` antes de recarregar Nginx. Faça backup do vhost existente. No PHP, use `display_errors=Off`, `log_errors=On`, `expose_php=Off`, `upload_max_filesize=5M`, `post_max_size=6M`, `memory_limit=256M` e `max_execution_time=120` (a coleta de ~50 fontes leva ~10 s e a geração com IA até ~60 s). Se o Nginx devolver 504 nessas ações, aumente `fastcgi_read_timeout` do handler PHP para 120s.
 
 Dentro do handler PHP-FPM já existente, confirme também `fastcgi_param HTTP_AUTHORIZATION $http_authorization;`, para que os endpoints API/MCP recebam o Bearer token. Não crie outro handler PHP concorrente. Confira a autenticação com token válido e a rejeição de token inválido antes de liberar a integração.
 
@@ -87,17 +87,23 @@ Em PR, o workflow executa somente lint e testes sem Secrets. Depois de um merge 
 
 O pacote contém somente `app/`, `public/`, `bin/` e `config.example.php`. O deploy não substitui `shared/config.php` ou `shared/storage`. Faz verificação SSH estrita, valida requisitos do PHP, publica uma release nova e troca `current` de forma atômica. Verifica `/health.php` por HTTPS no Nginx local (com o nome correto do certificado) e pelo endereço público. Em falha, restaura o symlink anterior, ou remove o novo `current` se não havia release anterior. Isso não restaura configurações externas modificadas manualmente.
 
-## 5. Cron e logs
+## 5. Cron, banco e logs
 
-Cadastre no CloudPanel um cron como o mesmo usuário do site:
+Cadastre no CloudPanel um cron **a cada 30 minutos**, como o mesmo usuário do site:
 
 ```cron
-*/10 * * * * /usr/bin/flock -n /home/USUARIO/apps/radar-viral-br/.feeds.lock /usr/bin/php /home/USUARIO/apps/radar-viral-br/current/bin/update.php >> /home/USUARIO/apps/radar-viral-br/shared/storage/cron.log 2>&1
+*/30 * * * * /usr/bin/flock -n /home/USUARIO/apps/radar-viral-br/.feeds.lock /usr/bin/php /home/USUARIO/apps/radar-viral-br/current/bin/update.php >> /home/USUARIO/apps/radar-viral-br/shared/storage/cron.log 2>&1
 ```
 
-Confirme os caminhos reais de `php` e `flock`. Execute o cron com o mesmo usuário PHP-FPM dono de `shared/storage` (0700); sessões, limites e arquivos internos permanecem privados. O cron limpa contadores de limite e sessões expiradas antes de atualizar o cache; mantenha-o executando pelo menos a cada 10 minutos, inclusive quando os feeds estiverem indisponíveis. Ele sai com código 1 em caso de fonte indisponível ou cache antigo; falhas upstream devem aparecer no painel. Configure rotação para `cron.log` e para os logs PHP/Nginx do site. Não coloque tokens ou dados de login nos logs. A aplicação também consulta os feeds sob demanda usando cache.
+Confirme os caminhos reais de `php` e `flock`. O script coleta todas as fontes ativas em paralelo, grava o histórico (visível em *Histórico de coleta*), reclassifica e recalcula o ranking, busca imagens Open Graph das melhores matérias sem capa, limpa sessões/limites expirados e remove matérias antigas não salvas (14 dias). Saída `0` = coletou (mesmo com fontes falhando; os erros aparecem no log e no painel); `1` = todas as fontes falharam ou a aplicação não iniciou. **Sem o cron o painel ainda se atualiza sozinho**: ao ser aberto com dados de mais de 30 minutos, dispara a coleta (manual ou automática; nunca duas ao mesmo tempo, há trava).
 
-Para rollback manual, execute como usuário do site uma troca atômica para uma release anterior que já tenha sido validada, confira novamente `/health.php` e o login. Nunca apague a release atual ou a anterior durante um deploy. Faça backup restrito de `shared/config.php` e `shared/storage`, fora da raiz pública, e teste recuperação. O workflow mantém releases anteriores para inspeção; programe a retenção após confirmar quais releases podem ser removidas.
+O banco é `shared/storage/radar.sqlite` (modo WAL: aparecem também `-wal` e `-shm`). **Faça backup** de `shared/storage/radar.sqlite` e de `shared/storage/app.key` (sem a chave mestra, as chaves de IA salvas no banco não podem ser lidas e precisarão ser digitadas de novo). Backup consistente com o site no ar:
+
+```bash
+sqlite3 /home/USUARIO/apps/radar-viral-br/shared/storage/radar.sqlite ".backup '/home/USUARIO/backups/radar-$(date +%F).sqlite'"
+```
+
+Configure rotação para `cron.log` e para os logs PHP/Nginx do site. Não coloque tokens ou dados de login nos logs. Para rollback manual, execute como usuário do site uma troca atômica para uma release anterior já validada, confira `/health.php` e o login. Nunca apague a release atual ou a anterior durante um deploy; o workflow mantém releases anteriores (programe a retenção depois).
 
 ## Diagnóstico
 
@@ -110,7 +116,9 @@ Para rollback manual, execute como usuário do site uma troca atômica para uma 
 | Health 503 | Config privado, hash de senha, extensões PHP e storage privado gravável |
 | Health 404 ou página antiga | Raiz CloudPanel em current/public, host/SSL e cache/proxy corretos |
 | Falha de cookie/login | HTTPS, secure_cookies e relógio do servidor; conferir PHP session storage |
-| Feeds vazios/antigos | Saída HTTPS e erros de fonte; não trate cache antigo como notícias atualizadas |
+| Feeds vazios/antigos | *Histórico de coleta* mostra o erro de cada fonte; confirme saída HTTPS do servidor (porta 443) e o cron |
+| Health 503 com PHP ok | extensão `pdo_sqlite`/`mbstring` ausente no PHP-FPM, ou `shared/storage` sem permissão 0700/gravável |
+| IA não responde | *Configurações de IA* > Testar conexão; chave, nome do modelo e saldo do provedor |
 | PHP funciona no CLI mas retorna 502 | Pool PHP-FPM, versão/extensões e permissões; logs do site no CloudPanel |
 
 Uma resposta 200 em uma página genérica do domínio não prova que o Radar Viral BR está instalado. Valide o health JSON, login, carregamento de notícias, upload autorizado e negativas de acesso aos arquivos privados.
