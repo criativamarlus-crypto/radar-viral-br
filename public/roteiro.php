@@ -94,7 +94,7 @@ radar_page_start('Roteiro de react', 'roteiros.php');
         <div class="panel script-block">
             <div class="head"><span>F. Prompt de vídeo (personagem fixo)</span><button type="button" class="btn primary small" data-copy="video-prompt">Copiar prompt</button></div>
             <textarea id="video-prompt" rows="14" readonly class="mono"><?= radar_h($script['video_prompt']) ?></textarea>
-            <p class="hint">Envie junto as imagens de referência de <a href="personagem.php">Meu Personagem</a> à ferramenta de vídeo. O bloco do personagem é fixo e não muda.</p>
+            <p class="hint">Envie junto as imagens de referência de <a href="personagem.php">Meu Personagem</a> à ferramenta de vídeo. O bloco do personagem é fixo e não muda. Padrão: <strong>ele não sorri depois da última fala</strong>.</p>
         </div>
     </aside>
 </div>

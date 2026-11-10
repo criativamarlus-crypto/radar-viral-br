@@ -84,6 +84,24 @@ function radar_character_set_primary(string $mediaId): bool
 }
 
 /**
+ * Fixed rules appended to EVERY video prompt (shown read-only in "Meu Personagem").
+ * Video models tend to add a closing grin when the speech ends; the character must not.
+ *
+ * @return array<string,array{label:string,description:string,rule:string,avoid:string}>
+ */
+function radar_video_standards(): array
+{
+    return [
+        'no_smile_after_speech' => [
+            'label' => 'Sem sorrir depois da fala',
+            'description' => 'Ele pode sorrir, brincar e gesticular enquanto fala. Na hora em que termina a última palavra, para de sorrir: boca fechada e relaxada, rosto neutro olhando para a câmera por cerca de 1 segundo, e o vídeo acaba. Sem sorriso de despedida, risada ou piscadinha no final.',
+            'rule' => 'ENDING (default rule, do not override): he may smile, joke and gesture while he is speaking. The moment the last word is said he STOPS smiling: mouth closed, lips relaxed and neutral, no grin, no smirk, no laughing, no teeth showing, no wink, no smiling head-tilt. He holds a calm neutral face looking straight at the camera for about one second and the clip ends there. Never add a closing smile, a thank-you smile or a laugh after the dialogue.',
+            'avoid' => 'smiling, grinning, laughing or winking after the last spoken word',
+        ],
+    ];
+}
+
+/**
  * Prompt for external AI video tools. Built from code (not by the language model) so the
  * character block stays identical. The dialogue is the user's own approved script.
  *
@@ -108,7 +126,9 @@ function radar_video_prompt(array $parts): string
         'DIALOGUE (spoken in natural, colloquial Brazilian Portuguese, with lip-sync, exactly as written):',
         '"' . $spoken . '"',
         '',
+        radar_video_standards()['no_smile_after_speech']['rule'],
+        '',
         'CONTEXT (do not show or invent any text on screen): reacting to the headline "' . trim($parts['headline']) . '" reported by ' . trim($parts['source']) . '.',
-        'AVOID: news-anchor look, studio desk, teleprompter feel, extra people, subtitles burned into the video, logos, watermarks, distorted hands, a different face or body type, changing glasses/chain/watch/clothing.',
+        'AVOID: ' . radar_video_standards()['no_smile_after_speech']['avoid'] . ', news-anchor look, studio desk, teleprompter feel, extra people, subtitles burned into the video, logos, watermarks, distorted hands, a different face or body type, changing glasses/chain/watch/clothing.',
     ]);
 }

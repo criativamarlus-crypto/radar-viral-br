@@ -268,7 +268,7 @@ try {
     $txt = localRequest('api.php?action=script&id=' . $scriptId . '&format=txt');
     check('a script exports as a downloadable text file', static fn(): bool => $txt['status'] === 200 && str_contains($txt['headers']['content-type'] ?? '', 'text/plain') && str_contains($txt['body'], 'PROMPT DE VÍDEO'));
     $roteiroPage = localRequest('roteiro.php?id=' . $scriptId);
-    check('the script page shows editable fields, copy buttons and the fixed-character prompt', static fn(): bool => $roteiroPage['status'] === 200 && str_contains($roteiroPage['body'], 'data-copy="video-prompt"') && str_contains($roteiroPage['body'], 'recurring fictional Brazilian character'));
+    check('the script page shows editable fields, copy buttons, the fixed-character prompt and the no-smile standard', static fn(): bool => $roteiroPage['status'] === 200 && str_contains($roteiroPage['body'], 'data-copy="video-prompt"') && str_contains($roteiroPage['body'], 'recurring fictional Brazilian character') && str_contains($roteiroPage['body'], 'STOPS smiling') && str_contains($roteiroPage['body'], 'não sorri depois da última fala'));
     $edit = localRequest('roteiro.php', 'POST', formBody(['csrf' => $writeCsrf, 'id' => $scriptId, 'hook' => 'Gancho editado pelo usuário', 'script' => 'Texto novo', 'commentary' => 'Opinião nova', 'cta' => 'E aí?', 'expression' => 'rindo', 'scene' => 'casa']), FORM);
     check('editing a script through the form redirects back and rebuilds the prompt', static fn(): bool => $edit['status'] === 303 && str_contains(radar_script_get($scriptId)['video_prompt'], 'Gancho editado pelo usuário'));
     $editNoCsrf = localRequest('roteiro.php', 'POST', formBody(['id' => $scriptId, 'hook' => 'Invasor']), FORM);
@@ -311,7 +311,7 @@ try {
     $traversal = localRequest('media.php?id=..%2Fconfig.php');
     check('media endpoint rejects traversal to private configuration', static fn(): bool => $traversal['status'] === 404 && !str_contains($traversal['body'], 'admin_password_hash'));
     $personagem = localRequest('personagem.php');
-    check('"Meu Personagem" shows the immutable master prompt and the uploaded reference', static fn(): bool => str_contains($personagem['body'], 'Prompt mestre (imutável)') && str_contains($personagem['body'], $mediaId) && str_contains($personagem['body'], 'readonly'));
+    check('"Meu Personagem" shows the immutable master prompt and the uploaded reference', static fn(): bool => str_contains($personagem['body'], 'Padrões do vídeo (fixos)') && str_contains($personagem['body'], 'Sem sorrir depois da fala') && str_contains($personagem['body'], 'Prompt mestre (imutável)') && str_contains($personagem['body'], $mediaId) && str_contains($personagem['body'], 'readonly'));
 
     /* ---- forms: sources, AI settings, integrations ---- */
     $sourceForm = localRequest('fontes.php', 'POST', formBody(['csrf' => $writeCsrf, 'op' => 'create', 'name' => 'Nova Fonte', 'url' => 'https://nova.example.com/rss', 'category' => 'Economia', 'region' => 'BR', 'weight' => '1.1']), FORM);

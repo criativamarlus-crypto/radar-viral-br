@@ -24,6 +24,14 @@ radar_page_start('Meu Personagem', 'personagem.php');
     </section>
 </div>
 
+<section class="panel section" aria-labelledby="padroes-h">
+    <h2 id="padroes-h">Padrões do vídeo (fixos)</h2>
+    <p class="hint">Regras que entram automaticamente em <strong>todo</strong> prompt de vídeo, inclusive nos roteiros já criados.</p>
+    <?php foreach (radar_video_standards() as $standard): ?>
+        <div class="notice info"><strong><?= radar_h($standard['label']) ?></strong><br><?= radar_h($standard['description']) ?></div>
+    <?php endforeach; ?>
+</section>
+
 <div class="grid-2 section">
     <section class="panel">
         <h2>Personalidade</h2>

@@ -621,6 +621,29 @@ check('video prompt embeds the fixed character, the approved dialogue, 9:16 fram
         && str_contains($prompt, '9:16') && str_contains($prompt, '28 seconds') && str_contains($prompt, 'sofa') && str_contains($prompt, 'eyebrow raised')
         && str_contains($prompt, 'AVOID') && str_contains($prompt, 'Brazilian Portuguese');
 });
+check('the "no smile after speech" standard is in every video prompt, whatever the expression, and comes after the dialogue', static function (): bool {
+    $rule = radar_video_standards()['no_smile_after_speech'];
+    foreach (array_keys(radar_character_expressions()) as $expression) {
+        $prompt = radar_video_prompt(['spoken' => 'Fala de teste.', 'expression' => $expression, 'scene' => 'carro', 'duration' => 25, 'headline' => 'H', 'source' => 'S']);
+        if (!str_contains($prompt, $rule['rule']) || !str_contains($prompt, 'AVOID: ' . $rule['avoid']) || strpos($prompt, $rule['rule']) < strpos($prompt, '"Fala de teste."')) {
+            return false;
+        }
+    }
+    return str_contains($rule['rule'], 'STOPS smiling') && str_contains($rule['rule'], 'while he is speaking') && str_contains($rule['rule'], 'no teeth showing') && str_contains($rule['description'], 'última palavra');
+});
+check('the standard is a fixed, labelled rule that the UI can show', static function (): bool {
+    $standards = radar_video_standards();
+    return isset($standards['no_smile_after_speech']) && $standards['no_smile_after_speech']['label'] === 'Sem sorrir depois da fala' && mb_strlen($standards['no_smile_after_speech']['description']) > 60;
+});
+check('scripts created before the standard get it too: the prompt is rebuilt from the stored fields on read', static function (): bool {
+    radar_db_exec("INSERT INTO scripts (news_title, news_url, news_source, mode, duration, tone, hook, script, commentary, cta, expression, scene, video_prompt, created_at, updated_at) VALUES ('Manchete antiga', 'https://old.example.com/a', 'Fonte Velha', 'rascunho', 25, 'direto', 'Gancho antigo.', 'Roteiro antigo.', 'Opinião antiga.', 'E você?', 'rindo', 'casa', 'LEGACY PROMPT WITHOUT ANY STANDARD', ?, ?)", [time(), time()]);
+    $script = radar_script_get((int)radar_db()->lastInsertId());
+    return !str_contains($script['video_prompt'], 'LEGACY PROMPT') && str_contains($script['video_prompt'], radar_video_standards()['no_smile_after_speech']['rule']) && str_contains($script['video_prompt'], 'Gancho antigo. Roteiro antigo.') && str_contains($script['video_prompt'], 'Fonte Velha') && str_contains($script['video_prompt'], 'laughing');
+});
+check('every exported script and every AI-prepared react carries the standard', static function (): bool {
+    $latest = radar_scripts_list(1)[0];
+    return str_contains(radar_script_export_text($latest), 'STOPS smiling');
+});
 check('every expression and scene produces a distinct prompt block', static function (): bool {
     $seen = [];
     foreach (array_keys(radar_character_expressions()) as $key) {

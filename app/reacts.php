@@ -106,7 +106,12 @@ function radar_script_decode(array $row): array
         'estimated_seconds' => radar_speech_seconds($spoken),
         'expression' => (string)$row['expression'],
         'scene' => (string)$row['scene'],
-        'video_prompt' => (string)$row['video_prompt'],
+        // Rebuilt on every read from the stored fields, so scripts created before a prompt standard
+        // existed (e.g. "no smile after speech") get it too. The stored column is legacy.
+        'video_prompt' => radar_video_prompt([
+            'spoken' => $spoken, 'expression' => (string)$row['expression'], 'scene' => (string)$row['scene'], 'duration' => (int)$row['duration'],
+            'headline' => (string)$row['news_title'], 'source' => (string)$row['news_source'],
+        ]),
         'warnings' => is_array($meta) ? ($meta['warnings'] ?? []) : [],
         'fact_check' => is_array($meta) ? ($meta['fact_check'] ?? []) : [],
         'created_at' => gmdate(DATE_ATOM, (int)$row['created_at']),
@@ -148,7 +153,7 @@ function radar_script_update(int $id, array $input): array
     $row = ['hook' => $text('hook', 200), 'script' => $text('script', 1800), 'commentary' => $text('commentary', 600), 'cta' => $text('cta', 250)];
     $prompt = radar_video_prompt([
         'spoken' => radar_script_spoken($row), 'expression' => $expression, 'scene' => $scene, 'duration' => $current['duration'],
-        'headline' => $headlines[0] ?? $current['news_title'], 'source' => $current['news_source'],
+        'headline' => $current['news_title'], 'source' => $current['news_source'],
     ]);
     radar_db_exec(
         'UPDATE scripts SET headlines = ?, hook = ?, script = ?, commentary = ?, cta = ?, expression = ?, scene = ?, video_prompt = ?, updated_at = ? WHERE id = ?',
