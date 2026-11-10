@@ -11,6 +11,8 @@ Estado: workflow preparado, produção desativada por padrão. Os testes locais 
 3. **Publicar:** `bash bin/deploy-local.sh` roda os testes, empacota o commit atual e usa o mesmo `bin/deploy.sh` do CI (release imutável, troca atômica, health check e rollback). Lê a chave e o `known_hosts` de `~/.ssh` e `DEPLOY_HOST/USER/PATH` de `~/.ssh/radar-deploy.env`, tudo **fora do repositório**. Não usa GitHub Secrets.
 4. **Alternativa pelo GitHub Actions** (com aprovação por deploy): Secrets do Environment `production` (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`), variável `PRODUCTION_DEPLOY_ENABLED=true` e *Review deployments > Approve*.
 
+**Estado em 2026-11-10:** instalado e publicado (PHP 8.3, release imutável em `~/htdocs/radar-viral-br`). Falta apenas o que exige o vhost do Nginx, que é do root: cole o conteúdo de [`deploy/nginx-vhost-snippet.conf`](../deploy/nginx-vhost-snippet.conf) em *Sites > domínio > Vhost*, logo depois da linha `server {`. Ele traz (1) o `rewrite` da descoberta OAuth, sem o qual `/.well-known/oauth-*` dá 404 e o ChatGPT não conecta, e (2) o IP real do visitante atrás da Cloudflare.
+
 As seções abaixo detalham cada ponto e os diagnósticos.
 
 ## 0. Domínio atrás da Cloudflare (situação verificada em 2026-11-10)
