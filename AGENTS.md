@@ -8,8 +8,8 @@ Aplicação PHP 8.2+ completa (sem framework), com SQLite em `storage/`. Continu
 
 ## Estrutura
 - `public/`: raiz web. Páginas (`index`, `noticias`, `noticia`, `fontes`, `salvas`, `estudio`, `personagem`, `roteiros`, `roteiro`, `config-ia`, `integracoes`, `coletas`), `login`/`logout`, `api.php`, `mcp.php`, `media.php`, `health.php`, `assets/` (CSS/JS sem inline: CSP estrita).
-- `app/`: lógica, **fora da raiz pública**: `net` (HTTP seguro/SSRF), `db` (SQLite, migrações, segredos criptografados), `feeds` (RSS/Atom/RDF/Trends), `sources`, `ranking`, `collector`, `og`, `news`, `media`, `character`, `ai`, `reacts`, `tokens`, `layout`, `diagnostics`, `bootstrap` (sessão/CSRF/limites).
-- `bin/`: `setup.php` (config privado), `update.php` (cron de 30 min), `deploy.sh`.
+- `app/`: lógica, **fora da raiz pública**: `net` (HTTP seguro/SSRF), `db` (SQLite, migrações, segredos criptografados), `feeds` (RSS/Atom/RDF/Trends), `sources`, `ranking`, `collector`, `og`, `news`, `media`, `character`, `ai`, `reacts`, `tokens`, `oauth`, `layout`, `diagnostics`, `bootstrap` (sessão/CSRF/limites).
+- `bin/`: `setup.php` (config privado), `update.php` (cron de 30 min), `deploy.sh`, `dev-router.php` (só dev: `php -S localhost:8080 -t public bin/dev-router.php`).
 - `tests/`: `php tests/run.php` (unitário + HTTP descartável). `.github/workflows/deploy.yml`: CI e deploy protegido.
 - `config.php` (0600) e `storage/` (0700): privados, nunca comitar.
 
@@ -31,6 +31,6 @@ Aplicação PHP 8.2+ completa (sem framework), com SQLite em `storage/`. Continu
 - Não criar automações de publicação em redes sociais sem confirmação separada.
 
 ## Pendências conhecidas
-- **OAuth 2.1 para conectar o ChatGPT** (hoje só Bearer; ver `docs/CHATGPT.md`).
+- Conexão real com o ChatGPT: OAuth 2.1 está implementado e testado localmente, mas **não foi testado contra o ChatGPT** (exige HTTPS publicado; ver `docs/CHATGPT.md`).
 - Primeiro deploy: acesso SSH, chave de host por canal confiável, DNS/SSL e Secrets ainda não verificados. Não tratar a página genérica do CloudPanel como publicação.
 - Chave de IA e (opcional) serviço de captura de tela: configurar no painel, nunca no código.

@@ -18,6 +18,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 radar_token_revoke((int)($_POST['id'] ?? 0));
                 radar_flash_set('ok', 'Token revogado. Quem o usava perde o acesso imediatamente.');
                 break;
+            case 'oauth_client_create':
+                $client = radar_oauth_client_create((string)($_POST['name'] ?? ''), (string)($_POST['redirects'] ?? ''));
+                radar_session();
+                $_SESSION['new_oauth_client'] = $client;
+                radar_flash_set('ok', 'Cliente OAuth criado. Copie o segredo agora: ele não será mostrado de novo.');
+                break;
+            case 'oauth_client_delete':
+                radar_oauth_client_delete((string)($_POST['client_id'] ?? ''));
+                radar_flash_set('ok', 'Cliente removido e as conexões dele foram revogadas.');
+                break;
             case 'shot_save':
                 $template = trim((string)($_POST['template'] ?? ''));
                 if ($template !== '' && !radar_screenshot_template_valid($template)) {
@@ -47,8 +57,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 radar_session();
 $newToken = $_SESSION['new_token'] ?? null;
-unset($_SESSION['new_token']);
+$newClient = $_SESSION['new_oauth_client'] ?? null;
+unset($_SESSION['new_token'], $_SESSION['new_oauth_client']);
 $siteUrl = rtrim((string)radar_config()['site_url'], '/');
+$oauthClients = radar_oauth_clients();
 $tokens = radar_tokens_list();
 $shot = radar_screenshot_config();
 $checks = radar_diagnostics();
@@ -66,7 +78,51 @@ radar_page_start('Integrações', 'integracoes.php');
     </div>
 <?php endif; ?>
 
-<div class="grid-2">
+<?php if (is_array($newClient)): ?>
+    <div class="notice warn">
+        <strong>Novo cliente OAuth (o segredo aparece só agora):</strong>
+        <dl class="kv">
+            <dt>Client ID</dt><dd><code id="new-client-id"><?= radar_h($newClient['client_id']) ?></code> <button type="button" class="btn ghost small" data-copy="new-client-id">Copiar</button></dd>
+            <dt>Client secret</dt><dd><code id="new-client-secret"><?= radar_h($newClient['client_secret']) ?></code> <button type="button" class="btn primary small" data-copy="new-client-secret">Copiar</button></dd>
+        </dl>
+    </div>
+<?php endif; ?>
+
+<section class="panel section" aria-labelledby="oauth-h">
+    <h2 id="oauth-h">OAuth (conectar o ChatGPT)</h2>
+    <p class="hint">O ChatGPT conecta por OAuth 2.1 com PKCE: ele se registra sozinho (registro dinâmico), você aprova na tela de consentimento deste painel e ele recebe um token que expira em 1 hora e se renova. A senha nunca sai daqui.</p>
+    <div class="grid-2">
+        <dl class="kv">
+            <dt>URL do MCP</dt><dd><code><?= radar_h($siteUrl) ?>/mcp.php</code></dd>
+            <dt>Descoberta</dt><dd><code><?= radar_h($siteUrl) ?>/.well-known/oauth-authorization-server</code></dd>
+            <dt>Autorização</dt><dd><code id="oauth-auth-url"><?= radar_h($siteUrl) ?>/oauth-authorize.php</code></dd>
+            <dt>Token</dt><dd><code id="oauth-token-url"><?= radar_h($siteUrl) ?>/oauth-token.php</code></dd>
+            <dt>Registro</dt><dd><code><?= radar_h($siteUrl) ?>/oauth-register.php</code></dd>
+            <dt>Escopos</dt><dd><code>read</code>, <code>react</code></dd>
+        </dl>
+        <form method="post" action="integracoes.php" class="form-grid">
+            <input type="hidden" name="csrf" value="<?= radar_h($csrf) ?>"><input type="hidden" name="op" value="oauth_client_create">
+            <p class="hint">Se a tela do ChatGPT pedir <em>Client ID</em> e <em>Client secret</em> em vez de registrar sozinha, crie um cliente manual com o endereço de retorno que ele mostrar.</p>
+            <label>Nome<input name="name" required maxlength="80" placeholder="Ex.: ChatGPT"></label>
+            <label>Endereços de retorno (um por linha, HTTPS)<textarea name="redirects" rows="2" required maxlength="1500" placeholder="https://chatgpt.com/connector_platform_oauth_redirect"></textarea></label>
+            <button class="btn ghost" type="submit">Criar cliente manual</button>
+        </form>
+    </div>
+    <?php if ($oauthClients !== []): ?>
+        <div class="table-wrap section"><table>
+            <thead><tr><th>Cliente</th><th>Tipo</th><th>Retorno</th><th>Conexões ativas</th><th></th></tr></thead>
+            <tbody><?php foreach ($oauthClients as $client): ?>
+                <tr><td><?= radar_h($client['name']) ?><br><span class="meta"><?= radar_h($client['client_id']) ?></span></td>
+                    <td><?= $client['kind'] === 'manual' ? 'manual (com segredo)' : 'registro dinâmico' ?></td>
+                    <td><?= radar_h(implode(', ', array_map(static fn(string $u): string => (string)parse_url($u, PHP_URL_HOST), json_decode((string)$client['redirect_uris'], true) ?: []))) ?></td>
+                    <td><?= (int)$client['active_tokens'] ?></td>
+                    <td><form method="post" action="integracoes.php" data-confirm="Remover este cliente e revogar as conexões dele?"><input type="hidden" name="csrf" value="<?= radar_h($csrf) ?>"><input type="hidden" name="op" value="oauth_client_delete"><input type="hidden" name="client_id" value="<?= radar_h($client['client_id']) ?>"><button class="btn danger small" type="submit">Remover</button></form></td></tr>
+            <?php endforeach; ?></tbody>
+        </table></div>
+    <?php endif; ?>
+</section>
+
+<div class="grid-2 section">
     <section class="panel">
         <h2>Servidor MCP (ChatGPT)</h2>
         <dl class="kv">
@@ -92,8 +148,8 @@ radar_page_start('Integrações', 'integracoes.php');
             <div class="table-wrap section"><table>
                 <thead><tr><th>Nome</th><th>Acesso</th><th>Último uso</th><th></th></tr></thead>
                 <tbody><?php foreach ($tokens as $token): ?>
-                    <tr><td><?= radar_h($token['name']) ?></td><td><?= radar_h(str_contains((string)$token['scopes'], 'react') ? 'leitura + react' : 'leitura') ?></td>
-                        <td><?= $token['revoked_at'] !== null ? '<span class="pill bad">revogado</span>' : radar_h(radar_date($token['last_used_at'] !== null ? (int)$token['last_used_at'] : null)) ?></td>
+                    <tr><td><?= radar_h($token['name']) ?><?= $token['kind'] === 'oauth' ? ' <span class="pill">OAuth</span>' : '' ?></td><td><?= radar_h(str_contains((string)$token['scopes'], 'react') ? 'leitura + react' : 'leitura') ?></td>
+                        <td><?= $token['revoked_at'] !== null ? '<span class="pill bad">revogado</span>' : radar_h(radar_date($token['last_used_at'] !== null ? (int)$token['last_used_at'] : null)) ?><?= $token['kind'] === 'oauth' && $token['revoked_at'] === null ? '<br><span class="meta">renovável até ' . radar_h(radar_date((int)$token['refresh_expires_at'])) . '</span>' : '' ?></td>
                         <td><?php if ($token['revoked_at'] === null): ?><form method="post" action="integracoes.php" data-confirm="Revogar este token?"><input type="hidden" name="csrf" value="<?= radar_h($csrf) ?>"><input type="hidden" name="op" value="token_revoke"><input type="hidden" name="id" value="<?= (int)$token['id'] ?>"><button class="btn danger small" type="submit">Revogar</button></form><?php endif; ?></td></tr>
                 <?php endforeach; ?></tbody>
             </table></div>

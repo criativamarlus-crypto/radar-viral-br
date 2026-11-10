@@ -1,6 +1,11 @@
 <?php
 declare(strict_types=1);
 require_once dirname(__DIR__) . '/app/bootstrap.php';
+// OAuth discovery fallback (try_files / the PHP built-in server route unknown paths here).
+if (str_starts_with((string)parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH), '/.well-known/')) {
+    require __DIR__ . '/oauth-metadata.php';
+    exit;
+}
 radar_require_login();
 
 $stats = radar_dashboard_stats();

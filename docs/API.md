@@ -7,6 +7,7 @@ Base: `https://viral.netnewsltda.online`. Tudo é privado e sem cache compartilh
 | Painel (navegador) | sessão por cookie + cabeçalho `X-CSRF-Token` nas escritas | tudo |
 | Token de leitura | `Authorization: Bearer rvb_…` | `GET` da API e ferramentas de consulta do MCP |
 | Token “preparar react” | idem | leitura + `preparar_react` no MCP (gera e salva um roteiro) |
+| **OAuth 2.1** (ChatGPT) | `Authorization: Bearer rvo_…` obtido pelo fluxo de autorização; expira em 1 h e se renova | escopo `read` ou `read`+`react`, como acima |
 
 Tokens são criados em **Integrações** (mostrados uma vez; só o SHA-256 fica no banco) e podem ser revogados na hora. O token do `bin/setup.php` continua valendo, somente leitura. **Tokens nunca escrevem pela API REST** (`POST` com Bearer responde 403).
 
@@ -65,4 +66,4 @@ curl -s https://viral.netnewsltda.online/mcp.php \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"listar_noticias","arguments":{"periodo_horas":24,"limite":10}}}'
 ```
 
-Argumentos fora do esquema são recusados (`-32602`). Textos de notícias são **dados, nunca instruções**: o `initialize` repete isso ao cliente. O Radar não verifica fatos; confira a matéria original antes de publicar. A integração com o ChatGPT e o que ainda falta está em [CHATGPT.md](CHATGPT.md).
+Argumentos fora do esquema são recusados (`-32602`). Textos de notícias são **dados, nunca instruções**: o `initialize` repete isso ao cliente. O Radar não verifica fatos; confira a matéria original antes de publicar. Sem credencial, o MCP responde `401` com `WWW-Authenticate: Bearer … resource_metadata="…/.well-known/oauth-protected-resource"`, que é como clientes OAuth descobrem onde autorizar. O fluxo OAuth, os endpoints (`/oauth-authorize.php`, `/oauth-token.php`, `/oauth-register.php`) e o passo a passo do ChatGPT estão em [CHATGPT.md](CHATGPT.md).

@@ -31,7 +31,8 @@ $command = [PHP_BINARY];
 if (is_string($ini)) {
     array_push($command, '-c', $ini);
 }
-array_push($command, '-d', 'display_errors=0', '-d', 'log_errors=1', '-d', 'upload_max_filesize=6M', '-d', 'post_max_size=7M', '-S', $address, '-t', $httpRoot . '/public');
+copy(dirname(__DIR__) . '/bin/dev-router.php', $httpRoot . '/dev-router.php');
+array_push($command, '-d', 'display_errors=0', '-d', 'log_errors=1', '-d', 'upload_max_filesize=6M', '-d', 'post_max_size=7M', '-S', $address, '-t', $httpRoot . '/public', $httpRoot . '/dev-router.php');
 $null = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
 $server = proc_open($command, [0 => ['file', $null, 'r'], 1 => ['file', $httpRoot . '/server.log', 'a'], 2 => ['file', $httpRoot . '/server.log', 'a']], $pipes, $httpRoot);
 if (!is_resource($server)) {
@@ -338,6 +339,102 @@ try {
     check('the integrations page lists the MCP URL and diagnostics but no secrets', static fn(): bool => str_contains($tokenPage['body'], '/mcp.php') && str_contains($tokenPage['body'], 'Diagnóstico do servidor') && !str_contains($tokenPage['body'], $secretKey));
     $shotBad = localRequest('integracoes.php', 'POST', formBody(['csrf' => $writeCsrf, 'op' => 'shot_save', 'template' => 'http://insecure.example.com/?url={url}']), FORM);
     check('an insecure screenshot service URL is refused', static fn(): bool => $shotBad['status'] === 303 && radar_setting('shot_url', '') === '');
+
+    /* ---- OAuth 2.1 over real HTTP (what the ChatGPT connector does) ---- */
+    $mainJar = $httpCookie;
+    $redirectUri = 'https://chatgpt.com/connector_platform_oauth_redirect';
+    $resourceDoc = localRequest('.well-known/oauth-protected-resource/mcp.php', 'GET', '', [], false);
+    $serverDoc = localRequest('.well-known/oauth-authorization-server', 'GET', '', [], false);
+    $resourceJson = json_decode($resourceDoc['body'], true);
+    $serverJson = json_decode($serverDoc['body'], true);
+    check('discovery: protected-resource metadata is served at the well-known path (with path suffix)', static fn(): bool => $resourceDoc['status'] === 200 && str_contains($resourceDoc['headers']['content-type'] ?? '', 'application/json') && ($resourceJson['resource'] ?? '') === 'http://' . $address . '/mcp.php' && ($resourceJson['authorization_servers'] ?? []) === ['http://' . $address]);
+    check('discovery: authorization-server metadata advertises PKCE S256, registration and refresh', static fn(): bool => $serverDoc['status'] === 200 && ($serverJson['code_challenge_methods_supported'] ?? []) === ['S256'] && str_ends_with($serverJson['registration_endpoint'] ?? '', '/oauth-register.php') && in_array('refresh_token', $serverJson['grant_types_supported'] ?? [], true) && ($serverDoc['headers']['access-control-allow-origin'] ?? '') === '*');
+    check('discovery: unknown well-known documents are 404 and the metadata endpoint is read-only', static fn(): bool => localRequest('.well-known/unknown-doc', 'GET', '', [], false)['status'] === 404 && localRequest('oauth-metadata.php?doc=oauth-authorization-server', 'POST', '', [], false)['status'] === 405);
+    $challengeHeader = localRequest('mcp.php', 'POST', $rpc(1, 'initialize'), ['Content-Type: application/json'], false)['headers']['www-authenticate'] ?? '';
+    check('MCP answers 401 with a WWW-Authenticate that points to the resource metadata', static fn(): bool => str_contains($challengeHeader, 'resource_metadata="http://' . $address . '/.well-known/oauth-protected-resource"') && str_starts_with($challengeHeader, 'Bearer '));
+    $register = static fn(array $body): array => localRequest('oauth-register.php', 'POST', json_encode($body), ['Content-Type: application/json'], false);
+    $registered = $register(['client_name' => 'ChatGPT HTTP', 'redirect_uris' => [$redirectUri], 'grant_types' => ['authorization_code', 'refresh_token'], 'token_endpoint_auth_method' => 'none']);
+    $registeredJson = json_decode($registered['body'], true);
+    $clientId = $registeredJson['client_id'] ?? '';
+    check('dynamic client registration returns a public client (201, no secret)', static fn(): bool => $registered['status'] === 201 && str_starts_with($clientId, 'rvc_') && !isset($registeredJson['client_secret']) && ($registeredJson['redirect_uris'] ?? []) === [$redirectUri]);
+    check('registration rejects insecure redirects, wrong content types and GET', static fn(): bool => $register(['redirect_uris' => ['http://evil.example.com/cb']])['status'] === 400 && json_decode($register(['redirect_uris' => ['http://evil.example.com/cb']])['body'], true)['error'] === 'invalid_redirect_uri'
+        && localRequest('oauth-register.php', 'POST', 'x=1', FORM, false)['status'] === 415 && localRequest('oauth-register.php', 'GET', '', [], false)['status'] === 405);
+    $verifier = radar_oauth_random(32);
+    $authQuery = static fn(string $client, string $scope = 'read react', array $override = []): string => http_build_query($override + ['client_id' => $client, 'redirect_uri' => $redirectUri, 'response_type' => 'code', 'code_challenge' => radar_oauth_s256($GLOBALS['verifier']), 'code_challenge_method' => 'S256', 'state' => 'st-123', 'scope' => $scope, 'resource' => 'http://' . $GLOBALS['address'] . '/mcp.php'], '', '&', PHP_QUERY_RFC3986);
+    $httpCookie = '';
+    $interstitial = localRequest('oauth-authorize.php?' . $authQuery($clientId), 'GET', '', [], false);
+    check('opened from another site (no cookie) the authorize page shows an interstitial, never a consent form', static fn(): bool => $interstitial['status'] === 200 && str_contains($interstitial['body'], 'ChatGPT HTTP') && str_contains($interstitial['body'], 'go=1') && !str_contains($interstitial['body'], 'name="decision"'));
+    $toLogin = localRequest('oauth-authorize.php?' . $authQuery($clientId) . '&go=1');
+    check('after the click, an anonymous visitor is sent to the login', static fn(): bool => $toLogin['status'] === 303 && ($toLogin['headers']['location'] ?? '') === '/login.php');
+    $loginForOauth = localRequest('login.php');
+    preg_match('/name="csrf" value="([a-f0-9]+)"/', $loginForOauth['body'], $oauthLoginCsrf);
+    $backToAuthorize = localRequest('login.php', 'POST', formBody(['csrf' => $oauthLoginCsrf[1] ?? '', 'username' => 'test-editor', 'password' => $password]), FORM);
+    $authorizeLocation = $backToAuthorize['headers']['location'] ?? '';
+    check('login returns to the pending authorization request (same-site path only)', static fn(): bool => $backToAuthorize['status'] === 303 && str_starts_with($authorizeLocation, '/oauth-authorize.php?') && str_contains($authorizeLocation, 'code_challenge='));
+    $consent = localRequest($authorizeLocation);
+    preg_match('/name="csrf" value="([a-f0-9]+)"/', $consent['body'], $consentCsrf);
+    check('the logged-in admin sees a consent screen naming the app and the destination host', static fn(): bool => $consent['status'] === 200 && str_contains($consent['body'], 'Autorizar «ChatGPT HTTP»') && str_contains($consent['body'], 'chatgpt.com') && str_contains($consent['body'], 'value="approve"') && str_contains($consent['body'], 'value="deny"') && ($consentCsrf[1] ?? '') !== '');
+    $consentFields = static fn(string $client, string $decision, array $grant, string $scope = 'read react'): string => http_build_query(['csrf' => $GLOBALS['consentCsrf'][1] ?? '', 'decision' => $decision, 'grant' => $grant, 'client_id' => $client, 'redirect_uri' => $GLOBALS['redirectUri'], 'response_type' => 'code', 'code_challenge' => radar_oauth_s256($GLOBALS['verifier']), 'code_challenge_method' => 'S256', 'state' => 'st-123', 'scope' => $scope, 'resource' => 'http://' . $GLOBALS['address'] . '/mcp.php']);
+    $redirectFrom = static function (array $response): string {
+        preg_match('/<meta name="oauth-redirect" content="([^"]+)"/', $response['body'], $m);
+        return html_entity_decode($m[1] ?? '', ENT_QUOTES | ENT_HTML5);
+    };
+    check('consent without a valid CSRF token is refused', static fn(): bool => localRequest('oauth-authorize.php', 'POST', str_replace($consentCsrf[1] ?? 'x', 'bad', $consentFields($clientId, 'approve', ['react'])), FORM)['status'] === 403);
+    $denied = localRequest('oauth-authorize.php', 'POST', $consentFields($clientId, 'deny', []), FORM);
+    $deniedUrl = $redirectFrom($denied);
+    check('denying sends the client back with access_denied and the original state, never a code', static fn(): bool => $denied['status'] === 200 && str_starts_with($deniedUrl, $redirectUri . '?') && str_contains($deniedUrl, 'error=access_denied') && str_contains($deniedUrl, 'state=st-123') && !str_contains($deniedUrl, 'code='));
+    $approved = localRequest('oauth-authorize.php', 'POST', $consentFields($clientId, 'approve', ['react']), FORM);
+    $approvedUrl = $redirectFrom($approved);
+    parse_str((string)parse_url($approvedUrl, PHP_URL_QUERY), $callback);
+    check('approving redirects (by script, not a form redirect) with code, state and issuer', static fn(): bool => $approved['status'] === 200 && str_starts_with($approvedUrl, $redirectUri . '?') && strlen($callback['code'] ?? '') >= 40 && ($callback['state'] ?? '') === 'st-123' && ($callback['iss'] ?? '') === 'http://' . $address && str_contains($approved['body'], 'oauth.js'));
+    $tokenPost = static fn(array $fields, array $headers = FORM): array => localRequest('oauth-token.php', 'POST', http_build_query($fields), $headers, false);
+    $exchangeFields = ['grant_type' => 'authorization_code', 'code' => $callback['code'] ?? '', 'client_id' => $clientId, 'redirect_uri' => $redirectUri, 'code_verifier' => $verifier];
+    check('the token endpoint rejects non-form bodies and GET', static fn(): bool => localRequest('oauth-token.php', 'POST', '{}', ['Content-Type: application/json'], false)['status'] === 415 && localRequest('oauth-token.php', 'GET', '', [], false)['status'] === 405);
+    check('a wrong PKCE verifier cannot redeem the code (RFC error invalid_grant)', static fn(): bool => json_decode($tokenPost(['code_verifier' => radar_oauth_random(32)] + $exchangeFields)['body'], true)['error'] === 'invalid_grant');
+    $ownCode = localRequest('oauth-authorize.php', 'POST', $consentFields($clientId, 'approve', ['react']), FORM);
+    parse_str((string)parse_url($redirectFrom($ownCode), PHP_URL_QUERY), $secondCallback);
+    $tokenResponse = $tokenPost(['code' => $secondCallback['code'] ?? ''] + $exchangeFields);
+    $tokenJson = json_decode($tokenResponse['body'], true);
+    check('the code is exchanged for Bearer tokens with no-store headers', static fn(): bool => $tokenResponse['status'] === 200 && ($tokenJson['token_type'] ?? '') === 'Bearer' && ($tokenJson['expires_in'] ?? 0) === 3600 && ($tokenJson['scope'] ?? '') === 'read react' && str_contains($tokenResponse['headers']['cache-control'] ?? '', 'no-store') && ($tokenResponse['headers']['pragma'] ?? '') === 'no-cache');
+    $mcpWith = static fn(string $token, string $payload): array => localRequest('mcp.php', 'POST', $payload, ['Content-Type: application/json', 'Authorization: Bearer ' . $token], false);
+    $oauthList = $mcpWith($tokenJson['access_token'] ?? '', $rpc(2, 'tools/list'));
+    check('the OAuth access token works on the MCP endpoint', static fn(): bool => $oauthList['status'] === 200 && count(json_decode($oauthList['body'], true)['result']['tools'] ?? []) === 7);
+    $oauthReact = json_decode($mcpWith($tokenJson['access_token'], $rpc(3, 'tools/call', ['name' => 'preparar_react', 'arguments' => (object)['noticia_id' => $firstNewsId]]))['body'], true);
+    check('with the react scope approved, preparar_react works through OAuth', static fn(): bool => ($oauthReact['result']['isError'] ?? true) === false);
+    check('replaying a used authorization code fails and revokes the tokens it produced', static fn(): bool => json_decode($tokenPost(['code' => $secondCallback['code'] ?? ''] + $exchangeFields)['body'], true)['error'] === 'invalid_grant' && $mcpWith($tokenJson['access_token'], $rpc(4, 'ping'))['status'] === 401);
+    $readOnlyApproval = localRequest('oauth-authorize.php', 'POST', $consentFields($clientId, 'approve', []), FORM);
+    parse_str((string)parse_url($redirectFrom($readOnlyApproval), PHP_URL_QUERY), $readOnlyCallback);
+    $readOnlyTokens = json_decode($tokenPost(['code' => $readOnlyCallback['code'] ?? ''] + $exchangeFields)['body'], true);
+    $readOnlyReact = json_decode($mcpWith($readOnlyTokens['access_token'] ?? '', $rpc(5, 'tools/call', ['name' => 'preparar_react', 'arguments' => (object)['noticia_id' => $firstNewsId]]))['body'], true);
+    check('unchecking "react" grants read only: preparar_react is refused', static fn(): bool => ($readOnlyTokens['scope'] ?? '') === 'read' && ($readOnlyReact['result']['isError'] ?? false) === true);
+    $refreshed = json_decode($tokenPost(['grant_type' => 'refresh_token', 'refresh_token' => $readOnlyTokens['refresh_token'] ?? '', 'client_id' => $clientId])['body'], true);
+    $oldAccess = $mcpWith($readOnlyTokens['access_token'], $rpc(6, 'ping'));
+    check('refresh rotates the pair: the new access token works, the old access and refresh tokens do not', static fn(): bool => str_starts_with($refreshed['access_token'] ?? '', 'rvo_') && $mcpWith($refreshed['access_token'], $rpc(7, 'ping'))['status'] === 200 && $oldAccess['status'] === 401 && str_contains($oldAccess['headers']['www-authenticate'] ?? '', 'invalid_token')
+        && json_decode($tokenPost(['grant_type' => 'refresh_token', 'refresh_token' => $readOnlyTokens['refresh_token'], 'client_id' => $clientId])['body'], true)['error'] === 'invalid_grant');
+    $evil = localRequest('oauth-authorize.php?' . $authQuery($clientId, 'read', ['redirect_uri' => 'https://evil.example.com/steal']));
+    check('an unregistered redirect_uri is shown as an error and never redirected to', static fn(): bool => $evil['status'] === 400 && !isset($evil['headers']['location']) && !str_contains($evil['body'], 'oauth-redirect') && str_contains($evil['body'], 'redirect_uri'));
+    $noPkce = localRequest('oauth-authorize.php?' . str_replace('code_challenge_method=S256', 'code_challenge_method=plain', $authQuery($clientId)));
+    check('authorization without PKCE S256 is refused', static fn(): bool => $noPkce['status'] === 400 && !isset($noPkce['headers']['location']));
+    $manualPage = localRequest('integracoes.php', 'POST', formBody(['csrf' => $consentCsrf[1] ?? '', 'op' => 'oauth_client_create', 'name' => 'ChatGPT manual', 'redirects' => $redirectUri]), FORM);
+    $manualView = localRequest('integracoes.php');
+    preg_match('/id="new-client-id">(rvc_[A-Za-z0-9_-]+)</', $manualView['body'], $manualId);
+    preg_match('/id="new-client-secret">(rvs_[A-Za-z0-9_-]+)</', $manualView['body'], $manualSecret);
+    check('a manual OAuth client shows its secret exactly once in the panel', static fn(): bool => $manualPage['status'] === 303 && ($manualId[1] ?? '') !== '' && ($manualSecret[1] ?? '') !== '' && !str_contains(localRequest('integracoes.php')['body'], $manualSecret[1]) && str_contains(localRequest('integracoes.php')['body'], 'ChatGPT manual'));
+    $manualApprove = localRequest('oauth-authorize.php', 'POST', $consentFields($manualId[1] ?? '', 'approve', ['react']), FORM);
+    parse_str((string)parse_url($redirectFrom($manualApprove), PHP_URL_QUERY), $manualCallback);
+    $manualFields = ['grant_type' => 'authorization_code', 'code' => $manualCallback['code'] ?? '', 'redirect_uri' => $redirectUri, 'code_verifier' => $verifier];
+    check('a manual client must present its secret: without it the token endpoint answers 401', static fn(): bool => $tokenPost($manualFields + ['client_id' => $manualId[1] ?? ''])['status'] === 401 && $tokenPost($manualFields + ['client_id' => $manualId[1] ?? '', 'client_secret' => 'rvs_wrong'])['status'] === 401);
+    $manualApprove2 = localRequest('oauth-authorize.php', 'POST', $consentFields($manualId[1] ?? '', 'approve', ['react']), FORM);
+    parse_str((string)parse_url($redirectFrom($manualApprove2), PHP_URL_QUERY), $manualCallback2);
+    $basic = ['Content-Type: application/x-www-form-urlencoded', 'Authorization: Basic ' . base64_encode(($manualId[1] ?? '') . ':' . ($manualSecret[1] ?? ''))];
+    $manualTokens = json_decode($tokenPost(['code' => $manualCallback2['code'] ?? ''] + $manualFields, $basic)['body'], true);
+    check('a manual client authenticates with HTTP Basic (client_secret_basic) and gets working tokens', static fn(): bool => str_starts_with($manualTokens['access_token'] ?? '', 'rvo_') && $mcpWith($manualTokens['access_token'], $rpc(8, 'ping'))['status'] === 200);
+    $integrations = localRequest('integracoes.php');
+    check('the panel lists active OAuth connections and the OAuth endpoints, without any token value', static fn(): bool => str_contains($integrations['body'], 'OAuth (conectar o ChatGPT)') && str_contains($integrations['body'], '/oauth-token.php') && str_contains($integrations['body'], 'ChatGPT HTTP') && !str_contains($integrations['body'], $manualTokens['access_token']) && !str_contains($integrations['body'], $tokenJson['access_token']));
+    $revokeId = (int)radar_db_value("SELECT id FROM api_tokens WHERE kind = 'oauth' AND revoked_at IS NULL ORDER BY id DESC LIMIT 1");
+    $revokeResponse = localRequest('integracoes.php', 'POST', formBody(['csrf' => $consentCsrf[1] ?? '', 'op' => 'token_revoke', 'id' => $revokeId]), FORM);
+    check('an OAuth connection can be revoked from the panel and stops working immediately', static fn(): bool => $revokeResponse['status'] === 303 && $mcpWith($manualTokens['access_token'], $rpc(9, 'ping'))['status'] === 401);
+    $httpCookie = $mainJar;
 
     /* ---- private files are not reachable ---- */
     foreach (['config.php', 'app/bootstrap.php', 'app/db.php', 'storage/radar.sqlite', 'storage/app.key', 'bin/deploy.sh', 'tests/run.php', '.git/config', '.env', 'config.example.php', 'docs/API.md', 'AGENTS.md'] as $private) {

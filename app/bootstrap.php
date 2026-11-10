@@ -173,7 +173,7 @@ function radar_require_read_access(): void
                 }
             }
         }
-        header('WWW-Authenticate: Bearer realm="Radar Viral BR"');
+        header('WWW-Authenticate: ' . radar_oauth_challenge('invalid_token'));
         radar_json(['error' => 'Credencial de leitura inválida.'], 401);
     }
     radar_require_login(true);

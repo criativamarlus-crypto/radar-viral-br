@@ -12,8 +12,13 @@ if (!$configured) {
         header('Retry-After: 300');
         radar_json(['error' => 'Muitas consultas à página de acesso. Aguarde alguns minutos.'], 429);
     }
+    // After login, return to a pending OAuth authorization (same-site relative path only).
+    $loginNext = static function (): string {
+        $next = $_SESSION['login_next'] ?? '';
+        return is_string($next) && preg_match('#\A/oauth-authorize\.php\?[A-Za-z0-9%=&._~:/+-]{0,2000}\z#D', $next) === 1 ? $next : '/';
+    };
     if (radar_logged_in()) {
-        header('Location: /', true, 302);
+        header('Location: ' . $loginNext(), true, 302);
         exit;
     }
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -29,9 +34,10 @@ if (!$configured) {
             $passwordValid = is_string($password) && strlen($password) <= 1024
                 && password_verify($password, (string)$config['admin_password_hash']);
             if (is_string($user) && hash_equals((string)$config['admin_user'], $user) && $passwordValid) {
+                $returnTo = $loginNext();
                 session_regenerate_id(true);
                 $_SESSION = ['admin' => $user, 'created' => time(), 'seen' => time(), 'credential_version' => hash('sha256', (string)$config['admin_password_hash']), 'csrf' => bin2hex(random_bytes(32))];
-                header('Location: /', true, 303);
+                header('Location: ' . $returnTo, true, 303);
                 exit;
             }
             http_response_code(401);

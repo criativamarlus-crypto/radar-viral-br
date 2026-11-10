@@ -15,7 +15,7 @@ function radar_token_create(string $name, string $scope): array
     if ($name === '' || !isset(RADAR_TOKEN_SCOPES[$scope])) {
         throw new InvalidArgumentException('Informe um nome e escolha o acesso do token.');
     }
-    if ((int)radar_db_value('SELECT COUNT(*) FROM api_tokens WHERE revoked_at IS NULL') >= 20) {
+    if ((int)radar_db_value("SELECT COUNT(*) FROM api_tokens WHERE revoked_at IS NULL AND kind = 'manual'") >= 20) {
         throw new InvalidArgumentException('Limite de 20 tokens ativos. Revogue algum antes de criar outro.');
     }
     $token = 'rvb_' . bin2hex(random_bytes(24));
@@ -27,7 +27,8 @@ function radar_token_create(string $name, string $scope): array
 /** @return array<int,string>|null scopes when valid */
 function radar_token_authenticate(string $token): ?array
 {
-    $row = radar_db_one('SELECT id, scopes, last_used_at FROM api_tokens WHERE token_hash = ? AND revoked_at IS NULL', [hash('sha256', $token)]);
+    // OAuth access tokens expire (1 h); manual tokens have no expiry until revoked.
+    $row = radar_db_one('SELECT id, scopes, last_used_at FROM api_tokens WHERE token_hash = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)', [hash('sha256', $token), time()]);
     if ($row === null) {
         return null;
     }
@@ -41,7 +42,7 @@ function radar_token_authenticate(string $token): ?array
 /** @return array<int,array<string,mixed>> */
 function radar_tokens_list(): array
 {
-    return radar_db_all('SELECT id, name, scopes, created_at, last_used_at, revoked_at FROM api_tokens ORDER BY revoked_at IS NOT NULL, created_at DESC');
+    return radar_db_all("SELECT id, name, scopes, created_at, last_used_at, revoked_at, kind, client_id, expires_at, refresh_expires_at FROM api_tokens WHERE kind = 'manual' OR revoked_at IS NULL ORDER BY revoked_at IS NOT NULL, created_at DESC");
 }
 
 function radar_token_revoke(int $id): bool

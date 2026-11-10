@@ -16,6 +16,7 @@ require dirname(__DIR__) . '/app/bootstrap.php';
 
 try {
     radar_cleanup_private_storage();
+    radar_oauth_cleanup();
     $started = microtime(true);
     $result = radar_collect('cron', 15);
     printf(

@@ -216,6 +216,34 @@ SQL,
 ALTER TABLE news ADD COLUMN og_checked_at INTEGER;
 ALTER TABLE news ADD COLUMN trend_origin TEXT;
 SQL,
+        3 => <<<'SQL'
+ALTER TABLE api_tokens ADD COLUMN kind TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE api_tokens ADD COLUMN client_id TEXT;
+ALTER TABLE api_tokens ADD COLUMN refresh_hash TEXT;
+ALTER TABLE api_tokens ADD COLUMN expires_at INTEGER;
+ALTER TABLE api_tokens ADD COLUMN refresh_expires_at INTEGER;
+ALTER TABLE api_tokens ADD COLUMN code_id INTEGER;
+CREATE INDEX api_tokens_refresh ON api_tokens(refresh_hash);
+CREATE TABLE oauth_clients (
+    client_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    redirect_uris TEXT NOT NULL,
+    secret_hash TEXT,
+    kind TEXT NOT NULL DEFAULT 'dynamic',
+    created_at INTEGER NOT NULL
+);
+CREATE TABLE oauth_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code_hash TEXT NOT NULL UNIQUE,
+    client_id TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    scopes TEXT NOT NULL,
+    resource TEXT,
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER
+);
+SQL,
     ];
 }
 

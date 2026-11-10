@@ -10,7 +10,7 @@ mkdir($testDirectory, 0700, true);
 $testStorage = $testDirectory . '/storage';
 function radar_config(): array
 {
-    return ['storage_path' => $GLOBALS['testStorage'], 'feed_ttl' => 300];
+    return ['storage_path' => $GLOBALS['testStorage'], 'feed_ttl' => 300, 'site_url' => 'https://viral.test.example'];
 }
 date_default_timezone_set('America/Sao_Paulo');
 require_once dirname(__DIR__) . '/app/modules.php';
@@ -793,6 +793,155 @@ check('token creation validates name and scope and caps active tokens', static f
     return $badName && $badScope && radar_token_create('só leitura', 'read')['scopes'] === 'read';
 });
 
+/* ======================= OAuth 2.1 (MCP authorization) ======================= */
+check('discovery documents point at this server and advertise PKCE S256 only', static function (): bool {
+    $resource = radar_oauth_metadata('oauth-protected-resource');
+    $server = radar_oauth_metadata('oauth-authorization-server');
+    return $resource['resource'] === 'https://viral.test.example/mcp.php' && $resource['authorization_servers'] === ['https://viral.test.example']
+        && $server['issuer'] === 'https://viral.test.example' && $server['authorization_endpoint'] === 'https://viral.test.example/oauth-authorize.php'
+        && $server['token_endpoint'] === 'https://viral.test.example/oauth-token.php' && $server['registration_endpoint'] === 'https://viral.test.example/oauth-register.php'
+        && $server['code_challenge_methods_supported'] === ['S256'] && $server['response_types_supported'] === ['code'] && in_array('refresh_token', $server['grant_types_supported'], true)
+        && $server['authorization_response_iss_parameter_supported'] === true;
+});
+check('401 challenges tell clients where the resource metadata lives', static fn(): bool => str_contains(radar_oauth_challenge(), 'resource_metadata="https://viral.test.example/.well-known/oauth-protected-resource"') && str_contains(radar_oauth_challenge('invalid_token'), 'error="invalid_token"'));
+foreach (['https://chatgpt.com/connector_platform_oauth_redirect' => true, 'https://platform.openai.com/apps-manage/oauth' => true, 'http://localhost:8123/cb' => true, 'http://127.0.0.1/cb' => true,
+    'http://chatgpt.com/cb' => false, 'https://user:pw@chatgpt.com/cb' => false, 'https://chatgpt.com/cb#frag' => false, 'javascript:alert(1)' => false, '/relative' => false, 'https://exa mple.com/' => false, '' => false] as $uri => $valid) {
+    check('redirect_uri ' . json_encode($uri) . ($valid ? ' is accepted' : ' is rejected'), static fn(): bool => radar_oauth_redirect_valid($uri) === $valid);
+}
+$oauthClient = radar_oauth_register(['client_name' => '<b>ChatGPT</b>', 'redirect_uris' => ['https://chatgpt.com/connector_platform_oauth_redirect']]);
+check('dynamic registration creates a public client with sanitised name and no secret', static function () use ($oauthClient): bool {
+    $row = radar_oauth_client($oauthClient['client_id']);
+    return str_starts_with($oauthClient['client_id'], 'rvc_') && $oauthClient['client_name'] === 'ChatGPT' && $oauthClient['token_endpoint_auth_method'] === 'none' && !isset($oauthClient['client_secret']) && $row['secret_hash'] === null;
+});
+check('registration refuses bad redirects, confidential clients and unknown grants', static fn(): bool => rejects(static fn() => radar_oauth_register(['redirect_uris' => []]), RadarOAuthError::class)
+    && rejects(static fn() => radar_oauth_register(['redirect_uris' => ['http://evil.example.com/cb']]), RadarOAuthError::class)
+    && rejects(static fn() => radar_oauth_register(['redirect_uris' => ['https://a.example.com/1', 'https://a.example.com/2', 'https://a.example.com/3', 'https://a.example.com/4', 'https://a.example.com/5', 'https://a.example.com/6']]), RadarOAuthError::class)
+    && rejects(static fn() => radar_oauth_register(['redirect_uris' => ['https://a.example.com/cb'], 'token_endpoint_auth_method' => 'client_secret_basic']), RadarOAuthError::class)
+    && rejects(static fn() => radar_oauth_register(['redirect_uris' => ['https://a.example.com/cb'], 'grant_types' => ['password']]), RadarOAuthError::class));
+$verifier = radar_oauth_random(32);
+$challenge = radar_oauth_s256($verifier);
+$authParams = static fn(array $override = []): array => $override + ['client_id' => $oauthClient['client_id'], 'redirect_uri' => 'https://chatgpt.com/connector_platform_oauth_redirect', 'response_type' => 'code', 'code_challenge' => $challenge, 'code_challenge_method' => 'S256', 'state' => 'abc', 'scope' => 'read react', 'resource' => 'https://viral.test.example/mcp.php'];
+check('the S256 transform matches the RFC 7636 test vector', static fn(): bool => radar_oauth_s256('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk') === 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM');
+check('a valid authorization request is understood', static function () use ($authParams): bool {
+    $request = radar_oauth_authorize_request($authParams());
+    return $request['scopes'] === ['read', 'react'] && $request['state'] === 'abc' && $request['challenge'] === radar_oauth_s256($GLOBALS['verifier']);
+});
+foreach ([
+    'unknown client' => ['client_id' => 'rvc_doesnotexist0000'],
+    'redirect_uri that was not registered' => ['redirect_uri' => 'https://evil.example.com/cb'],
+    'response_type token (implicit flow)' => ['response_type' => 'token'],
+    'missing PKCE challenge' => ['code_challenge' => ''],
+    'PKCE method plain' => ['code_challenge_method' => 'plain'],
+    'weak (short) PKCE challenge' => ['code_challenge' => 'abc'],
+    'unknown scope' => ['scope' => 'read admin'],
+    'resource of another server' => ['resource' => 'https://other.example.com/mcp.php'],
+] as $label => $override) {
+    check("authorization request is refused for: $label", static fn(): bool => rejects(static fn() => radar_oauth_authorize_request($authParams($override)), RadarOAuthError::class));
+}
+$issue = static fn(array $scopes = ['read', 'react'], ?string $forChallenge = null): string => radar_oauth_issue_code($GLOBALS['oauthClient']['client_id'], 'https://chatgpt.com/connector_platform_oauth_redirect', $forChallenge ?? $GLOBALS['challenge'], $scopes, 'https://viral.test.example/mcp.php');
+$exchange = static fn(string $code, array $override = []): array => radar_oauth_token($override + ['grant_type' => 'authorization_code', 'code' => $code, 'client_id' => $GLOBALS['oauthClient']['client_id'], 'redirect_uri' => 'https://chatgpt.com/connector_platform_oauth_redirect', 'code_verifier' => $GLOBALS['verifier']]);
+$tokens = $exchange($issue());
+check('code + PKCE verifier yield a short-lived access token and a refresh token, scoped as approved', static fn(): bool => $tokens['token_type'] === 'Bearer' && $tokens['expires_in'] === 3600 && str_starts_with($tokens['access_token'], 'rvo_') && str_starts_with($tokens['refresh_token'], 'rvr_') && $tokens['scope'] === 'read react');
+check('the OAuth access token authenticates with its scopes; only hashes are stored', static function () use ($tokens): bool {
+    $file = (string)file_get_contents(radar_db_path());
+    return radar_token_authenticate($tokens['access_token']) === ['read', 'react'] && !str_contains($file, $tokens['access_token']) && !str_contains($file, $tokens['refresh_token']);
+});
+check('a read-only approval never carries the react scope', static function () use ($issue, $exchange): bool {
+    return $exchange($issue(['read']))['scope'] === 'read' && radar_oauth_mint(radar_oauth_client($GLOBALS['oauthClient']['client_id']), ['react'], null)['scope'] === 'read react';
+});
+check('a code can be used exactly once, and replaying it revokes the tokens it produced', static function () use ($issue, $exchange): bool {
+    $code = $issue();
+    $first = $exchange($code);
+    $replayed = rejects(static fn() => $exchange($code), RadarOAuthError::class);
+    return $replayed && radar_token_authenticate($first['access_token']) === null;
+});
+check('a wrong PKCE verifier is refused (and burns the code)', static function () use ($issue, $exchange): bool {
+    $code = $issue();
+    $wrong = rejects(static fn() => $exchange($code, ['code_verifier' => radar_oauth_random(32)]), RadarOAuthError::class);
+    $missing = rejects(static fn() => $exchange($issue(), ['code_verifier' => '']), RadarOAuthError::class);
+    return $wrong && $missing && rejects(static fn() => $exchange($code), RadarOAuthError::class);
+});
+check('the redirect_uri must match the one used at authorization', static fn(): bool => rejects(static fn() => $exchange($issue(), ['redirect_uri' => 'https://chatgpt.com/other']), RadarOAuthError::class));
+check('another client cannot redeem the code', static function () use ($issue): bool {
+    $other = radar_oauth_register(['client_name' => 'Outro', 'redirect_uris' => ['https://outro.example.com/cb']]);
+    return rejects(static fn() => radar_oauth_token(['grant_type' => 'authorization_code', 'code' => $issue(), 'client_id' => $other['client_id'], 'redirect_uri' => 'https://chatgpt.com/connector_platform_oauth_redirect', 'code_verifier' => $GLOBALS['verifier']]), RadarOAuthError::class);
+});
+check('authorization codes expire after five minutes', static function () use ($issue, $exchange): bool {
+    $code = $issue();
+    radar_db_exec('UPDATE oauth_codes SET expires_at = ? WHERE code_hash = ?', [time() - 1, radar_oauth_hash($code)]);
+    return rejects(static fn() => $exchange($code), RadarOAuthError::class);
+});
+check('garbage codes, grants and missing client are refused with OAuth error codes', static function (): bool {
+    $codes = [];
+    foreach ([['grant_type' => 'authorization_code', 'code' => 'nope', 'client_id' => $GLOBALS['oauthClient']['client_id']], ['grant_type' => 'password', 'client_id' => $GLOBALS['oauthClient']['client_id']], ['grant_type' => 'authorization_code', 'client_id' => 'rvc_unknown000000000']] as $post) {
+        try {
+            radar_oauth_token($post);
+        } catch (RadarOAuthError $error) {
+            $codes[] = $error->oauthCode . ':' . $error->httpStatus;
+        }
+    }
+    return $codes === ['invalid_grant:400', 'unsupported_grant_type:400', 'invalid_client:401'];
+});
+check('refresh tokens rotate: a new pair is issued and the old pair stops working', static function () use ($issue, $exchange): bool {
+    $pair = $exchange($issue());
+    $next = radar_oauth_token(['grant_type' => 'refresh_token', 'refresh_token' => $pair['refresh_token'], 'client_id' => $GLOBALS['oauthClient']['client_id']]);
+    $oldRefreshDead = rejects(static fn() => radar_oauth_token(['grant_type' => 'refresh_token', 'refresh_token' => $pair['refresh_token'], 'client_id' => $GLOBALS['oauthClient']['client_id']]), RadarOAuthError::class);
+    return radar_token_authenticate($pair['access_token']) === null && radar_token_authenticate($next['access_token']) === ['read', 'react'] && $oldRefreshDead && $next['refresh_token'] !== $pair['refresh_token'] && $next['scope'] === $pair['scope'];
+});
+check('expired access tokens and expired refresh tokens are refused', static function () use ($issue, $exchange): bool {
+    $pair = $exchange($issue());
+    radar_db_exec('UPDATE api_tokens SET expires_at = ? WHERE token_hash = ?', [time() - 1, radar_oauth_hash($pair['access_token'])]);
+    $accessDead = radar_token_authenticate($pair['access_token']) === null;
+    radar_db_exec('UPDATE api_tokens SET refresh_expires_at = ? WHERE refresh_hash = ?', [time() - 1, radar_oauth_hash($pair['refresh_token'])]);
+    return $accessDead && rejects(static fn() => radar_oauth_token(['grant_type' => 'refresh_token', 'refresh_token' => $pair['refresh_token'], 'client_id' => $GLOBALS['oauthClient']['client_id']]), RadarOAuthError::class);
+});
+check('another client cannot use a refresh token', static function () use ($issue, $exchange): bool {
+    $pair = $exchange($issue());
+    $other = radar_oauth_register(['client_name' => 'Intruso', 'redirect_uris' => ['https://intruso.example.com/cb']]);
+    return rejects(static fn() => radar_oauth_token(['grant_type' => 'refresh_token', 'refresh_token' => $pair['refresh_token'], 'client_id' => $other['client_id']]), RadarOAuthError::class);
+});
+$manual = radar_oauth_client_create('ChatGPT manual', "https://chatgpt.com/connector_platform_oauth_redirect\nhttps://chatgpt.com/connector/oauth/abc123");
+check('manual clients get a secret that is shown once and stored only as a hash', static function () use ($manual): bool {
+    $row = radar_oauth_client($manual['client_id']);
+    return str_starts_with($manual['client_secret'], 'rvs_') && $row['secret_hash'] === hash('sha256', $manual['client_secret']) && count($row['redirect_uris']) === 2
+        && !str_contains((string)file_get_contents(radar_db_path()), $manual['client_secret']);
+});
+check('manual clients must authenticate (secret in body or Basic) and wrong secrets give 401', static function () use ($manual, $challenge, $verifier): bool {
+    $mk = static fn(): string => radar_oauth_issue_code($manual['client_id'], 'https://chatgpt.com/connector_platform_oauth_redirect', $challenge, ['read'], '');
+    $post = static fn(string $code): array => ['grant_type' => 'authorization_code', 'code' => $code, 'redirect_uri' => 'https://chatgpt.com/connector_platform_oauth_redirect', 'code_verifier' => $verifier];
+    $viaBody = radar_oauth_token($post($mk()) + ['client_id' => $manual['client_id'], 'client_secret' => $manual['client_secret']]);
+    $viaBasic = radar_oauth_token($post($mk()), $manual['client_id'], $manual['client_secret']);
+    $status = 0;
+    try {
+        radar_oauth_token($post($mk()) + ['client_id' => $manual['client_id'], 'client_secret' => 'rvs_wrong']);
+    } catch (RadarOAuthError $error) {
+        $status = $error->httpStatus;
+    }
+    $noSecret = rejects(static fn() => radar_oauth_token($post($mk()) + ['client_id' => $manual['client_id']]), RadarOAuthError::class);
+    return str_starts_with($viaBody['access_token'], 'rvo_') && str_starts_with($viaBasic['access_token'], 'rvo_') && $status === 401 && $noSecret;
+});
+check('manual client creation validates name and redirects', static fn(): bool => rejects(static fn() => radar_oauth_client_create('', 'https://a.example.com/cb'), InvalidArgumentException::class) && rejects(static fn() => radar_oauth_client_create('X', 'http://evil.example.com/cb'), InvalidArgumentException::class));
+check('removing a client revokes every connection it had', static function () use ($issue, $exchange): bool {
+    $client = radar_oauth_register(['client_name' => 'Descartável', 'redirect_uris' => ['https://descartavel.example.com/cb']]);
+    $code = radar_oauth_issue_code($client['client_id'], 'https://descartavel.example.com/cb', $GLOBALS['challenge'], ['read'], '');
+    $pair = radar_oauth_token(['grant_type' => 'authorization_code', 'code' => $code, 'client_id' => $client['client_id'], 'redirect_uri' => 'https://descartavel.example.com/cb', 'code_verifier' => $GLOBALS['verifier']]);
+    $before = radar_token_authenticate($pair['access_token']) !== null;
+    radar_oauth_client_delete($client['client_id']);
+    return $before && radar_token_authenticate($pair['access_token']) === null && radar_oauth_client($client['client_id']) === null;
+});
+check('housekeeping removes rotated OAuth rows and stale unused dynamic clients, keeps active ones', static function () use ($oauthClient): bool {
+    $stale = radar_oauth_register(['client_name' => 'Velho', 'redirect_uris' => ['https://velho.example.com/cb']]);
+    radar_db_exec('UPDATE oauth_clients SET created_at = ? WHERE client_id = ?', [time() - 8 * 86400, $stale['client_id']]);
+    radar_db_exec("UPDATE api_tokens SET revoked_at = ? WHERE kind = 'oauth'", [time() - 2 * 86400]);
+    radar_oauth_cleanup();
+    return radar_oauth_client($stale['client_id']) === null && radar_oauth_client($oauthClient['client_id']) !== null && (int)radar_db_value("SELECT COUNT(*) FROM api_tokens WHERE kind = 'oauth' AND revoked_at IS NOT NULL") === 0;
+});
+check('OAuth tokens are listed in the panel only while active', static function () use ($exchange, $issue): bool {
+    $pair = $exchange($issue());
+    $listed = array_filter(radar_tokens_list(), static fn(array $t): bool => $t['kind'] === 'oauth');
+    return count($listed) === 1 && array_values($listed)[0]['name'] === 'ChatGPT' && radar_token_authenticate($pair['access_token']) !== null;
+});
+
 /* ======================= HTML safety and diagnostics ======================= */
 check('news cards escape hostile headlines, sources and image URLs', static function (): bool {
     $card = radar_news_card(radar_news_decode(['id' => 1, 'title' => '<script>alert(1)</script>"><img src=x onerror=alert(1)>', 'url' => 'https://x.example.com/', 'source_name' => '<b>Fonte</b>', 'category' => 'Geral', 'summary' => '', 'published_at' => null, 'first_seen_at' => time(), 'image_url' => 'https://i.example.com/a.jpg" onerror="alert(1)', 'image_credit' => null, 'image_note' => null, 'score' => 10, 'score_reasons' => '[]', 'source_count' => 1, 'trend_hits' => '[]', 'trend_origin' => null, 'related' => '[]', 'cluster_id' => null, 'saved' => 0, 'note' => '']));
@@ -855,7 +1004,7 @@ check('no private keys, tokens or real credentials are committed', static functi
     return true;
 });
 check('the public web root contains only entry points and assets (no app code, config or storage)', static function () use ($root): bool {
-    $allowed = ['api.php', 'assets', 'config-ia.php', 'coletas.php', 'estudio.php', 'fontes.php', 'health.php', 'index.php', 'integracoes.php', 'login.php', 'logout.php', 'mcp.php', 'media.php', 'noticia.php', 'noticias.php', 'personagem.php', 'roteiro.php', 'roteiros.php', 'salvas.php'];
+    $allowed = ['api.php', 'assets', 'config-ia.php', 'coletas.php', 'estudio.php', 'fontes.php', 'health.php', 'index.php', 'integracoes.php', 'login.php', 'logout.php', 'mcp.php', 'media.php', 'noticia.php', 'noticias.php', 'oauth-authorize.php', 'oauth-metadata.php', 'oauth-register.php', 'oauth-token.php', 'personagem.php', 'roteiro.php', 'roteiros.php', 'salvas.php'];
     $found = array_values(array_diff(scandir($root . '/public') ?: [], ['.', '..']));
     return array_diff($found, $allowed) === [] && !is_dir($root . '/public/storage') && !is_file($root . '/public/config.php');
 });

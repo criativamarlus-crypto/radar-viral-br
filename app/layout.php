@@ -145,6 +145,22 @@ function radar_page_end(): void
     echo '<div class="toast" id="toast" role="status" aria-live="polite" hidden></div></body></html>';
 }
 
+/** Minimal centred card page (OAuth consent, errors). Same CSP: no inline code. */
+function radar_simple_page(string $title, string $bodyHtml, array $options = []): never
+{
+    $meta = '';
+    if (!empty($options['redirect'])) {
+        $meta = '<meta name="oauth-redirect" content="' . radar_h($options['redirect']) . '">';
+    }
+    http_response_code((int)($options['status'] ?? 200));
+    echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        . '<meta name="color-scheme" content="dark"><meta name="robots" content="noindex,nofollow">' . $meta
+        . '<title>' . radar_h($title) . ' · Radar Viral BR</title><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/app.css">'
+        . '<script src="/assets/oauth.js" defer></script></head><body class="login-page"><main><section class="auth-card">'
+        . '<p class="eyebrow">RADAR VIRAL BR</p>' . $bodyHtml . '</section></main></body></html>';
+    exit;
+}
+
 function radar_react_dialog(): string
 {
     $tones = '';

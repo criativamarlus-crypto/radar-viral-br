@@ -10,7 +10,7 @@ Painel **privado**, em português brasileiro, que busca notícias do Brasil e do
 - **Roteiros**: botão *Gerar react com IA* (Anthropic, OpenAI ou API compatível; sem IA gera um rascunho conservador). Entrega 3 headlines, gancho, roteiro de 15–35 s, comentário (opinião separada de fato), CTA e prompt de vídeo com o personagem fixo. Alerta sobre números/citações que não estão na fonte.
 - **Estúdio de React**: composição vertical 9:16 (notícia em cima, personagem embaixo), enquadramento, headline, expressão, salvar projeto, exportar PNG 1080×1920 e `.txt`.
 - **Meu Personagem**: prompt mestre imutável + imagens de referência.
-- **API REST e MCP** com tokens (leitura / preparar react): [docs/API.md](docs/API.md) e [docs/CHATGPT.md](docs/CHATGPT.md).
+- **API REST e MCP** com tokens (leitura / preparar react) e **OAuth 2.1** para conectar o ChatGPT: [docs/API.md](docs/API.md) e [docs/CHATGPT.md](docs/CHATGPT.md).
 
 ## Rodar localmente
 
@@ -20,7 +20,7 @@ Requisitos: PHP 8.2+ com `curl`, `simplexml`, `fileinfo`, `mbstring`, `pdo_sqlit
 cp config.example.php config.php
 # edite config.php: admin_user, admin_password_hash, storage_path, secure_cookies=false, site_url=http://localhost:8080
 php -r 'echo password_hash("SUA-SENHA-LONGA", PASSWORD_DEFAULT), PHP_EOL;'   # cole o hash em config.php
-php -S localhost:8080 -t public
+php -S localhost:8080 -t public bin/dev-router.php   # o router roteia /.well-known/* (descoberta OAuth)
 ```
 
 Abra http://localhost:8080 e entre. No primeiro acesso o painel faz a primeira coleta sozinho. No servidor use `php bin/setup.php`, que cria o `config.php` pedindo a senha no terminal.
@@ -28,7 +28,7 @@ Abra http://localhost:8080 e entre. No primeiro acesso o painel faz a primeira c
 ## Testes
 
 ```bash
-php tests/run.php     # ~275 verificações; sobe um servidor PHP descartável; não usa rede nem credenciais reais
+php tests/run.php     # ~345 verificações; sobe um servidor PHP descartável; não usa rede nem credenciais reais
 ```
 
 ## Publicar no CloudPanel

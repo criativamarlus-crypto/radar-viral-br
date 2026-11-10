@@ -247,3 +247,9 @@ body.login-page { display: grid; place-items: center; min-height: 100vh; padding
 
 /* canvas preview inside the phone frame */
 .phone canvas { grid-row: 1 / span 2; width: 100%; height: 100%; display: block; }
+
+/* consent form */
+fieldset.panel { margin: 0; } legend { padding: 0 .4rem; font-weight: 700; }
+label.check { display: block; font-weight: 400; margin: .3rem 0; }
+
+body.login-page main { width: min(420px, 100%); }
