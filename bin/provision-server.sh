@@ -21,14 +21,16 @@ DEPLOY_PUBKEY=${1:-}
 
 say '1/6  PHP e extensões'
 PHP=''
-for candidate in php8.4 php8.3 php8.2 php; do
+# Prefere as versões que o CI testa (8.3, 8.2); 8.4 só se não houver outra.
+for candidate in php8.3 php8.2 php8.4 php; do
   if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' 2>/dev/null; then
     PHP=$(command -v "$candidate")
     break
   fi
 done
 [[ -n $PHP ]] || fail 'Nenhum PHP 8.2+ encontrado para este usuário. No CloudPanel, confira a versão do PHP do site.'
-missing=$("$PHP" -r '
+# 2>/dev/null: servidores com módulos PHP ausentes imprimem avisos de inicialização.
+missing=$("$PHP" 2>/dev/null -r '
   $need = ["curl", "simplexml", "fileinfo", "mbstring", "pdo_sqlite", "libxml", "json"];
   $missing = array_values(array_filter($need, static fn(string $e): bool => !extension_loaded($e)));
   if (!extension_loaded("sodium") && !extension_loaded("openssl")) { $missing[] = "sodium ou openssl"; }
@@ -38,7 +40,7 @@ missing=$("$PHP" -r '
 for tool in git tar flock curl; do
   command -v "$tool" >/dev/null 2>&1 || fail "Falta o comando '$tool' no servidor."
 done
-echo "ok: $("$PHP" -r 'echo PHP_VERSION;') em $PHP"
+echo "ok: $("$PHP" -r 'echo PHP_VERSION;' 2>/dev/null) em $PHP"
 
 say '2/6  Pastas privadas'
 mkdir -p "$BASE/shared/storage"

@@ -32,7 +32,10 @@ if (is_string($ini)) {
     array_push($command, '-c', $ini);
 }
 copy(dirname(__DIR__) . '/bin/dev-router.php', $httpRoot . '/dev-router.php');
-array_push($command, '-d', 'display_errors=0', '-d', 'log_errors=1', '-d', 'upload_max_filesize=6M', '-d', 'post_max_size=7M', '-S', $address, '-t', $httpRoot . '/public', $httpRoot . '/dev-router.php');
+// The test rewrites config.php twice within milliseconds and expects the next request to see it.
+// OPcache (enabled by default for cli-server when the extension is loaded) revalidates files only
+// every 2 s, which made the session-revocation checks intermittent on fast machines.
+array_push($command, '-d', 'opcache.enable=0', '-d', 'opcache.validate_timestamps=1', '-d', 'opcache.revalidate_freq=0', '-d', 'display_errors=0', '-d', 'log_errors=1', '-d', 'upload_max_filesize=6M', '-d', 'post_max_size=7M', '-S', $address, '-t', $httpRoot . '/public', $httpRoot . '/dev-router.php');
 $null = PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null';
 $server = proc_open($command, [0 => ['file', $null, 'r'], 1 => ['file', $httpRoot . '/server.log', 'a'], 2 => ['file', $httpRoot . '/server.log', 'a']], $pipes, $httpRoot);
 if (!is_resource($server)) {
