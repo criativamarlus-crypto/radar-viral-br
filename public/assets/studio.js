@@ -386,6 +386,7 @@
   // studio-pack.js plugs in the complete block of each scene (images, coordinates, script and prompt together).
   let sceneTextFn = null;
   let fullTextFn = null;
+  let labelFn = null;
   function renderPrompts() {
     const box = $('st-prompts');
     if (!box) return;
@@ -401,7 +402,7 @@
       title.textContent = 'Cena ' + (index + 1) + ' de ' + list.length;
       const button = document.createElement('button');
       button.type = 'button'; button.className = 'btn ghost small';
-      button.dataset.copyScene = String(index); button.textContent = 'Copiar cena ' + (index + 1) + ' (tudo junto)';
+      button.dataset.copyScene = String(index); button.textContent = labelFn ? labelFn(index) : 'Copiar cena ' + (index + 1);
       head.append(title, button);
       const look = state.direction;
       let note = null;
@@ -416,7 +417,7 @@
       box.append(block);
     });
     $('st-scenes-hint').textContent = list.length
-      ? list.length + (list.length === 1 ? ' cena' : ' cenas') + ' de até 25 s. Cada cena é um bloco completo: imagens a anexar, coordenadas, roteiro e prompt juntos. Cole uma cena por vez na ferramenta de vídeo (“Copiar cena” leva o bloco e a prancha com o template e as referências).'
+      ? list.length + (list.length === 1 ? ' cena' : ' cenas') + ' de até 25 s. Cada cena é um bloco completo: imagens a anexar, roupa e cenário, coordenadas, roteiro e prompt juntos. “Copiar cena” funciona em 2 passos com o mesmo botão: 1/2 a prancha (template + referências) e 2/2 o texto.'
         + (list.length > state.scenes ? ' O roteiro é longo: precisa de ' + list.length + ' cenas para ficar em até 25 s cada. Encurte o texto para ter menos.' : '')
       : '';
   }
@@ -744,7 +745,7 @@
   // Small hook for diagnostics and automated checks.
   window.RadarStudio = {
     state, data, render, redraw, hasImpact, sourceLine, layout: () => lastLayout,
-    setSceneText(fns) { sceneTextFn = fns.scene; fullTextFn = fns.full; renderPrompts(); },
+    setSceneText(fns) { sceneTextFn = fns.scene; fullTextFn = fns.full; labelFn = fns.label || null; renderPrompts(); },
   };
   renderPickers(); words(); redraw();
 

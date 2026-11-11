@@ -116,10 +116,17 @@
     plannedFiles().filter((f) => ['template', 'reference', 'news'].includes(f.kind))
       .forEach((f, i) => lines.push('   ' + (i + 1) + '. ' + f.label + (f.note ? ' — ' + f.note : '') + ' [' + f.name + ']'));
     lines.push('   Prancha única: 00-prancha-template-e-referencias.png (o template e as referências da personagem na mesma imagem)');
-    lines.push('', '2) COORDENADAS DA COMPOSIÇÃO (tela de 1080 × 1920 px; origem no canto superior esquerdo)', ...coordinateLines());
-    lines.push('', '3) ROTEIRO COMPLETO (a fala desta cena está marcada com >>)');
+    const look = state.direction;
+    if (look && look.outfit) {
+      lines.push('', '2) ROUPA, CENÁRIO E ÂNGULO DESTA CENA (mudam a cada notícia: use estes, não os do vídeo anterior)',
+        'Roupa: ' + look.outfit, 'Acessórios: ' + (look.accessories || 'nenhum extra'), 'Cenário: ' + (data.scenes[state.scene] || state.scene), 'Iluminação: ' + (look.lighting || '—'),
+        'Ângulo desta cena: ' + (look.angles && look.angles.length ? look.angles[index % look.angles.length] : '—') + (look.gestures && look.gestures.length ? ' · gesto: ' + look.gestures[index % look.gestures.length] : ''),
+        'O rosto da personagem nunca muda (vem das imagens de referência).');
+    }
+    lines.push('', '3) COORDENADAS DA COMPOSIÇÃO (tela de 1080 × 1920 px; origem no canto superior esquerdo)', ...coordinateLines());
+    lines.push('', '4) ROTEIRO COMPLETO (a fala desta cena está marcada com >>)');
     prompts.forEach((prompt, j) => lines.push((j === index ? '>> ' : '   ') + 'Cena ' + (j + 1) + ': ' + (dialogueOf(prompt) || state.spoken)));
-    lines.push('', '4) PROMPT PARA A IA DE VÍDEO (cole este texto)', '', prompts[index] || '');
+    lines.push('', '5) PROMPT PARA A IA DE VÍDEO (cole este texto)', '', prompts[index] || '');
     return lines.join('\n');
   }
 
@@ -129,7 +136,7 @@
     const lines = [];
     const add = (...parts) => lines.push(...parts);
     add('RADAR VIRAL BR · PACOTE COMPLETO DO REACT', SEPARATOR, '',
-      'COMO USAR: cada cena abaixo é um bloco completo (imagens, coordenadas, roteiro e prompt). O template é o primeiro quadro de cada cena: a IA mantém a faixa, o título e o card e troca só a personagem do fundo. Se a ferramenta aceitar uma imagem só, use a PRANCHA (template + referências na mesma imagem).', '');
+      'COMO USAR: cada cena abaixo é um bloco completo (imagens, roupa e cenário, coordenadas, roteiro e prompt). A roupa e o cenário mudam a cada notícia: valem os desta notícia, não os do vídeo anterior. O template é o primeiro quadro de cada cena: a IA mantém a faixa, o título e o card e troca só a personagem do fundo. Se a ferramenta aceitar uma imagem só, use a PRANCHA (template + referências na mesma imagem).', '');
     add('Personagem: ' + characterName(), 'Título: ' + (state.title || '—'), 'Modelo do vídeo: ' + data.templates[state.template].label);
     if (data.news) {
       add('', 'NOTÍCIA', 'Manchete real: ' + data.news.title, 'Fonte: ' + data.news.source, 'Categoria: ' + (data.news.category || '—'), 'Link: ' + data.news.url);
@@ -189,10 +196,11 @@
   }
 
   /** `only`: the index of one scene (its block alone), or undefined for the whole react. */
-  async function buildPack(only) {
+  async function buildPack(only, withHtml = true) {
     const files = await collectFiles();
     const board = await makeBoard(files);
     const text = only === undefined ? buildText() : sceneText(only);
+    if (!withHtml) return { text, html: '', files, board };
     const parts = ['<h1>Radar Viral BR · ' + (only === undefined ? 'pacote completo do react' : 'cena ' + (only + 1)) + '</h1>'];
     if (board) parts.push('<h3>Prancha única: template + referências da personagem</h3><img src="' + (await read(board)) + '" alt="Prancha com o template e as referências" style="max-width:640px;height:auto">');
     parts.push('<pre style="white-space:pre-wrap;font-family:Consolas,monospace;font-size:12px">' + escapeHtml(text) + '</pre>');
@@ -273,32 +281,75 @@
   // Small hook for diagnostics and automated checks.
   window.RadarStudioPack = { buildPack, buildText, sceneText, makeZip, crc32, makeBoard, collectFiles, plannedFiles };
 
-  /** One copy carries the text, the same text with the images, and the board as an image: each place you paste into takes what it understands. */
-  function copyPack(button, only) {
-    return withBusy(button, 'Preparando…', async () => {
-      if (!state.spoken.trim() && !state.prompt) { status('Escreva ou gere o roteiro antes de copiar.', true); return; }
-      const packPromise = buildPack(only);
-      if (navigator.clipboard && window.ClipboardItem) {
-        await navigator.clipboard.write([new ClipboardItem({
-          'text/plain': packPromise.then((pack) => new Blob([pack.text], { type: 'text/plain' })),
-          'text/html': packPromise.then((pack) => new Blob([pack.html], { type: 'text/html' })),
-          'image/png': packPromise.then((pack) => pack.board),
-        })]);
-      } else {
-        await navigator.clipboard.writeText((await packPromise).text);
-      }
-      const pack = await packPromise;
-      const what = only === undefined ? 'todas as ' + scenePrompts().length + ' cenas' : 'a cena ' + (only + 1);
-      status('Copiado de uma vez (' + what + '): imagens a anexar, coordenadas, roteiro e prompt no texto, e a prancha com o template e as referências como imagem. Cole na ferramenta de vídeo: o texto vai no prompt e, onde ela aceitar imagem, a prancha vem junto. Em um documento ou editor vêm todas as ' + pack.files.length + ' imagens.');
-      toast('Copiado.');
-    });
+  /**
+   * The video tool takes the image OR the text from one paste, never both, so copying is done in two guided steps with the
+   * same button: 1/2 the board (the template and the character references) as an image, 2/2 the text of the scenes.
+   * `only` is the index of one scene, or undefined for all of them.
+   */
+  const pending = new Map();
+  const keyOf = (only) => (only === undefined ? 'all' : 'scene-' + only);
+  const baseLabel = (only) => (only === undefined ? 'Copiar todas as cenas (prancha + texto)' : 'Copiar cena ' + (only + 1) + ' (prancha + texto)');
+  const stepLabel = (only) => (only === undefined ? '2/2 · agora copiar o texto das cenas' : '2/2 · agora copiar o texto da cena ' + (only + 1));
+  const labelFor = (only) => (pending.has(keyOf(only)) ? stepLabel(only) : baseLabel(only));
+  function refreshLabels() {
+    for (const [id, only] of [['st-copy-all', undefined], ['st-copy-scenes', undefined]]) {
+      const button = $(id);
+      if (button) button.textContent = labelFor(only);
+    }
+    S.setSceneText({ scene: sceneText, full: buildText, label: (index) => labelFor(index) });
   }
-  $('st-copy-all').addEventListener('click', (event) => copyPack(event.currentTarget));
-  $('st-copy-scenes').addEventListener('click', (event) => copyPack(event.currentTarget));
+
+  async function copyStep(button, only) {
+    const key = keyOf(only);
+    const step = pending.get(key);
+    button.disabled = true;
+    try {
+      if (step && Date.now() < step.until) {
+        // 2/2: the text (everything the tool needs to read), as plain text.
+        pending.delete(key);
+        await navigator.clipboard.writeText(step.text);
+        status('Passo 2 de 2: o TEXTO ' + (only === undefined ? 'das ' + scenePrompts().length + ' cenas' : 'da cena ' + (only + 1)) + ' está copiado (imagens a anexar, roupa e cenário, coordenadas, roteiro e prompt). Cole na ferramenta de vídeo.');
+        toast('Texto copiado.');
+      } else {
+        if (!state.spoken.trim() && !state.prompt) { status('Escreva ou gere o roteiro antes de copiar.', true); return; }
+        pending.delete(key);
+        button.textContent = 'Montando a prancha…';
+        const pack = await buildPack(only, false);
+        if (!pack.board) throw new Error('Não foi possível montar a prancha.');
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': pack.board })]);
+        pending.set(key, { text: pack.text, until: Date.now() + 10 * 60 * 1000 });
+        setTimeout(() => { if (pending.get(key) && Date.now() >= pending.get(key).until) { pending.delete(key); refreshLabels(); } }, 10 * 60 * 1000 + 500);
+        status('Passo 1 de 2: a PRANCHA (template + referências da personagem) está copiada. Cole na ferramenta de vídeo. Depois clique de novo no mesmo botão (agora “2/2”) para copiar o texto.');
+        toast('Prancha copiada. Cole e clique de novo para o texto.');
+      }
+    } catch (error) {
+      pending.delete(key);
+      status('Não deu certo: ' + error.message + ' Se o navegador bloqueou a cópia, use “Baixar pacote completo (.zip)”.', true);
+      toast(error.message, true);
+    } finally {
+      button.disabled = false;
+      refreshLabels();
+    }
+  }
+  $('st-copy-all').addEventListener('click', (event) => copyStep(event.currentTarget));
+  $('st-copy-scenes').addEventListener('click', (event) => copyStep(event.currentTarget));
   document.addEventListener('click', (event) => {
     const button = event.target.closest('[data-copy-scene]');
-    if (button) copyPack(button, Number(button.dataset.copyScene));
+    if (button) copyStep(button, Number(button.dataset.copyScene));
   });
+
+  /** For a document or an editor that takes text and images together: everything in one copy (text, html with the images, the board). */
+  $('st-copy-once').addEventListener('click', (event) => withBusy(event.currentTarget, 'Preparando…', async () => {
+    if (!state.spoken.trim() && !state.prompt) { status('Escreva ou gere o roteiro antes de copiar.', true); return; }
+    const packPromise = buildPack();
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/plain': packPromise.then((pack) => new Blob([pack.text], { type: 'text/plain' })),
+      'text/html': packPromise.then((pack) => new Blob([pack.html], { type: 'text/html' })),
+      'image/png': packPromise.then((pack) => pack.board),
+    })]);
+    status('Copiado de uma vez: texto, texto com as imagens e a prancha. Serve para colar em um documento ou editor; uma ferramenta de vídeo costuma pegar só a imagem (para ela, use o botão em 2 passos).');
+    toast('Copiado.');
+  }));
 
   $('st-download-pack').addEventListener('click', (event) => withBusy(event.currentTarget, 'Montando…', async () => {
     const pack = await buildPack();
@@ -315,9 +366,9 @@
   }));
 
   // From now on every scene block of the Studio shows (and copies) the complete text.
-  S.setSceneText({ scene: sceneText, full: buildText });
+  refreshLabels();
   // The coordinates come from a drawing of the frame: make one right away, so the blocks have them even before the first redraw.
   const warm = document.createElement('canvas');
   warm.width = 540; warm.height = 960;
-  S.render(warm, 540, 960).then(() => S.setSceneText({ scene: sceneText, full: buildText }));
+  S.render(warm, 540, 960).then(() => refreshLabels());
 })();
