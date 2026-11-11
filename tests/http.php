@@ -180,6 +180,11 @@ try {
     });
     $newsPage = localRequest('noticias.php?janela=24');
     check('news page lists the stored stories with the viral estimate and the generate button', static fn(): bool => str_contains($newsPage['body'], 'Gol decisivo muda o rumo') && str_contains($newsPage['body'], 'Gerar react com IA') && str_contains($newsPage['body'], 'Estimativa própria') || str_contains($newsPage['body'], 'estimativa própria'));
+    $multiCategory = localRequest('noticias.php?janela=24&categoria=' . rawurlencode('Finanças,Cartão de crédito'));
+    check('the news page shows a count on every category button and lets several be marked at once', static fn(): bool => $multiCategory['status'] === 200 && str_contains($multiCategory['body'], 'class="count"') && str_contains($multiCategory['body'], 'Marque uma ou várias categorias')
+        && str_contains($multiCategory['body'], 'aria-pressed="true"') && str_contains($multiCategory['body'], 'Cartão de crédito'));
+    $apiMulti = localRequest('api.php?action=news&janela=24&categoria=' . rawurlencode('Futebol,Finanças'));
+    check('the API accepts a comma-separated list of categories', static fn(): bool => $apiMulti['status'] === 200 && is_array(json_decode($apiMulti['body'], true)['items'] ?? null));
     $filtered = localRequest('noticias.php?janela=24&categoria=' . rawurlencode('Futebol'));
     check('news page category filter shows only that category', static fn(): bool => str_contains($filtered['body'], 'Gol decisivo') && !str_contains($filtered['body'], 'Governo anuncia pacote'));
     $badFilter = localRequest('noticias.php?categoria%5B%5D=x&ordem=%27%3B%20DROP%20TABLE%20news');

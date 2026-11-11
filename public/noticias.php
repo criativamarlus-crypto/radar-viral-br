@@ -8,6 +8,7 @@ if ($_GET === []) {
     $filters['window'] = 24;
 }
 $result = radar_news_query($filters);
+$counts = radar_news_category_counts($filters);
 $pages = max(1, (int)ceil($result['total'] / $filters['limit']));
 $base = [
     'janela' => $filters['window'] ?: 'tudo', 'ordem' => $filters['sort'], 'categoria' => $filters['category'], 'q' => $filters['q'],
@@ -47,9 +48,12 @@ radar_page_start('Notícias em alta', 'noticias.php');
     <div class="chips" role="group" aria-label="Categoria">
         <span class="label">Categoria</span>
         <a class="chip<?= $filters['category'] === '' ? ' on' : '' ?>" href="<?= radar_h(radar_url('noticias.php', ['categoria' => ''] + $base)) ?>">Todas</a>
-        <?php foreach (radar_category_list() as $category): ?>
-            <a class="chip<?= $filters['category'] === $category ? ' on' : '' ?>" href="<?= radar_h(radar_url('noticias.php', ['categoria' => $category] + $base)) ?>"><?= radar_h($category) ?></a>
+        <?php foreach (radar_category_list() as $category):
+            $isOn = in_array($category, $filters['categories'], true);
+            $next = $isOn ? array_values(array_diff($filters['categories'], [$category])) : array_merge($filters['categories'], [$category]); ?>
+            <a class="chip<?= $isOn ? ' on' : '' ?>" aria-pressed="<?= $isOn ? 'true' : 'false' ?>" href="<?= radar_h(radar_url('noticias.php', ['categoria' => implode(',', $next)] + $base)) ?>"><?= radar_h($category) ?><span class="count"><?= (int)($counts[$category] ?? 0) ?></span></a>
         <?php endforeach; ?>
+        <span class="hint">Marque uma ou várias categorias.</span>
     </div>
 </form>
 

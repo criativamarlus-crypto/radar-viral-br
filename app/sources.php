@@ -5,10 +5,19 @@ declare(strict_types=1);
 
 const RADAR_TRENDS_URL = 'https://trends.google.com/trending/rss?geo=BR';
 
+/** Bumped whenever built-in sources or category keywords change (see radar_sources_seed). */
+const RADAR_SOURCES_SEED_VERSION = '2';
+
 /** @return array<int,string> */
 function radar_category_list(): array
 {
-    return ['Política', 'Futebol', 'Esportes', 'Famosos', 'Economia', 'Tecnologia', 'Notícias internacionais', 'Curiosidades', 'Entretenimento', 'Assuntos virais', 'Geral'];
+    return ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia', 'Política', 'Futebol', 'Esportes', 'Famosos', 'Tecnologia', 'Notícias internacionais', 'Curiosidades', 'Entretenimento', 'Assuntos virais', 'Geral'];
+}
+
+/** The money categories: scripts about them inform and never advise (see the AI rules and the draft). @return array<int,string> */
+function radar_finance_categories(): array
+{
+    return ['Finanças', 'Cartão de crédito', 'Finanças pessoais'];
 }
 
 /** Categories a source may be pinned to ('auto' = classify each headline). */
@@ -61,7 +70,7 @@ function radar_default_sources(): array
         ['name' => 'Gazeta Esportiva', 'url' => 'https://www.gazetaesportiva.com/feed/', 'category' => 'Futebol', 'region' => 'BR', 'weight' => 0.9],
         ['name' => 'ESPN Brasil', 'url' => 'https://www.espn.com.br/espn/rss/news', 'category' => 'Futebol', 'region' => 'BR', 'weight' => 0.9],
         ['name' => 'Exame', 'url' => 'https://exame.com/feed/', 'category' => 'Economia', 'region' => 'BR', 'weight' => 0.9],
-        ['name' => 'InfoMoney', 'url' => 'https://www.infomoney.com.br/feed/', 'category' => 'Economia', 'region' => 'BR', 'weight' => 0.9],
+        ['name' => 'InfoMoney', 'url' => 'https://www.infomoney.com.br/feed/', 'category' => 'Finanças', 'region' => 'BR', 'weight' => 0.9],
         ['name' => 'TecMundo', 'url' => 'https://rss.tecmundo.com.br/feed', 'category' => 'Tecnologia', 'region' => 'BR', 'weight' => 0.9],
         ['name' => 'Canaltech', 'url' => 'https://canaltech.com.br/rss/', 'category' => 'Tecnologia', 'region' => 'BR', 'weight' => 0.9],
         ['name' => 'Olhar Digital', 'url' => 'https://olhardigital.com.br/feed/', 'category' => 'Tecnologia', 'region' => 'BR', 'weight' => 0.9],
@@ -76,6 +85,21 @@ function radar_default_sources(): array
         ['name' => 'Al Jazeera', 'url' => 'https://www.aljazeera.com/xml/rss/all.xml', 'category' => 'Notícias internacionais', 'region' => 'INT', 'weight' => 0.8],
         ['name' => 'Superinteressante', 'url' => 'https://super.abril.com.br/feed/', 'category' => 'Curiosidades', 'region' => 'BR', 'weight' => 0.8],
         ['name' => 'Galileu', 'url' => 'https://revistagalileu.globo.com/rss/galileu/', 'category' => 'Curiosidades', 'region' => 'BR', 'weight' => 0.8],
+        // Finanças, cartões e dinheiro no bolso (probed live; Google News searches follow the same personal-use notice).
+        ['name' => 'Seu Dinheiro', 'url' => 'https://www.seudinheiro.com/feed/', 'category' => 'Finanças', 'region' => 'BR', 'weight' => 0.9],
+        ['name' => 'Money Times', 'url' => 'https://www.moneytimes.com.br/feed/', 'category' => 'Finanças', 'region' => 'BR', 'weight' => 0.9],
+        ['name' => 'Investing.com Brasil', 'url' => 'https://br.investing.com/rss/news.rss', 'category' => 'Finanças', 'region' => 'BR', 'weight' => 0.8],
+        ['name' => 'Exame · Invest', 'url' => 'https://exame.com/invest/feed/', 'category' => 'Finanças', 'region' => 'BR', 'weight' => 0.9],
+        ['name' => 'Valor Econômico', 'url' => 'https://pox.globo.com/rss/valor', 'category' => 'auto', 'region' => 'BR', 'weight' => 1.0],
+        ['name' => 'Melhores Cartões', 'url' => 'https://www.melhorescartoes.com.br/feed', 'category' => 'Cartão de crédito', 'region' => 'BR', 'weight' => 0.9],
+        ['name' => 'Passageiro de Primeira', 'url' => 'https://passageirodeprimeira.com/feed/', 'category' => 'auto', 'region' => 'BR', 'weight' => 0.8],
+        ['name' => 'Pontos pra Voar', 'url' => 'https://pontospravoar.com/feed/', 'category' => 'auto', 'region' => 'BR', 'weight' => 0.8],
+        ['name' => 'Mestre das Milhas', 'url' => 'https://www.mestredasmilhas.com.br/feed/', 'category' => 'auto', 'region' => 'BR', 'weight' => 0.8],
+        ['name' => 'Google Notícias · Cartão de crédito', 'url' => "https://news.google.com/rss/search?q=cart%C3%A3o+de+cr%C3%A9dito&$g", 'category' => 'Cartão de crédito', 'region' => 'BR', 'weight' => 0.9],
+        ['name' => 'Google Notícias · Investimentos', 'url' => "https://news.google.com/rss/search?q=investimentos&$g", 'category' => 'Finanças', 'region' => 'BR', 'weight' => 0.9],
+        ['name' => 'Google Notícias · Bancos e fintechs', 'url' => "https://news.google.com/rss/search?q=Nubank+OR+Ita%C3%BA+OR+Bradesco+OR+Santander&$g", 'category' => 'Finanças', 'region' => 'BR', 'weight' => 0.8],
+        ['name' => 'Google Notícias · Dívidas e Serasa', 'url' => "https://news.google.com/rss/search?q=Serasa+OR+Desenrola+OR+d%C3%ADvidas&$g", 'category' => 'Finanças pessoais', 'region' => 'BR', 'weight' => 0.9],
+        ['name' => 'Google Notícias · Pix e golpes', 'url' => "https://news.google.com/rss/search?q=Pix+golpe&$g", 'category' => 'Finanças pessoais', 'region' => 'BR', 'weight' => 0.8],
     ];
 }
 
@@ -85,7 +109,7 @@ function radar_sources_seed(): int
     $added = 0;
     $now = time();
     $seeded = radar_setting('sources_seeded_version', '0');
-    if ($seeded === '1') {
+    if ($seeded === RADAR_SOURCES_SEED_VERSION) {
         return 0;
     }
     foreach (radar_default_sources() as $source) {
@@ -99,7 +123,13 @@ function radar_sources_seed(): int
         );
         $added++;
     }
-    radar_setting_set('sources_seeded_version', '1');
+    if ($seeded === '1') {
+        // Version 2 introduced the finance categories: InfoMoney is a markets outlet (only if still on its old default).
+        radar_db_exec("UPDATE sources SET category = 'Finanças', updated_at = ? WHERE url = 'https://www.infomoney.com.br/feed/' AND builtin = 1 AND category = 'Economia'", [$now]);
+    }
+    radar_setting_set('sources_seeded_version', RADAR_SOURCES_SEED_VERSION);
+    // The keyword lists changed: classify again what is already stored, so the new categories are not empty.
+    radar_news_reclassify();
     return $added;
 }
 
@@ -213,7 +243,11 @@ function radar_category_keywords(): array
         'Esportes' => ['formula 1', 'f1', 'ufc', 'mma', 'volei', 'basquete', 'nba', 'tenis', 'olimpiadas', 'jogos olimpicos', 'paralimpiadas', 'atletismo', 'natacao', 'surf', 'judo', 'boxe', 'grande premio', 'verstappen', 'hamilton', 'atleta', 'atletas', 'medalha', 'ginastica', 'rugby', 'nfl', 'ciclismo', 'maratona', 'golfe', 'esporte', 'esportes', 'automobilismo', 'stock car', 'skate', 'handebol'],
         'Política' => ['lula', 'bolsonaro', 'governo', 'congresso', 'senado', 'camara dos deputados', 'stf', 'ministro', 'ministra', 'eleicao', 'eleicoes', 'deputado', 'deputada', 'senador', 'senadora', 'planalto', 'moraes', 'prefeito', 'governador', 'reforma tributaria', 'impeachment', 'tse', 'pec', 'partido', 'oposicao', 'pgr', 'cpi', 'ministerio publico', 'tarcisio', 'haddad', 'dino', 'fachin', 'lira', 'alcolumbre'],
         'Famosos' => ['famoso', 'famosa', 'celebridade', 'bbb', 'ator', 'atriz', 'cantor', 'cantora', 'influenciador', 'influenciadora', 'influencer', 'namoro', 'casamento', 'separacao', 'novela', 'big brother', 'anitta', 'virginia', 'apresentador', 'apresentadora', 'ex bbb', 'a fazenda', 'gravidez', 'famosos', 'fofoca'],
-        'Economia' => ['dolar', 'inflacao', 'ipca', 'selic', 'juros', 'bolsa', 'ibovespa', 'pib', 'mercado', 'economia', 'banco central', 'imposto', 'salario minimo', 'desemprego', 'petroleo', 'fiscal', 'orcamento', 'tarifa', 'receita federal', 'inss', 'fgts', 'pix', 'investimento', 'acoes', 'bitcoin', 'cripto', 'varejo', 'credito', 'divida', 'consumidor', 'preco', 'precos', 'emprego', 'agronegocio'],
+        // Specific finance categories come first so a tie goes to them.
+        'Cartão de crédito' => ['cartao de credito', 'cartoes de credito', 'cartao de debito', 'cartao sem anuidade', 'cartao black', 'cartao platinum', 'cartao pre pago', 'cartao virtual', 'cartao consignado', 'fatura do cartao', 'faturas do cartao', 'limite do cartao', 'limite de credito', 'anuidade', 'rotativo', 'juros do rotativo', 'milhas', 'programa de pontos', 'cashback', 'mastercard', 'amex', 'american express', 'nubank', 'c6 bank', 'banco inter', 'picpay', 'mercado pago', 'pagbank', 'neon', 'smiles', 'livelo', 'latam pass', 'tudoazul', 'maquininha', 'parcelamento sem juros', 'bandeira de cartao'],
+        'Finanças pessoais' => ['divida', 'dividas', 'endividamento', 'endividados', 'inadimplencia', 'inadimplentes', 'negativado', 'negativados', 'serasa', 'spc', 'score de credito', 'desenrola', 'renegociacao', 'renegociar', 'consignado', 'emprestimo', 'emprestimos', 'financiamento', 'financiamento imobiliario', 'fgts', 'inss', 'aposentadoria', 'aposentado', 'aposentados', 'imposto de renda', 'irpf', 'restituicao', 'decimo terceiro', '13 salario', 'bolsa familia', 'pix', 'golpe do pix', 'golpe financeiro', 'fraude bancaria', 'poupanca', 'educacao financeira', 'consumidor', 'procon', 'cheque especial', 'salario minimo', 'mei', 'conta bancaria', 'tarifa bancaria', 'orcamento familiar'],
+        'Finanças' => ['ibovespa', 'b3', 'bolsa de valores', 'bolsa', 'acoes', 'acao', 'dolar', 'euro', 'cambio', 'renda fixa', 'renda variavel', 'tesouro direto', 'tesouro selic', 'cdb', 'lci', 'lca', 'fii', 'fiis', 'fundos imobiliarios', 'fundo de investimento', 'fundos de investimento', 'dividendos', 'investidor', 'investidores', 'investimento', 'investimentos', 'investir', 'bitcoin', 'criptomoedas', 'cripto', 'ethereum', 'copom', 'selic', 'juros futuros', 'mercado financeiro', 'bancos', 'itau', 'bradesco', 'santander', 'btg', 'ipo', 'balanco', 'lucro', 'wall street', 'nasdaq', 'dow jones', 'commodities', 'analistas', 'recomendacao de compra', 'carteira recomendada'],
+        'Economia' => ['inflacao', 'ipca', 'selic', 'juros', 'pib', 'economia', 'banco central', 'imposto', 'impostos', 'desemprego', 'petroleo', 'fiscal', 'orcamento', 'tarifa', 'receita federal', 'varejo', 'preco', 'precos', 'emprego', 'agronegocio', 'industria', 'exportacoes', 'importacoes', 'balanca comercial'],
         'Tecnologia' => ['tecnologia', 'inteligencia artificial', 'iphone', 'android', 'apple', 'google', 'microsoft', 'whatsapp', 'instagram', 'tiktok', 'openai', 'chatgpt', 'aplicativo', 'smartphone', 'celular', 'software', 'hacker', 'ciberataque', 'startup', 'samsung', 'nvidia', 'robo', 'tesla', '5g', 'windows', 'playstation', 'xbox', 'nintendo', 'gamer', 'cibernetico', 'big tech'],
         'Notícias internacionais' => ['eua', 'estados unidos', 'trump', 'biden', 'harris', 'china', 'russia', 'ucrania', 'israel', 'gaza', 'hamas', 'europa', 'onu', 'otan', 'franca', 'alemanha', 'reino unido', 'argentina', 'milei', 'venezuela', 'maduro', 'japao', 'india', 'mexico', 'canada', 'italia', 'espanha', 'portugal', 'putin', 'zelensky', 'macron', 'papa', 'vaticano', 'internacional'],
         'Entretenimento' => ['filme', 'serie', 'cinema', 'netflix', 'streaming', 'estreia', 'trailer', 'musica', 'album', 'festival', 'show', 'teatro', 'oscar', 'grammy', 'disney', 'hbo', 'prime video', 'globoplay', 'lancamento', 'documentario', 'turne', 'rock in rio', 'carnaval', 'bilheteria'],
@@ -262,4 +296,32 @@ function radar_classify(string $title, string $summary = '', string $sourceCateg
         return $pinned;
     }
     return $trending ? 'Assuntos virais' : 'Geral';
+}
+
+/**
+ * Classify the stored news again with the current keyword lists (used when the categories change).
+ * Each story keeps its source's pinned category as the weak prior, exactly as at collection time.
+ *
+ * @return int how many news changed category
+ */
+function radar_news_reclassify(): int
+{
+    $rows = radar_db_all('SELECT n.id, n.title, n.summary, n.category, n.trend_origin, COALESCE(s.category, \'auto\') AS pinned FROM news n LEFT JOIN sources s ON s.id = n.source_id');
+    $changed = 0;
+    $pdo = radar_db();
+    $pdo->exec('BEGIN IMMEDIATE');
+    try {
+        foreach ($rows as $row) {
+            $category = radar_classify((string)$row['title'], (string)$row['summary'], (string)$row['pinned'], $row['trend_origin'] !== null);
+            if ($category !== $row['category']) {
+                radar_db_exec('UPDATE news SET category = ? WHERE id = ?', [$category, (int)$row['id']]);
+                $changed++;
+            }
+        }
+        $pdo->exec('COMMIT');
+    } catch (Throwable $error) {
+        $pdo->exec('ROLLBACK');
+        throw $error;
+    }
+    return $changed;
 }

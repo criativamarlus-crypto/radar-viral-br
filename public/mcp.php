@@ -63,7 +63,8 @@ if (!is_array($params)) {
 $categories = radar_category_list();
 $filterSchema = [
     'periodo_horas' => ['type' => 'integer', 'enum' => [1, 3, 6, 24], 'description' => 'Somente notícias das últimas N horas.'],
-    'categoria' => ['type' => 'string', 'enum' => $categories, 'description' => 'Filtra por categoria.'],
+    'categoria' => ['type' => 'string', 'enum' => $categories, 'description' => 'Filtra por uma categoria.'],
+    'categorias' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => $categories], 'maxItems' => 6, 'description' => 'Filtra por várias categorias ao mesmo tempo (ex.: Finanças e Cartão de crédito).'],
     'ordem' => ['type' => 'string', 'enum' => ['viral', 'recentes'], 'description' => '"viral" = maior potencial viral (estimativa editorial); "recentes" = mais novas primeiro.'],
     'limite' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 30, 'description' => 'Quantas notícias devolver (padrão 10).'],
 ];
@@ -110,8 +111,8 @@ if (!is_string($name) || !is_array($arguments) || ($arguments !== [] && array_is
     $fail(-32602, 'Argumentos inválidos.');
 }
 $allowed = [
-    'listar_noticias' => ['periodo_horas', 'categoria', 'ordem', 'limite'],
-    'buscar_noticias' => ['consulta', 'periodo_horas', 'categoria', 'ordem', 'limite'],
+    'listar_noticias' => ['periodo_horas', 'categoria', 'categorias', 'ordem', 'limite'],
+    'buscar_noticias' => ['consulta', 'periodo_horas', 'categoria', 'categorias', 'ordem', 'limite'],
     'consultar_tendencias' => [],
     'obter_noticia' => ['id'], 'obter_imagens' => ['id'],
     'listar_reacts' => ['noticia_id', 'limite'],
@@ -131,11 +132,12 @@ $brief = static fn(array $n): array => [
 ];
 $listFilters = static function (array $a): array {
     return radar_news_filters([
-        'window' => $a['periodo_horas'] ?? 24, 'category' => $a['categoria'] ?? '', 'sort' => ($a['ordem'] ?? 'viral') === 'recentes' ? 'recent' : 'viral',
+        'window' => $a['periodo_horas'] ?? 24, 'category' => array_merge(isset($a['categoria']) ? [$a['categoria']] : [], $a['categorias'] ?? []), 'sort' => ($a['ordem'] ?? 'viral') === 'recentes' ? 'recent' : 'viral',
         'limit' => min(30, max(1, (int)($a['limite'] ?? 10))), 'q' => $a['consulta'] ?? '',
     ]);
 };
-$validCategory = static fn(array $a): bool => !isset($a['categoria']) || (is_string($a['categoria']) && in_array($a['categoria'], radar_category_list(), true));
+$validCategory = static fn(array $a): bool => (!isset($a['categoria']) || (is_string($a['categoria']) && in_array($a['categoria'], radar_category_list(), true)))
+    && (!isset($a['categorias']) || (is_array($a['categorias']) && array_is_list($a['categorias']) && count($a['categorias']) <= 6 && array_filter($a['categorias'], static fn(mixed $c): bool => !is_string($c) || !in_array($c, radar_category_list(), true)) === []));
 $positiveInt = static fn(mixed $v): bool => is_int($v) && $v > 0;
 
 try {

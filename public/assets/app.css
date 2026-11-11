@@ -137,6 +137,8 @@ label .optional, .hint, .muted { color: var(--muted); font-weight: 400; }
 .chip { padding: .35rem .8rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: .85rem; white-space: nowrap; }
 .chip:hover { text-decoration: none; border-color: #3a404c; }
 .chip.on { background: var(--yellow); color: #14120a; border-color: var(--yellow); font-weight: 700; }
+.chip .count { margin-left: .4rem; padding: 0 .4rem; border-radius: 999px; background: var(--surface-3); color: var(--muted); font-size: .72rem; font-weight: 600; }
+.chip.on .count { background: rgba(20, 18, 10, .18); color: #14120a; }
 .search-row { display: flex; gap: .5rem; flex-wrap: wrap; }
 .search-row input { flex: 1 1 220px; }
 .pager { display: flex; justify-content: center; gap: .6rem; margin-top: 1.4rem; align-items: center; color: var(--muted); }

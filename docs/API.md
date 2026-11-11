@@ -19,7 +19,7 @@ Sem credencial: `401`. Excesso de requisições: `429` com `Retry-After`. Instal
 
 | `action` | Parâmetros | Retorno |
 | --- | --- | --- |
-| `news` (padrão) | `janela` (1, 3, 6, 24 ou `tudo`), `ordem` (`viral`\|`recent`), `categoria`, `q`, `salvas=1`, `com_imagem=1`, `agrupar=0`, `limite` (1–100), `pagina` | lista de assuntos (um por história) com fonte, link original, horário, resumo do veículo, imagem + crédito, pontuação 0–100 e motivos |
+| `news` (padrão) | `janela` (1, 3, 6, 24 ou `tudo`), `ordem` (`viral`\|`recent`), `categoria` (uma ou várias separadas por vírgula, ex.: `Finanças,Cartão de crédito`), `q`, `salvas=1`, `com_imagem=1`, `agrupar=0`, `limite` (1–100), `pagina` | lista de assuntos (um por história) com fonte, link original, horário, resumo do veículo, imagem + crédito, pontuação 0–100 e motivos |
 | `news_item` | `id` | uma notícia com motivos da pontuação, mesma história em outros veículos, tendências e arquivos de mídia |
 | `trends` | — | última coleta do Google Trends Brasil, com matérias associadas |
 | `scripts` | `news_id` (opcional) | roteiros criados |
@@ -52,7 +52,7 @@ JSON-RPC sobre HTTP `POST`, sem estado, `Content-Type: application/json`, `Autho
 
 | Ferramenta | Argumentos | Acesso |
 | --- | --- | --- |
-| `listar_noticias` | `periodo_horas` (1/3/6/24), `categoria`, `ordem` (`viral`\|`recentes`), `limite` (≤30) | leitura |
+| `listar_noticias` | `periodo_horas` (1/3/6/24), `categoria` ou `categorias` (lista), `ordem` (`viral`\|`recentes`), `limite` (≤30) | leitura |
 | `buscar_noticias` | `consulta` + os mesmos filtros | leitura |
 | `consultar_tendencias` | — | leitura |
 | `obter_noticia` | `id` | leitura |

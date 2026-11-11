@@ -127,7 +127,7 @@ function radar_rank_trend_match(array $titleTokens, array $queryTokens): bool
 /** @return array<string,int> category => base public-interest points (0–10) */
 function radar_rank_category_interest(): array
 {
-    return ['Futebol' => 9, 'Esportes' => 6, 'Política' => 8, 'Famosos' => 8, 'Assuntos virais' => 8, 'Economia' => 7, 'Notícias internacionais' => 6, 'Tecnologia' => 6, 'Entretenimento' => 6, 'Curiosidades' => 6, 'Geral' => 4];
+    return ['Futebol' => 9, 'Esportes' => 6, 'Política' => 8, 'Famosos' => 8, 'Assuntos virais' => 8, 'Finanças pessoais' => 8, 'Cartão de crédito' => 7, 'Finanças' => 7, 'Economia' => 7, 'Notícias internacionais' => 6, 'Tecnologia' => 6, 'Entretenimento' => 6, 'Curiosidades' => 6, 'Geral' => 4];
 }
 
 /**

@@ -182,11 +182,11 @@ check('Google Trends RSS exposes query, traffic and direct article URLs', static
 $cases = [
     ['Flamengo vence o Palmeiras e assume a liderança do Brasileirão', 'auto', 'Futebol'],
     ['Lula sanciona projeto aprovado pelo Senado', 'auto', 'Política'],
-    ['Dólar fecha em alta e Ibovespa recua após decisão do Banco Central', 'auto', 'Economia'],
+    ['Dólar fecha em alta e Ibovespa recua após decisão do Banco Central', 'auto', 'Finanças'],
     ['Apple lança novo iPhone com inteligência artificial', 'auto', 'Tecnologia'],
     ['Putin e Zelensky discutem cessar-fogo na Ucrânia', 'auto', 'Notícias internacionais'],
     ['Alison dos Santos disputa prêmio de melhor atleta do atletismo', 'Futebol', 'Esportes'],
-    ['Dólar vai a R$ 5,58 e Bolsa cai', 'Política', 'Economia'],
+    ['Dólar vai a R$ 5,58 e Bolsa cai', 'Política', 'Finanças'],
     ['Algo qualquer sem palavras-chave conhecidas', 'Política', 'Política'],
     ['Algo qualquer sem palavras-chave conhecidas', 'auto', 'Geral'],
 ];
@@ -302,6 +302,106 @@ check('built-in list covers the sources the project asked for', static function 
 check('seeding inserts the defaults exactly once', static function (): bool {
     $added = radar_sources_seed();
     return $added === count(radar_default_sources()) && radar_sources_seed() === 0;
+});
+check('the finance categories exist, come first and every one is a valid source category', static function (): bool {
+    $list = radar_category_list();
+    foreach (['Finanças', 'Cartão de crédito', 'Finanças pessoais'] as $position => $category) {
+        if (($list[$position] ?? '') !== $category || !radar_source_category_valid($category) || !in_array($category, radar_finance_categories(), true)) {
+            return false;
+        }
+    }
+    return count($list) === count(array_unique($list)) && in_array('Economia', $list, true) && !in_array('Economia', radar_finance_categories(), true);
+});
+check('every built-in source has a valid category, a unique HTTPS address and the finance outlets are pinned to finance', static function (): bool {
+    $urls = [];
+    $pinned = [];
+    foreach (radar_default_sources() as $source) {
+        if (!radar_source_category_valid($source['category']) || !str_starts_with($source['url'], 'https://') || isset($urls[$source['url']])) {
+            return false;
+        }
+        $urls[$source['url']] = true;
+        $pinned[$source['name']] = $source['category'];
+    }
+    return $pinned['InfoMoney'] === 'Finanças' && $pinned['Seu Dinheiro'] === 'Finanças' && $pinned['Melhores Cartões'] === 'Cartão de crédito' && $pinned['Google Notícias · Dívidas e Serasa'] === 'Finanças pessoais' && $pinned['Exame'] === 'Economia';
+});
+check('finance headlines land in the right money category; football cards and coups are not finance', static function (): bool {
+    $cases = [
+        ['Nubank reduz anuidade e muda o limite do cartão de crédito', 'auto', 'Cartão de crédito'],
+        ['Fatura do cartão sobe com os juros do rotativo', 'Economia', 'Cartão de crédito'],
+        ['Como juntar milhas e usar o cashback do cartão', 'auto', 'Cartão de crédito'],
+        ['Serasa: Desenrola renegocia dívidas de negativados', 'auto', 'Finanças pessoais'],
+        ['Golpe do Pix: como se proteger e pedir o dinheiro de volta', 'auto', 'Finanças pessoais'],
+        ['Ibovespa fecha em alta e dólar cai com foco em dividendos', 'auto', 'Finanças'],
+        ['Fundos imobiliários: veja o que analistas esperam para os FIIs', 'auto', 'Finanças'],
+        ['IPCA desacelera e Banco Central avalia a inflação', 'auto', 'Economia'],
+        ['Jogador leva cartão vermelho e Flamengo perde a rodada do Brasileirão', 'auto', 'Futebol'],
+        ['Golpe de Estado é tema de julgamento no Supremo', 'auto', 'Geral'],
+        ['Algo qualquer sem palavras-chave conhecidas', 'Cartão de crédito', 'Cartão de crédito'],
+    ];
+    foreach ($cases as [$title, $pinned, $expected]) {
+        if (radar_classify($title, '', $pinned) !== $expected) {
+            fwrite(STDERR, "  classify: $title => " . radar_classify($title, '', $pinned) . " (esperado $expected)\n");
+            return false;
+        }
+    }
+    return true;
+});
+check('version 2 of the seed adds the finance sources, moves InfoMoney and sorts the stored news again, once', static function (): bool {
+    radar_setting_set('sources_seeded_version', '1');
+    radar_db_exec("DELETE FROM sources WHERE url IN ('https://www.seudinheiro.com/feed/', 'https://passageirodeprimeira.com/feed/')");
+    radar_db_exec("UPDATE sources SET category = 'Economia' WHERE url = 'https://www.infomoney.com.br/feed/'");
+    $sourceId = (int)radar_db_value("SELECT id FROM sources WHERE url = 'https://www.infomoney.com.br/feed/'");
+    radar_db_exec("INSERT INTO news (id, uid, source_id, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (620, 'cat1', ?, 'InfoMoney', 'Fatura do cartão de crédito vai subir com o rotativo', 'https://i.example.com/1', '', ?, ?, ?, 'Economia', 40, 1)", [$sourceId, time() - 600, time() - 600, time()]);
+    $added = radar_sources_seed();
+    $again = radar_sources_seed();
+    $category = radar_db_value("SELECT category FROM sources WHERE url = 'https://www.infomoney.com.br/feed/'");
+    $news = radar_db_value('SELECT category FROM news WHERE id = 620');
+    $ok = $added === 2 && $again === 0 && $category === 'Finanças' && $news === 'Cartão de crédito' && radar_setting('sources_seeded_version', '0') === RADAR_SOURCES_SEED_VERSION;
+    radar_db_exec('DELETE FROM news WHERE id = 620');
+    return $ok;
+});
+check('a source the user already edited keeps its category when the seed version changes', static function (): bool {
+    radar_setting_set('sources_seeded_version', '1');
+    radar_db_exec("UPDATE sources SET category = 'Política' WHERE url = 'https://www.infomoney.com.br/feed/'");
+    radar_sources_seed();
+    $kept = radar_db_value("SELECT category FROM sources WHERE url = 'https://www.infomoney.com.br/feed/'") === 'Política';
+    radar_db_exec("UPDATE sources SET category = 'Finanças' WHERE url = 'https://www.infomoney.com.br/feed/'");
+    return $kept;
+});
+check('news can be filtered by one or several categories, with the stories counted per category', static function (): bool {
+    $now = time();
+    $insert = static function (int $id, string $title, string $category, ?int $cluster = null) use ($now): void {
+        radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count, cluster_id) VALUES (?, ?, 'Fonte', ?, ?, '', ?, ?, ?, ?, 50, 1, ?)", [$id, 'cf' . $id, $title, 'https://f.example.com/' . $id, $now - 600, $now - 600, $now, $category, $cluster]);
+    };
+    $insert(630, 'Cartão A', 'Cartão de crédito');
+    $insert(631, 'Cartão B', 'Cartão de crédito', 9001);
+    $insert(632, 'Cartão B outra fonte', 'Cartão de crédito', 9001);
+    $insert(633, 'Bolsa sobe', 'Finanças');
+    $insert(634, 'Jogo do dia', 'Futebol');
+    $one = radar_news_filters(['categoria' => 'Finanças']);
+    $two = radar_news_filters(['categoria' => 'Cartão de crédito,Finanças,Inventada', 'janela' => 24]);
+    $array = radar_news_filters(['categoria' => ['Futebol', 'x', 'Finanças']]);
+    $none = radar_news_filters(['categoria' => "Finanças'; DROP TABLE news;--"]);
+    $titles = static fn(array $filters): array => array_map(static fn(array $n): string => $n['title'], radar_news_query($filters)['items']);
+    $found = $titles($two);
+    sort($found);
+    $counts = radar_news_category_counts(radar_news_filters(['janela' => 24]));
+    $countsFiltered = radar_news_category_counts($two);
+    $ok = $one['categories'] === ['Finanças'] && $one['category'] === 'Finanças'
+        && $two['categories'] === ['Finanças', 'Cartão de crédito'] && $two['category'] === 'Finanças,Cartão de crédito'
+        && $array['categories'] === ['Finanças', 'Futebol'] && $none['categories'] === [] && $none['category'] === ''
+        && count($found) === 3 && in_array('Bolsa sobe', $found, true) && !in_array('Jogo do dia', $found, true)
+        && ($counts['Cartão de crédito'] ?? 0) === 2 && ($counts['Finanças'] ?? 0) === 1 && ($counts['Futebol'] ?? 0) === 1
+        && ($countsFiltered['Futebol'] ?? 0) === 1 && ($countsFiltered['Cartão de crédito'] ?? 0) === 2;
+    radar_db_exec('DELETE FROM news WHERE id BETWEEN 630 AND 634');
+    return $ok;
+});
+check('the AI rules and the draft inform about money topics without giving financial advice', static function (): bool {
+    $system = radar_ai_system_prompt();
+    $money = radar_ai_fallback(['title' => 'Nubank muda anuidade', 'source' => 'G1', 'summary' => '', 'category' => 'Cartão de crédito'], 60, 'direto', '');
+    $other = radar_ai_fallback(['title' => 'Flamengo vence', 'source' => 'G1', 'summary' => '', 'category' => 'Futebol'], 60, 'direto', '');
+    return str_contains($system, 'INFORME, não aconselhe') && str_contains($system, 'nunca prometa ganho') && str_contains($money['commentary'], 'não é recomendação financeira') && !str_contains($other['commentary'], 'recomendação financeira')
+        && $money['expression'] === 'pensativo';
 });
 check('source validation rejects HTTP, bad categories, odd weights and empty names', static fn(): bool => rejects(static fn() => radar_source_create(['name' => 'X', 'url' => 'http://x.example.com/feed']), InvalidArgumentException::class)
     && rejects(static fn() => radar_source_create(['name' => 'X', 'url' => 'https://x.example.com/feed', 'category' => 'Inventada']), InvalidArgumentException::class)

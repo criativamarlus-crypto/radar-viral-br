@@ -5,17 +5,24 @@ declare(strict_types=1);
 
 const RADAR_NEWS_WINDOWS = [1, 3, 6, 24];
 
-/** @return array{window:int,sort:string,category:string,q:string,saved:bool,with_image:bool,grouped:bool,limit:int,page:int} */
+/**
+ * `category` is a comma-separated list of categories (one or several); `categories` is the same as an array.
+ *
+ * @return array{window:int,sort:string,category:string,categories:array<int,string>,q:string,saved:bool,with_image:bool,grouped:bool,limit:int,page:int}
+ */
 function radar_news_filters(array $input): array
 {
     $window = (int)radar_str($input['janela'] ?? $input['window'] ?? 0);
     $sort = radar_str($input['ordem'] ?? $input['sort'] ?? 'viral');
-    $category = radar_str($input['categoria'] ?? $input['category'] ?? '');
+    $rawCategory = $input['categoria'] ?? $input['category'] ?? '';
+    $asked = is_array($rawCategory) ? array_map('radar_str', $rawCategory) : array_map('trim', explode(',', radar_str($rawCategory)));
+    $categories = array_values(array_filter(radar_category_list(), static fn(string $c): bool => in_array($c, $asked, true)));
     $q = trim(radar_str($input['q'] ?? ''));
     return [
         'window' => in_array($window, RADAR_NEWS_WINDOWS, true) ? $window : 0,
         'sort' => in_array($sort, ['viral', 'recent'], true) ? $sort : 'viral',
-        'category' => in_array($category, radar_category_list(), true) ? $category : '',
+        'category' => implode(',', $categories),
+        'categories' => $categories,
         'q' => mb_substr($q, 0, 100),
         'saved' => in_array(radar_str($input['salvas'] ?? $input['saved'] ?? ''), ['1', 'true'], true),
         'with_image' => in_array(radar_str($input['com_imagem'] ?? $input['with_image'] ?? ''), ['1', 'true'], true),
@@ -32,11 +39,12 @@ function radar_like(string $text): string
 }
 
 /**
- * @return array{items:array<int,array<string,mixed>>,total:int,filters:array<string,mixed>}
+ * WHERE clause shared by the list and the category counts.
+ *
+ * @return array{0:string,1:array<int,mixed>} condition and its parameters
  */
-function radar_news_query(array $filters, ?int $now = null): array
+function radar_news_where(array $filters, int $now, bool $withCategory): array
 {
-    $now ??= time();
     $effective = 'COALESCE(published_at, first_seen_at)';
     $where = ['1 = 1'];
     $params = [];
@@ -48,9 +56,9 @@ function radar_news_query(array $filters, ?int $now = null): array
         $where[] = $effective . ' >= ?';
         $params[] = $now - 72 * 3600;
     }
-    if ($filters['category'] !== '') {
-        $where[] = 'category = ?';
-        $params[] = $filters['category'];
+    if ($withCategory && $filters['categories'] !== []) {
+        $where[] = 'category IN (' . implode(', ', array_fill(0, count($filters['categories']), '?')) . ')';
+        array_push($params, ...$filters['categories']);
     }
     if ($filters['q'] !== '') {
         $where[] = '(title LIKE ? ESCAPE \'\\\' OR source_name LIKE ? ESCAPE \'\\\' OR summary LIKE ? ESCAPE \'\\\')';
@@ -63,7 +71,36 @@ function radar_news_query(array $filters, ?int $now = null): array
     if ($filters['with_image']) {
         $where[] = 'image_url IS NOT NULL';
     }
-    $condition = implode(' AND ', $where);
+    return [implode(' AND ', $where), $params];
+}
+
+/**
+ * Stories per category under the current filters. The category filter itself is ignored, so every
+ * category button shows how many stories it would bring.
+ *
+ * @return array<string,int>
+ */
+function radar_news_category_counts(array $filters, ?int $now = null): array
+{
+    [$condition, $params] = radar_news_where($filters, $now ?? time(), false);
+    $rows = $filters['grouped']
+        ? radar_db_all('SELECT category, COUNT(DISTINCT COALESCE(cluster_id, -id)) AS total FROM news WHERE ' . $condition . ' GROUP BY category', $params)
+        : radar_db_all('SELECT category, COUNT(*) AS total FROM news WHERE ' . $condition . ' GROUP BY category', $params);
+    $counts = [];
+    foreach ($rows as $row) {
+        $counts[(string)$row['category']] = (int)$row['total'];
+    }
+    return $counts;
+}
+
+/**
+ * @return array{items:array<int,array<string,mixed>>,total:int,filters:array<string,mixed>}
+ */
+function radar_news_query(array $filters, ?int $now = null): array
+{
+    $now ??= time();
+    $effective = 'COALESCE(published_at, first_seen_at)';
+    [$condition, $params] = radar_news_where($filters, $now, true);
     $order = $filters['sort'] === 'recent' ? $effective . ' DESC, score DESC' : 'score DESC, ' . $effective . ' DESC';
     $offset = ($filters['page'] - 1) * $filters['limit'];
     if ($filters['grouped']) {
