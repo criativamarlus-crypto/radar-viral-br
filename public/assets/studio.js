@@ -39,7 +39,12 @@
     prompt: project ? project.video_prompt : '',
   };
   if (!data.templates[state.template]) state.template = data.defaultTemplate;
-  const characterImages = () => data.characters.filter((c) => c.character === state.character);
+  const characterImages = () => {
+    const stills = data.characters.filter((c) => c.character === state.character);
+    if (stills.length) return stills;
+    // No still of this character yet: a reference photo of the same person goes behind the template.
+    return (data.references[state.character] || []).filter((r) => r.role === 'photo').map((r) => ({ id: r.id, label: r.label || 'Foto de referência', primary: false, character: state.character }));
+  };
   const primaryImage = () => { const list = characterImages(); return list.find((c) => c.primary) || list[0] || null; };
   const characterName = () => (data.characterList.find((c) => c.slug === state.character) || { name: '' }).name;
   if (!state.characterId || !characterImages().some((c) => c.id === state.characterId)) {
@@ -367,7 +372,8 @@
       button.addEventListener('click', () => { state.characterId = c.id; renderPickers(); redraw(); });
       chars.append(button);
     }
-    $('st-char-hint').textContent = characterImages().length ? '' : 'Nenhuma imagem de ' + characterName() + '. Cadastre em “Meus Personagens”.';
+    $('st-char-hint').textContent = data.characters.some((c) => c.character === state.character) ? ''
+      : (characterImages().length ? 'Sem imagem própria no Estúdio: usando a foto de referência de ' + characterName() + ' atrás do template.' : 'Nenhuma imagem de ' + characterName() + ' para ficar atrás do template. Cadastre em “Meus Personagens”.');
   }
 
   function wordCount() { return (state.spoken.match(/[\p{L}\p{N}]+/gu) || []).length; }
@@ -407,7 +413,7 @@
       box.append(block);
     });
     $('st-scenes-hint').textContent = list.length
-      ? list.length + (list.length === 1 ? ' cena' : ' cenas') + ' de até 25 s. Cada prompt é completo: cole um por vez na ferramenta de vídeo, sempre com a imagem de referência anexada.'
+      ? list.length + (list.length === 1 ? ' cena' : ' cenas') + ' de até 25 s. Cada prompt é completo: cole um por vez na ferramenta de vídeo, sempre com as imagens de referência, a imagem do template e a imagem da notícia anexadas (“Copiar tudo” e “Baixar pacote” já levam todas).'
         + (list.length > state.scenes ? ' O roteiro é longo: precisa de ' + list.length + ' cenas para ficar em até 25 s cada. Encurte o texto para ter menos.' : '')
       : '';
   }
@@ -457,7 +463,7 @@
     promptTimer = setTimeout(async () => {
       try {
         const result = await api({
-          action: 'video_prompt', character: state.character, spoken: state.spoken, expression: state.expression, scene: state.scene,
+          action: 'video_prompt', character: state.character, caption: state.caption, source_line: sourceLine(), spoken: state.spoken, expression: state.expression, scene: state.scene,
           direction: state.direction, scenes: state.scenes, headline: data.news ? data.news.title : state.headline, source: data.news ? data.news.source : '', layout: state.template,
         });
         state.prompt = result.prompt; state.prompts = result.prompts;
@@ -518,11 +524,11 @@
   }
   bindText('st-title', 'title');
   bindText('st-headline', 'headline', () => redraw());
-  bindText('st-caption', 'caption', () => redraw());
+  bindText('st-caption', 'caption', () => { redraw(); refreshPrompt(); });
   bindText('st-script', 'spoken', () => { words(); refreshPrompt(); });
   $('st-caption-options').addEventListener('change', (e) => {
     if (!e.target.value) return;
-    state.caption = e.target.value; $('st-caption').value = state.caption; redraw();
+    state.caption = e.target.value; $('st-caption').value = state.caption; redraw(); refreshPrompt();
   });
   $('st-template').addEventListener('change', (e) => {
     state.template = e.target.value;
@@ -735,4 +741,21 @@
   // Small hook for diagnostics and automated checks.
   window.RadarStudio = { state, data, render, redraw, hasImpact, sourceLine, layout: () => lastLayout };
   renderPickers(); words(); redraw();
+
+  /** The article thumbnail has to be in the card: the source's cover is stored (with its credit) as soon as the Studio opens. */
+  async function ensureCover() {
+    if (!data.news || !data.news.image || data.media.some((m) => m.kind === 'cover')) return;
+    $('st-cover-hint').textContent = 'Baixando a capa da notícia…';
+    try {
+      const result = await api({ action: 'import_cover', news_id: data.news.id });
+      const media = result.media;
+      data.media.unshift({ id: media.id, label: media.label, kind: media.kind, credit: media.credit });
+      if (!state.coverId) state.coverId = media.id;
+      renderPickers(); redraw();
+    } catch (error) {
+      renderPickers();
+      $('st-cover-hint').textContent = 'Não consegui baixar a capa automaticamente (' + error.message + '). Use “Anexar print/imagem” abaixo.';
+    }
+  }
+  ensureCover();
 })();

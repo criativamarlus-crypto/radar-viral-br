@@ -1024,7 +1024,7 @@ check('the prompt lists every reference image: the classic text for one sheet, n
     $both = radar_video_prompts($base + ['references' => [['role' => 'sheet', 'label' => ''], ['role' => 'photo', 'label' => 'selfie <b>ao ar livre</b>'], ['role' => 'photo', 'label' => '']]])[0];
     $classic = 'REFERENCE IMAGE (attach the character reference sheet to the video tool together with this prompt, in every scene): one image with five views of the SAME woman: front, left profile, right profile, 3/4 left and 3/4 right.';
     return str_contains($none, $classic) && str_contains($sheetOnly, $classic) && $none === $sheetOnly
-        && str_contains($photoOnly, 'REFERENCE IMAGE (attach this image to the video tool together with this prompt, in every scene): 1) a photo of the SAME woman (selfie ao ar livre)') && !str_contains($photoOnly, 'REFERENCE IMAGES')
+        && str_contains($photoOnly, 'REFERENCE IMAGE (attach this image to the video tool together with this prompt, in every scene): 1) a photo of the SAME woman (selfie ao ar livre)') && !str_contains($photoOnly, 'REFERENCE IMAGES (attach ALL')
         && str_contains($both, 'REFERENCE IMAGES (attach ALL 3 images to the video tool together with this prompt, in every scene): 1) a character sheet with several views of the SAME woman (front, profiles and 3/4 views); 2) a photo of the SAME woman (selfie ao ar livre); 3) a photo of the SAME woman.')
         && str_contains($both, 'Use them ONLY to keep her face and identity') && str_contains($both, 'pose or background of the images') && !str_contains($both, '<b>');
 });
@@ -1241,6 +1241,34 @@ check('an older script and project read as Beto', static function (): bool {
     $project = radar_project_save(null, ['title' => 'Antigo', 'headline' => 'H']);
     $clara = radar_project_save(null, ['title' => 'Da Clara', 'headline' => 'H', 'character' => 'clara']);
     return $script['character'] === 'beto' && str_contains($script['video_prompt'], 'Black Brazilian man') && $project['character'] === 'beto' && $clara['character'] === 'clara' && radar_project_get($clara['id'])['character'] === 'clara';
+});
+check('the caption-card prompt carries the template as a detailed brief: image, positions, exact texts and what not to show', static function (): bool {
+    $parts = ['spoken' => 'Fala curta.', 'expression' => 'serio', 'scene' => 'casa', 'source' => 'InfoMoney', 'headline' => 'Rotativo do cartão chega a 451% ao ano', 'layout' => 'caption_card', 'character' => 'clara',
+        'caption' => 'Atenção: cartão cobra 451% ao ano', 'source_line' => 'INFOMONEY • 10/11/2026'];
+    $prompt = radar_video_prompts($parts)[0];
+    $plain = radar_video_prompts(['caption' => ''] + $parts)[0];
+    return str_contains($prompt, 'TEMPLATE IMAGE (attach the template image to the video tool together with this prompt, in every scene)') && str_contains($prompt, 'TEMPLATE LAYOUT (vertical 9:16 frame; positions as a percentage of the frame):')
+        && str_contains($prompt, 'TOP BAND, from 0% to about 17% of the height') && str_contains($prompt, '"ATENÇÃO: CARTÃO COBRA 451% AO ANO"') && str_contains($prompt, '"INFOMONEY • 10/11/2026"') && str_contains($prompt, '"ROTATIVO DO CARTÃO CHEGA A 451% AO ANO"')
+        && str_contains($prompt, 'NEWS CARD, bottom center, from about 62% to 94% of the height and 71% of the frame width') && str_contains($prompt, 'NEWS IMAGE (the article thumbnail, attached to this prompt)') && str_contains($prompt, 'thin white border and a soft drop shadow')
+        && str_contains($prompt, 'her face between 22% and 62% of the height') && str_contains($prompt, 'Spell every word exactly as written above') && str_contains($prompt, 'The only text allowed on screen is the text listed in TEMPLATE LAYOUT') && !str_contains($prompt, 'do not show or invent any text')
+        && str_contains($plain, '"ROTATIVO DO CARTÃO CHEGA A 451% AO ANO"') && preg_match('/\{[a-zA-Z]+\}/', $prompt) === 0;
+});
+check('the split template has its own brief (photo on top, character below) and never mentions the caption band', static function (): bool {
+    $prompt = radar_video_prompts(['spoken' => 'Fala curta.', 'expression' => 'serio', 'scene' => 'casa', 'source' => 'G1', 'headline' => 'Senado vota projeto', 'layout' => 'split', 'character' => 'beto'])[0];
+    return str_contains($prompt, 'TEMPLATE IMAGE (attach the template image') && str_contains($prompt, 'TOP HALF, 0% to 50%') && str_contains($prompt, '"Fonte: G1"') && str_contains($prompt, '"Senado vota projeto"') && str_contains($prompt, 'BOTTOM HALF, 50% to 100%')
+        && !str_contains($prompt, 'caption band') && !str_contains($prompt, 'IMPACT PHRASE');
+});
+check('a stored script gets the impact phrase and the source line of its news in the template brief', static function (): bool {
+    $published = time() - 3600;
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (606, 'tp1', 'Fonte T', 'Banco muda a anuidade do cartão', 'https://f.example.com/6', 'Resumo.', ?, ?, ?, 'Cartão de crédito', 60, 1)", [$published, $published, time()]);
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (607, 'tp2', 'Fonte U', 'Sem data de publicação', 'https://f.example.com/7', 'Resumo.', NULL, ?, ?, 'Cartão de crédito', 60, 1)", [$published, time()]);
+    $script = radar_react_generate(606, ['scenes' => 1]);
+    $undated = radar_react_generate(607, ['scenes' => 1]);
+    $edited = radar_script_update($script['id'], ['hook' => 'Gancho forte do teste.']);
+    $line = mb_strtoupper('Fonte T') . ' • ' . date('d/m/Y', $published);
+    return str_contains($script['video_prompt'], '"' . $line . '"') && str_contains($script['video_prompt'], 'TEMPLATE LAYOUT') && str_contains($script['video_prompt'], '"BANCO MUDA A ANUIDADE DO CARTÃO"')
+        && str_contains($script['video_prompt'], '"ATENÇÃO: BANCO MUDA A ANUIDADE DO CARTÃO"')
+        && str_contains($undated['video_prompt'], '"FONTE U"') && !str_contains($undated['video_prompt'], 'FONTE U •') && str_contains($edited['video_prompt'], '"' . $line . '"');
 });
 check('two video templates exist: the full-screen caption + news card (default, first) and the original split', static function (): bool {
     $templates = radar_video_templates();

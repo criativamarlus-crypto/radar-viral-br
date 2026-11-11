@@ -107,10 +107,10 @@
         push(blob, next() + '-referencia-' + (photo ? 'foto' : 'folha-de-vistas') + '.' + extension(blob.type), (photo ? 'Foto de referência' : 'Folha de referência') + ' de ' + characterName() + (reference.label ? ' (' + reference.label + ')' : ''), 'anexe em TODAS as cenas (só serve para manter o rosto)');
       }
     }
-    push(await composition(false), next() + '-composicao-referencia-1080x1920.png', 'Composição 9:16 de referência', 'como o vídeo final deve ficar');
+    push(await composition(false), next() + '-template-1080x1920.png', 'Imagem do template (o modelo do vídeo)', 'anexe em TODAS as cenas junto com as imagens de referência: é o layout que a IA de vídeo deve entregar');
     push(await composition(true), next() + '-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', 'Camada transparente', 'vai por cima do vídeo gerado');
     const coverBlob = await mediaBlob(state.coverId);
-    if (coverBlob) push(coverBlob, next() + '-imagem-da-noticia.' + extension(coverBlob.type), 'Imagem da notícia', 'com o crédito da fonte');
+    if (coverBlob) push(coverBlob, next() + '-imagem-da-noticia.' + extension(coverBlob.type), 'Imagem da notícia (miniatura do artigo)', 'anexe também: vai dentro do card, com o crédito da fonte');
     const characterBlob = await mediaBlob(state.characterId);
     if (characterBlob) push(characterBlob, next() + '-personagem-no-estudio.' + extension(characterBlob.type), 'Imagem do personagem usada no Estúdio', '');
     return files;

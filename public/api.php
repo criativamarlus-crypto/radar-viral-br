@@ -202,6 +202,8 @@ try {
                 'scenes' => max(1, min(RADAR_SCENE_MAX_COUNT, api_int($input['scenes'] ?? 1) ?: 1)),
                 'headline' => mb_substr((string)($input['headline'] ?? ''), 0, 200),
                 'source' => mb_substr((string)($input['source'] ?? ''), 0, 100),
+                'caption' => mb_substr((string)($input['caption'] ?? ''), 0, 200),
+                'source_line' => mb_substr((string)($input['source_line'] ?? ''), 0, 120),
                 'layout' => radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : radar_video_default_template(),
             ];
             $scenePrompts = radar_video_prompts($promptParts);

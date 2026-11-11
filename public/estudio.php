@@ -164,7 +164,7 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js',
         <div class="panel stack">
             <button type="button" class="btn primary" id="st-save">Salvar projeto</button>
             <div class="row-actions">
-                <button type="button" class="btn ghost" id="st-export-png">Exportar imagem de referência (PNG)</button>
+                <button type="button" class="btn ghost" id="st-export-png">Baixar imagem do template (PNG 1080×1920)</button>
                 <button type="button" class="btn ghost" id="st-export-overlay">Exportar camada de legenda e card (PNG transparente)</button>
                 <button type="button" class="btn ghost" id="st-export-txt">Exportar roteiro (.txt)</button>
             </div>

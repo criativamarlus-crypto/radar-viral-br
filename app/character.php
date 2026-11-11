@@ -178,6 +178,38 @@ function radar_video_default_template(): string
 }
 
 /**
+ * The template as a detailed brief for the video tool: what goes where (as a percentage of the frame), the exact
+ * texts and what must not appear. The template image (the Studio's 1080x1920 composition) goes along with it.
+ *
+ * @param array{caption?:string,headline?:string,source?:string,source_line?:string} $texts
+ */
+function radar_template_brief(string $layout, array $texts): string
+{
+    $headline = radar_direction_text($texts['headline'] ?? '', 200);
+    $source = radar_direction_text($texts['source'] ?? '', 80);
+    $intro = 'TEMPLATE IMAGE (attach the template image to the video tool together with this prompt, in every scene): a vertical 9:16 mock-up of the final frame. Deliver the clip in EXACTLY this layout. The person in the mock-up is only a placeholder: the character comes from the REFERENCE IMAGES.';
+    if ($layout === 'caption_card') {
+        $caption = mb_strtoupper(radar_direction_text($texts['caption'] ?? '', 200) ?: $headline);
+        $sourceLine = mb_strtoupper(radar_direction_text($texts['source_line'] ?? '', 120) ?: $source);
+        return implode("\n", [
+            $intro,
+            'TEMPLATE LAYOUT (vertical 9:16 frame; positions as a percentage of the frame):',
+            '1) FULL-FRAME VIDEO: the character fills the whole frame, with {his} face between 22% and 62% of the height.',
+            '2) TOP BAND, from 0% to about 17% of the height: a solid black band across the full width. Centered inside it, up to 3 lines of the IMPACT PHRASE in bold white uppercase heavy sans-serif, with comfortable side margins: "' . $caption . '".',
+            '3) NEWS CARD, bottom center, from about 62% to 94% of the height and 71% of the frame width, centered horizontally, with a thin white border and a soft drop shadow. Its upper part (about 55% of the card) is the NEWS IMAGE (the article thumbnail, attached to this prompt). Its lower part (about 45%) is a solid black info bar: a first line in bold yellow uppercase, "' . $sourceLine . '", and below it the real headline in bold white uppercase, up to 3 lines, "' . mb_strtoupper($headline) . '".',
+            '4) NOTHING ELSE on screen: no other text, subtitles, logos or watermarks. Spell every word exactly as written above. If the video tool cannot render text reliably, keep the band and the card as clean flat areas (the text and the photo are added in editing) and never write different words.',
+        ]);
+    }
+    return implode("\n", [
+        $intro,
+        'TEMPLATE LAYOUT (vertical 9:16 frame; positions as a percentage of the frame height):',
+        '1) TOP HALF, 0% to 50%: the NEWS IMAGE (the article thumbnail, attached to this prompt) filling the whole half, with a dark gradient over its lower part. On the gradient, near the bottom of the half, the headline in bold white sans-serif, up to 4 lines: "' . $headline . '". In the top-left corner, a small rounded dark pill with white text: "Fonte: ' . $source . '".',
+        '2) BOTTOM HALF, 50% to 100%: the character, framed from the chest up, centered and anchored to the top of the half. A thin yellow line separates the two halves.',
+        '3) NOTHING ELSE on screen: no other text, subtitles, logos or watermarks. Spell every word exactly as written above. If the video tool cannot render text reliably, keep the top half as a clean area (the photo and the text are added in editing) and never write different words.',
+    ]);
+}
+
+/**
  * Fixed rules appended to EVERY video prompt (shown read-only in "Meu Personagem").
  * Video models tend to add a closing grin when the speech ends; the character must not.
  * The texts are written with {he}/{his}/{man} tokens and come out right for a man or a woman.
@@ -294,7 +326,7 @@ function radar_scene_split(string $spoken, int $scenes = 1): array
  * model) so the character block, the reference-image instruction and the fixed standards stay identical.
  * The dialogue is the user's own approved script, cut into scenes of at most 25 s.
  *
- * @param array{spoken:string,expression:string,scene:string,headline:string,source:string,layout?:string,scenes?:int,direction?:array<string,mixed>,character?:string,references?:array<int,array{role:string,label:string}>} $parts
+ * @param array{spoken:string,expression:string,scene:string,headline:string,source:string,layout?:string,scenes?:int,direction?:array<string,mixed>,character?:string,references?:array<int,array{role:string,label:string}>,caption?:string,source_line?:string} $parts
  * @return array<int,string>
  */
 function radar_video_prompts(array $parts): array
@@ -310,6 +342,8 @@ function radar_video_prompts(array $parts): array
     $total = count($chunks);
     $direction = radar_direction_normalize($parts['direction'] ?? null, 'manual') ?? radar_direction_default($slug);
     $referenceText = radar_reference_paragraph($parts['references'] ?? radar_character_reference_roles($slug));
+    $templateKey = isset($templates[(string)($parts['layout'] ?? 'split')]) ? (string)($parts['layout'] ?? 'split') : 'split';
+    $templateBrief = radar_template_brief($templateKey, ['caption' => $parts['caption'] ?? '', 'headline' => $parts['headline'], 'source' => $parts['source'], 'source_line' => $parts['source_line'] ?? '']);
     $moods = radar_direction_moods();
     $prompts = [];
     foreach ($chunks as $index => $chunk) {
@@ -337,12 +371,14 @@ function radar_video_prompts(array $parts): array
             'EXPRESSION AND ENERGY: ' . $expression['visual'] . '. Keep this same reaction and energy in every scene. Spontaneous, funny and expressive body language, natural hand gestures.',
             $template['layout'],
             '',
+            $templateBrief,
+            '',
             'DIALOGUE (spoken in natural, colloquial Brazilian Portuguese, with lip-sync, exactly as written):',
             '"' . $chunk . '"',
             '',
             $standards['no_smile_after_speech']['rule'],
             '',
-            'CONTEXT (do not show or invent any text on screen): reacting to the headline "' . trim($parts['headline']) . '" reported by ' . trim($parts['source']) . '.',
+            'CONTEXT: reacting to the headline "' . trim($parts['headline']) . '" reported by ' . trim($parts['source']) . '. The only text allowed on screen is the text listed in TEMPLATE LAYOUT; never invent other text.',
             'AVOID: ' . $standards['no_smile_after_speech']['avoid'] . ', ' . $standards['same_character_every_scene']['avoid'] . ', ' . $standards['new_look_every_video']['avoid'] . ', news-anchor look, studio desk, teleprompter feel, extra people, subtitles burned into the video, logos, watermarks, distorted hands, a different face or body type, changing {his} face, glasses or body build, clothes that change between scenes, logos or readable text on clothes.',
         ]), $slug);
     }

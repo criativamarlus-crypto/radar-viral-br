@@ -90,7 +90,8 @@ function radar_react_generate(int $newsId, array $options = []): array
     // A new look for this news: the model's, or one drawn from the pools that differs from the latest ones.
     $direction = radar_direction_normalize($generated['direction'] ?? null, 'ia')
         ?? radar_direction_generate(['category' => (string)$news['category'], 'expression' => $expression, 'character' => $slug], $scenes, radar_direction_recent());
-    $prompt = radar_video_prompt(['spoken' => $spoken, 'expression' => $expression, 'scene' => $scene, 'headline' => $news['title'], 'source' => $news['source'], 'layout' => $layout, 'scenes' => $scenes, 'direction' => $direction, 'character' => $slug]);
+    $prompt = radar_video_prompt(['spoken' => $spoken, 'expression' => $expression, 'scene' => $scene, 'headline' => $news['title'], 'source' => $news['source'], 'layout' => $layout, 'scenes' => $scenes, 'direction' => $direction, 'character' => $slug]
+        + radar_template_texts($generated['headlines'], (string)$generated['hook'], (string)$news['title'], (string)$news['source'], $newsId));
     $now = time();
     $id = radar_db_insert(
         'INSERT INTO scripts (news_id, news_title, news_url, news_source, mode, provider, model, duration, scenes, tone, context, headlines, hook, script, commentary, cta, expression, scene, layout, direction, character_slug, video_prompt, warnings, created_at, updated_at)
@@ -121,6 +122,28 @@ function radar_script_direction(array $row): array
     return radar_direction_generate(['category' => $category, 'expression' => (string)($row['expression'] ?? ''), 'character' => (string)($row['character_slug'] ?? '')], max(1, (int)($row['scenes'] ?? 1)), [], (int)$row['id']);
 }
 
+/**
+ * Texts of the template for a script: the impact phrase (the first headline that differs from the real one,
+ * else the hook) and the yellow line "SOURCE • DATE". The date appears only when the source gave one.
+ *
+ * @param array<int,string> $headlines
+ * @return array{caption:string,source_line:string}
+ */
+function radar_template_texts(array $headlines, string $hook, string $title, string $source, ?int $newsId): array
+{
+    $plain = static fn(string $text): string => trim(preg_replace('/[^\p{L}\p{N}]+/u', ' ', mb_strtolower($text)) ?? '');
+    $caption = $hook !== '' ? $hook : ($headlines[0] ?? $title);
+    foreach ($headlines as $headline) {
+        if ($plain($headline) !== $plain($title)) {
+            $caption = $headline;
+            break;
+        }
+    }
+    $published = $newsId !== null ? radar_db_value('SELECT published_at FROM news WHERE id = ?', [$newsId]) : null;
+    $line = $source . ($published !== null && (int)$published > 0 ? ' • ' . date('d/m/Y', (int)$published) : '');
+    return ['caption' => $caption, 'source_line' => mb_strtoupper($line)];
+}
+
 /** @return array<string,mixed> */
 function radar_script_decode(array $row): array
 {
@@ -128,7 +151,8 @@ function radar_script_decode(array $row): array
     $spoken = radar_script_spoken($row);
     $direction = radar_script_direction($row);
     $slug = radar_character_slug($row['character_slug'] ?? null);
-    $prompts = radar_video_prompts([
+    $templateTexts = radar_template_texts(json_decode((string)$row['headlines'], true) ?: [], (string)$row['hook'], (string)$row['news_title'], (string)$row['news_source'], $row['news_id'] !== null ? (int)$row['news_id'] : null);
+    $prompts = radar_video_prompts($templateTexts + [
         'character' => $slug, 'spoken' => $spoken, 'expression' => (string)$row['expression'], 'scene' => (string)$row['scene'], 'direction' => $direction,
         'headline' => (string)$row['news_title'], 'source' => (string)$row['news_source'], 'scenes' => max(1, (int)($row['scenes'] ?? 1)),
         'layout' => radar_video_template_valid((string)$row['layout']) ? (string)$row['layout'] : 'split',
@@ -220,7 +244,7 @@ function radar_script_update(int $id, array $input): array
             }
         }
     }
-    $prompt = radar_video_prompt([
+    $prompt = radar_video_prompt(radar_template_texts($headlines, $row['hook'], $current['news_title'], $current['news_source'], $current['news_id']) + [
         'character' => $slug, 'spoken' => radar_script_spoken($row), 'expression' => $expression, 'scene' => $scene, 'direction' => $direction,
         'headline' => $current['news_title'], 'source' => $current['news_source'], 'layout' => $layout, 'scenes' => $scenes,
     ]);
