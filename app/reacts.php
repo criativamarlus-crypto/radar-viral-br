@@ -58,12 +58,12 @@ function radar_react_generate(int $newsId, array $options = []): array
     $generated = null;
     if ($config['provider'] !== 'none' && $config['has_key']) {
         try {
-            $reply = radar_ai_complete(radar_ai_system_prompt(), radar_ai_user_message($news, $duration, $tone, $context, $scenes), $config);
+            $reply = radar_ai_complete(radar_ai_system_prompt(), radar_ai_user_message($news, $duration, $tone, $context, $scenes, radar_direction_recent()), $config);
             $decoded = radar_ai_extract_json($reply);
             if ($decoded === null) {
                 throw new RuntimeException('A IA não devolveu um JSON válido. Tente gerar novamente.');
             }
-            $generated = radar_ai_normalize($decoded, $news, $context);
+            $generated = radar_ai_normalize($decoded, $news, $context, $scenes);
             $mode = 'ia';
         } catch (RuntimeException $error) {
             // Fail visibly, but still hand over a safe draft so the work is not blocked.
@@ -84,19 +84,38 @@ function radar_react_generate(int $newsId, array $options = []): array
         $generated['warnings'][] = "O texto precisa de {$needed} cenas de até " . RADAR_SCENE_MAX_SECONDS . " s (você pediu {$scenes}). Encurte o texto ou aceite mais cenas.";
     }
     $layout = radar_video_template_valid((string)($options['layout'] ?? '')) ? (string)$options['layout'] : radar_video_default_template();
-    $prompt = radar_video_prompt(['spoken' => $spoken, 'expression' => $expression, 'scene' => $scene, 'headline' => $news['title'], 'source' => $news['source'], 'layout' => $layout, 'scenes' => $scenes]);
+    // A new look for this news: the model's, or one drawn from the pools that differs from the latest ones.
+    $direction = radar_direction_normalize($generated['direction'] ?? null, 'ia')
+        ?? radar_direction_generate(['category' => (string)$news['category'], 'expression' => $expression], $scenes, radar_direction_recent());
+    $prompt = radar_video_prompt(['spoken' => $spoken, 'expression' => $expression, 'scene' => $scene, 'headline' => $news['title'], 'source' => $news['source'], 'layout' => $layout, 'scenes' => $scenes, 'direction' => $direction]);
     $now = time();
     $id = radar_db_insert(
-        'INSERT INTO scripts (news_id, news_title, news_url, news_source, mode, provider, model, duration, scenes, tone, context, headlines, hook, script, commentary, cta, expression, scene, layout, video_prompt, warnings, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO scripts (news_id, news_title, news_url, news_source, mode, provider, model, duration, scenes, tone, context, headlines, hook, script, commentary, cta, expression, scene, layout, direction, video_prompt, warnings, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             $newsId, $news['title'], $news['url'], $news['source'], $mode, $mode === 'ia' ? $config['provider'] : null, $mode === 'ia' ? $config['model'] : null,
             $duration, $scenes, $tone, $context, json_encode($generated['headlines'], JSON_UNESCAPED_UNICODE), $generated['hook'], $generated['script'],
-            $generated['commentary'], $generated['cta'], $expression, $scene, $layout, $prompt,
+            $generated['commentary'], $generated['cta'], $expression, $scene, $layout, json_encode($direction, JSON_UNESCAPED_UNICODE), $prompt,
             json_encode(['warnings' => $generated['warnings'], 'fact_check' => $generated['fact_check_notes']], JSON_UNESCAPED_UNICODE), $now, $now,
         ]
     );
     return radar_script_get($id) ?? [];
+}
+
+/**
+ * The visual direction of a stored script. Scripts made before directions existed get one drawn from their id,
+ * so their prompt is varied but identical on every read.
+ *
+ * @return array<string,mixed>
+ */
+function radar_script_direction(array $row): array
+{
+    $stored = radar_direction_normalize(json_decode((string)($row['direction'] ?? ''), true), 'manual');
+    if ($stored !== null) {
+        return $stored;
+    }
+    $category = $row['news_id'] !== null ? (string)radar_db_value('SELECT category FROM news WHERE id = ?', [(int)$row['news_id']]) : '';
+    return radar_direction_generate(['category' => $category, 'expression' => (string)($row['expression'] ?? '')], max(1, (int)($row['scenes'] ?? 1)), [], (int)$row['id']);
 }
 
 /** @return array<string,mixed> */
@@ -104,8 +123,9 @@ function radar_script_decode(array $row): array
 {
     $meta = json_decode((string)$row['warnings'], true);
     $spoken = radar_script_spoken($row);
+    $direction = radar_script_direction($row);
     $prompts = radar_video_prompts([
-        'spoken' => $spoken, 'expression' => (string)$row['expression'], 'scene' => (string)$row['scene'],
+        'spoken' => $spoken, 'expression' => (string)$row['expression'], 'scene' => (string)$row['scene'], 'direction' => $direction,
         'headline' => (string)$row['news_title'], 'source' => (string)$row['news_source'], 'scenes' => max(1, (int)($row['scenes'] ?? 1)),
         'layout' => radar_video_template_valid((string)$row['layout']) ? (string)$row['layout'] : 'split',
     ]);
@@ -133,6 +153,7 @@ function radar_script_decode(array $row): array
         'layout' => radar_video_template_valid((string)$row['layout']) ? (string)$row['layout'] : 'split',
         // Rebuilt on every read from the stored fields, so scripts created before a prompt standard
         // existed (e.g. "no smile after speech") get it too. The stored column is legacy.
+        'direction' => $direction,
         'video_prompts' => $prompts,
         'video_prompt' => implode("\n\n" . str_repeat('-', 40) . "\n\n", $prompts),
         'warnings' => is_array($meta) ? ($meta['warnings'] ?? []) : [],
@@ -176,13 +197,28 @@ function radar_script_update(int $id, array $input): array
     $layout = radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : $current['layout'];
     $scenes = isset($input['scenes']) && (int)$input['scenes'] >= 1 && (int)$input['scenes'] <= RADAR_SCENE_MAX_COUNT ? (int)$input['scenes'] : $current['scenes'];
     $row = ['hook' => $text('hook', 200), 'script' => $text('script', 2600), 'commentary' => $text('commentary', 600), 'cta' => $text('cta', 250)];
+    $direction = $current['direction'];
+    if (!empty($input['reroll_direction'])) {
+        $category = $current['news_id'] !== null ? (string)radar_db_value('SELECT category FROM news WHERE id = ?', [(int)$current['news_id']]) : '';
+        $direction = radar_direction_generate(['category' => $category, 'expression' => $expression], $scenes, array_merge([$direction['outfit']], radar_direction_recent()));
+    } else {
+        foreach (['outfit', 'accessories', 'lighting'] as $key) {
+            if (isset($input[$key]) && is_string($input[$key])) {
+                $edited = radar_direction_text($input[$key]);
+                if (($key !== 'outfit' || $edited !== '') && $edited !== $direction[$key]) {
+                    $direction[$key] = $edited;
+                    $direction['origin'] = 'manual';
+                }
+            }
+        }
+    }
     $prompt = radar_video_prompt([
-        'spoken' => radar_script_spoken($row), 'expression' => $expression, 'scene' => $scene,
+        'spoken' => radar_script_spoken($row), 'expression' => $expression, 'scene' => $scene, 'direction' => $direction,
         'headline' => $current['news_title'], 'source' => $current['news_source'], 'layout' => $layout, 'scenes' => $scenes,
     ]);
     radar_db_exec(
-        'UPDATE scripts SET headlines = ?, hook = ?, script = ?, commentary = ?, cta = ?, expression = ?, scene = ?, layout = ?, scenes = ?, video_prompt = ?, updated_at = ? WHERE id = ?',
-        [json_encode(array_values($headlines), JSON_UNESCAPED_UNICODE), $row['hook'], $row['script'], $row['commentary'], $row['cta'], $expression, $scene, $layout, $scenes, $prompt, time(), $id]
+        'UPDATE scripts SET headlines = ?, hook = ?, script = ?, commentary = ?, cta = ?, expression = ?, scene = ?, layout = ?, scenes = ?, direction = ?, video_prompt = ?, updated_at = ? WHERE id = ?',
+        [json_encode(array_values($headlines), JSON_UNESCAPED_UNICODE), $row['hook'], $row['script'], $row['commentary'], $row['cta'], $expression, $scene, $layout, $scenes, json_encode($direction, JSON_UNESCAPED_UNICODE), $prompt, time(), $id]
     );
     return radar_script_get($id) ?? [];
 }
@@ -231,6 +267,7 @@ function radar_project_decode(array $row): array
         'expression' => (string)$row['expression'],
         'template' => radar_video_template_valid((string)$row['template']) ? (string)$row['template'] : 'split',
         'caption' => (string)$row['caption'],
+        'direction' => radar_direction_normalize(json_decode((string)($row['direction'] ?? ''), true), 'manual'),
         'created_at' => gmdate(DATE_ATOM, (int)$row['created_at']), 'updated_at' => gmdate(DATE_ATOM, (int)$row['updated_at']),
     ];
 }
@@ -274,12 +311,13 @@ function radar_project_save(?int $id, array $input): array
         max(1.0, min(3.0, (float)($input['cover_zoom'] ?? 1))), $expression,
         radar_video_template_valid(radar_str($input['template'] ?? '')) ? radar_str($input['template']) : 'split',
         mb_substr(trim(preg_replace('/\s+/u', ' ', strip_tags(radar_str($input['caption'] ?? ''))) ?? ''), 0, 200),
+        ($projectDirection = radar_direction_normalize($input['direction'] ?? null, 'manual')) === null ? '' : json_encode($projectDirection, JSON_UNESCAPED_UNICODE),
     ];
     $now = time();
     if ($id === null) {
         $id = radar_db_insert(
-            'INSERT INTO projects (script_id, news_id, title, headline, script, video_prompt, cover_media_id, character_media_id, cover_x, cover_y, cover_zoom, expression, template, caption, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO projects (script_id, news_id, title, headline, script, video_prompt, cover_media_id, character_media_id, cover_x, cover_y, cover_zoom, expression, template, caption, direction, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [...$values, $now, $now]
         );
     } else {
@@ -287,7 +325,7 @@ function radar_project_save(?int $id, array $input): array
             throw new InvalidArgumentException('Projeto não encontrado.');
         }
         radar_db_exec(
-            'UPDATE projects SET script_id = ?, news_id = ?, title = ?, headline = ?, script = ?, video_prompt = ?, cover_media_id = ?, character_media_id = ?, cover_x = ?, cover_y = ?, cover_zoom = ?, expression = ?, template = ?, caption = ?, updated_at = ? WHERE id = ?',
+            'UPDATE projects SET script_id = ?, news_id = ?, title = ?, headline = ?, script = ?, video_prompt = ?, cover_media_id = ?, character_media_id = ?, cover_x = ?, cover_y = ?, cover_zoom = ?, expression = ?, template = ?, caption = ?, direction = ?, updated_at = ? WHERE id = ?',
             [...$values, $now, $id]
         );
     }

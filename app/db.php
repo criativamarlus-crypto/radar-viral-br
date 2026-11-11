@@ -252,6 +252,10 @@ SQL,
         5 => <<<'SQL'
 ALTER TABLE scripts ADD COLUMN scenes INTEGER NOT NULL DEFAULT 1;
 SQL,
+        6 => <<<'SQL'
+ALTER TABLE scripts ADD COLUMN direction TEXT NOT NULL DEFAULT '';
+ALTER TABLE projects ADD COLUMN direction TEXT NOT NULL DEFAULT '';
+SQL,
     ];
 }
 

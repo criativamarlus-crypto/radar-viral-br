@@ -214,6 +214,7 @@ try {
                 'headlines' => $script['headlines'], 'gancho' => $script['hook'], 'roteiro' => $script['script'], 'comentario_opiniao' => $script['commentary'], 'cta' => $script['cta'],
                 'texto_falado_completo' => $script['spoken'], 'segundos_estimados' => $script['estimated_seconds'], 'prompt_de_video' => $script['video_prompt'],
                 'cenas' => count($script['video_prompts']), 'prompts_de_video_por_cena' => $script['video_prompts'],
+                'visual_desta_noticia' => ['roupa' => $script['direction']['outfit'], 'acessorios' => $script['direction']['accessories'], 'iluminacao' => $script['direction']['lighting'], 'angulos_por_cena' => $script['direction']['angles'], 'o_rosto_nunca_muda' => true],
                 'imagem_de_referencia' => 'Anexe a folha de referência do personagem (baixe em Meu Personagem, no painel) em cada cena. Todo prompt já manda manter o mesmo personagem e a mesma reação.',
                 'alertas' => $script['warnings'], 'conferir_antes_de_gravar' => $script['fact_check'],
                 'proximo_passo' => 'O usuário deve conferir a matéria original e pode ajustar a composição 9:16 no Estúdio de React do painel.',

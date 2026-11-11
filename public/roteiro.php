@@ -85,6 +85,13 @@ radar_page_start('Roteiro de react', 'roteiros.php');
                 <label>Cenas<select name="scenes"><?php for ($n = 1; $n <= RADAR_SCENE_MAX_COUNT; $n++): ?><option value="<?= $n ?>"<?= $script['scenes'] === $n ? ' selected' : '' ?>><?= $n ?> <?= $n === 1 ? 'cena' : 'cenas' ?> (até <?= $n * RADAR_SCENE_MAX_SECONDS ?> s)</option><?php endfor; ?></select></label>
                 <label>Modelo do vídeo<select name="layout"><?php foreach (radar_video_templates() as $key => $template): ?><option value="<?= radar_h($key) ?>"<?= $script['layout'] === $key ? ' selected' : '' ?>><?= radar_h($template['label']) ?></option><?php endforeach; ?></select></label>
             </div>
+            <h3>Visual desta notícia <span class="muted">(o rosto nunca muda)</span></h3>
+            <label>Roupa<textarea name="outfit" rows="2" maxlength="240"><?= radar_h($script['direction']['outfit']) ?></textarea></label>
+            <div class="field-row">
+                <label>Acessórios<input name="accessories" maxlength="240" value="<?= radar_h($script['direction']['accessories']) ?>"></label>
+                <label>Iluminação e clima<input name="lighting" maxlength="240" value="<?= radar_h($script['direction']['lighting']) ?>"></label>
+            </div>
+            <label class="check"><input type="checkbox" name="reroll_direction" value="1"> Sortear um visual novo ao salvar (roupa, acessórios, luz e ângulos)</label>
             <button class="btn primary" type="submit">Salvar alterações e refazer o prompt</button>
         </div>
     </form>
@@ -101,9 +108,11 @@ radar_page_start('Roteiro de react', 'roteiros.php');
             <?php else: ?>
                 <div class="notice warn">Falta a folha de referência do personagem. Cadastre em <a href="personagem.php">Meu Personagem</a> para baixar e anexar aqui.</div>
             <?php endif; ?>
+            <p class="hint">Visual: <strong><?= radar_h($script['direction']['outfit']) ?></strong><?= $script['direction']['accessories'] !== '' ? ' · ' . radar_h($script['direction']['accessories']) : '' ?></p>
             <?php foreach ($script['video_prompts'] as $index => $scenePrompt): ?>
                 <div class="script-block">
                     <div class="head"><span>Cena <?= $index + 1 ?> de <?= count($script['video_prompts']) ?></span><button type="button" class="btn ghost small" data-copy="scene-prompt-<?= $index ?>">Copiar cena <?= $index + 1 ?></button></div>
+                    <?php $angles = $script['direction']['angles']; if ($angles !== []): ?><p class="hint">Ângulo: <?= radar_h($angles[$index % count($angles)]) ?></p><?php endif; ?>
                     <textarea id="scene-prompt-<?= $index ?>" rows="10" readonly class="mono"><?= radar_h($scenePrompt) ?></textarea>
                 </div>
             <?php endforeach; ?>

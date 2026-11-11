@@ -26,6 +26,7 @@
     scene: 'carro',
     scenes: initialScript ? initialScript.scenes : data.defaultScenes,
     prompts: initialScript ? initialScript.video_prompts : [],
+    direction: initialScript ? initialScript.direction : (project ? project.direction : null),
     coverId: project ? project.cover_media_id : (data.preselectCover || null),
     characterId: project ? project.character_media_id : null,
     x: project ? project.cover_x : 50,
@@ -115,10 +116,14 @@
     return line.toUpperCase();
   }
 
+  // Where things were drawn in the last render (px of that render). The package lists these as coordinates.
+  let lastLayout = null;
+
   /* ---- template 1: news on top, character below ---- */
   function renderSplit(c, W, H, assets, overlay) {
     const half = H / 2;
     const { cover, character } = assets;
+    lastLayout = { W, H, template: 'split', news: { x: 0, y: 0, w: W, h: half }, character: { x: 0, y: half, w: W, h: half } };
     c.save();
     c.beginPath(); c.rect(0, 0, W, half); c.clip();
     if (cover) {
@@ -224,6 +229,10 @@
       size *= 0.92;
     }
     const imageH = ch - barH;
+    lastLayout = {
+      W, H, template: 'caption_card', band: { x: 0, y: 0, w: W, h: bandH }, card: { x: cx, y: cy, w: cw, h: ch },
+      image: { x: cx, y: cy, w: cw, h: imageH }, bar: { x: cx, y: cy + imageH, w: cw, h: barH }, safe: { x: 0, y: bandH, w: W, h: cy - bandH },
+    };
 
     c.save();
     c.shadowColor = 'rgba(0,0,0,.55)'; c.shadowBlur = W * 0.03; c.shadowOffsetY = W * 0.008;
@@ -376,9 +385,16 @@
       button.type = 'button'; button.className = 'btn ghost small';
       button.dataset.copy = 'st-prompt-' + index; button.textContent = 'Copiar cena ' + (index + 1);
       head.append(title, button);
+      const look = state.direction;
+      let note = null;
+      if (look && look.angles && look.angles.length) {
+        note = document.createElement('p');
+        note.className = 'hint';
+        note.textContent = 'Ângulo: ' + look.angles[index % look.angles.length] + (look.gestures && look.gestures.length ? ' · Gesto: ' + look.gestures[index % look.gestures.length] : '');
+      }
       const area = document.createElement('textarea');
       area.id = 'st-prompt-' + index; area.readOnly = true; area.rows = 8; area.className = 'mono'; area.value = text;
-      block.append(head, area);
+      if (note) block.append(head, note, area); else block.append(head, area);
       box.append(block);
     });
     $('st-scenes-hint').textContent = list.length
@@ -422,7 +438,7 @@
       try {
         const result = await api({
           action: 'video_prompt', spoken: state.spoken, expression: state.expression, scene: state.scene,
-          scenes: state.scenes, headline: data.news ? data.news.title : state.headline, source: data.news ? data.news.source : '', layout: state.template,
+          direction: state.direction, scenes: state.scenes, headline: data.news ? data.news.title : state.headline, source: data.news ? data.news.source : '', layout: state.template,
         });
         state.prompt = result.prompt; state.prompts = result.prompts;
         renderPrompts();
@@ -455,8 +471,9 @@
   /** The impact phrase should differ from the real headline on the card: first other headline, else the hook. */
   function pickCaption(script) {
     if (!script) return '';
-    const real = data.news ? data.news.title.trim().toLowerCase() : '';
-    const own = (script.headlines || []).find((h) => h.trim().toLowerCase() !== real);
+    const plain = (text) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const real = data.news ? plain(data.news.title) : '';
+    const own = (script.headlines || []).find((h) => plain(h) !== real);
     return own || script.hook || (script.headlines && script.headlines[0]) || '';
   }
 
@@ -491,6 +508,33 @@
     state.template = e.target.value;
     applyTemplateUi(); seedCaption(false); fillCaptionOptions(); refreshPrompt(); redraw();
   });
+  /** The look of this news: outfit, accessories and light (the face never changes). */
+  function fillLook() {
+    const look = state.direction || {};
+    $('st-outfit').value = look.outfit || '';
+    $('st-accessories').value = look.accessories || '';
+    $('st-lighting').value = look.lighting || '';
+    const origin = { ia: 'sugerido pela IA', sorteio: 'sorteado para esta notícia', manual: 'editado por você', 'padrão': 'padrão' }[look.origin] || '';
+    $('st-look-hint').textContent = look.outfit ? 'Tom do visual: ' + (data.moods[look.mood] || '—') + (origin ? ' · ' + origin : '') + '.' : '';
+  }
+  for (const key of ['outfit', 'accessories', 'lighting']) {
+    $('st-' + key).addEventListener('input', (e) => {
+      state.direction = Object.assign({ angles: [], gestures: [], mood: 'casual' }, state.direction, { [key]: e.target.value, origin: 'manual' });
+      refreshPrompt();
+    });
+  }
+  async function rerollLook() {
+    const button = $('st-reroll');
+    button.disabled = true;
+    try {
+      const result = await api({ action: 'direction', news_id: state.newsId || 0, scenes: state.scenes, expression: state.expression, outfit: state.direction ? state.direction.outfit : '' });
+      state.direction = result.direction;
+      fillLook(); refreshPrompt();
+    } catch (error) { toast(error.message, true); }
+    button.disabled = false;
+  }
+  $('st-reroll').addEventListener('click', rerollLook);
+
   $('st-expression').addEventListener('change', (e) => { state.expression = e.target.value; refreshPrompt(); });
   if ($('st-scenes')) $('st-scenes').addEventListener('change', (e) => { state.scenes = Number(e.target.value); refreshPrompt(); });
   $('st-scene').addEventListener('change', (e) => { state.scene = e.target.value; refreshPrompt(); });
@@ -504,7 +548,7 @@
   function applyScript(script, keepTemplate) {
     state.scriptId = script.id;
     state.spoken = script.spoken; state.expression = script.expression; state.scene = script.scene;
-    state.scenes = script.scenes; state.prompt = script.video_prompt; state.prompts = script.video_prompts;
+    state.scenes = script.scenes; state.prompt = script.video_prompt; state.prompts = script.video_prompts; state.direction = script.direction;
     if ($('st-scenes')) $('st-scenes').value = String(state.scenes);
     if (!keepTemplate && data.templates[script.layout]) state.template = script.layout;
     state.headline = state.template === 'caption_card' && data.news ? data.news.title : script.headline;
@@ -512,7 +556,7 @@
     if (!state.title) state.title = script.headline.slice(0, 80);
     $('st-title').value = state.title; $('st-headline').value = state.headline; $('st-script').value = state.spoken; $('st-caption').value = state.caption;
     $('st-expression').value = state.expression; $('st-scene').value = state.scene; $('st-template').value = state.template; renderPrompts();
-    applyTemplateUi(); fillCaptionOptions(); words(); redraw();
+    applyTemplateUi(); fillCaptionOptions(); words(); fillLook(); redraw();
     if (keepTemplate && script.layout !== state.template) refreshPrompt();
   }
 
@@ -557,7 +601,7 @@
       const script = {
         id: item.id, news_id: item.news_id, news_title: item.news_title, news_source: item.news_source,
         headline: (item.headlines && item.headlines[0]) || item.news_title, headlines: item.headlines || [], hook: item.hook,
-        spoken: item.spoken, expression: item.expression, scene: item.scene, layout: item.layout, scenes: item.scenes, video_prompt: item.video_prompt, video_prompts: item.video_prompts,
+        spoken: item.spoken, expression: item.expression, scene: item.scene, layout: item.layout, scenes: item.scenes, direction: item.direction, video_prompt: item.video_prompt, video_prompts: item.video_prompts,
       };
       data.scripts.unshift(script);
       scriptSelect.append(scriptOption(script));
@@ -597,7 +641,8 @@
       generateScript();
     }
   }
-  renderPrompts(); renderReference();
+  renderPrompts(); renderReference(); fillLook();
+  if (!state.direction && !(data.news && !project && !initialScript)) rerollLook();
   if (project) {
     // Projects keep their text; the prompts are rebuilt so they follow today's standards and scene cuts.
     const linked = data.scripts.find((s) => s.id === project.script_id);
@@ -616,7 +661,7 @@
     try {
       const result = await api({
         action: 'project_save', id: state.projectId || 0, script_id: state.scriptId || 0, news_id: state.newsId || 0,
-        title: state.title, headline: state.headline, caption: state.caption, template: state.template, script: state.spoken, video_prompt: state.prompt,
+        title: state.title, headline: state.headline, caption: state.caption, template: state.template, direction: state.direction, script: state.spoken, video_prompt: state.prompt,
         cover_media_id: state.coverId || '', character_media_id: state.characterId || '',
         cover_x: state.x, cover_y: state.y, cover_zoom: state.zoom, expression: state.expression,
       });
@@ -647,19 +692,7 @@
   $('st-export-png').addEventListener('click', () => exportPng(false));
   $('st-export-overlay').addEventListener('click', () => exportPng(true));
 
-  $('st-export-txt').addEventListener('click', () => {
-    const lines = [
-      'RADAR VIRAL BR · PROJETO DE REACT', '='.repeat(40),
-      'Título: ' + (state.title || '—'),
-      'Modelo: ' + data.templates[state.template].label,
-      data.news ? 'Notícia: ' + data.news.title : '', data.news ? 'Fonte: ' + data.news.source + ' — ' + data.news.url : '',
-      state.template === 'caption_card' ? '' : null, state.template === 'caption_card' ? 'FRASE DE IMPACTO (TOPO)' : null, state.template === 'caption_card' ? state.caption : null,
-      '', state.template === 'caption_card' ? 'MANCHETE NO CARD' : 'HEADLINE NA IMAGEM', state.headline, '', 'ROTEIRO FALADO', state.spoken, '', 'PROMPT DE VÍDEO', state.prompt, '',
-    ].filter((l, i, a) => l !== null && (l !== '' || a[i - 1] !== ''));
-    download(new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' }), 'radar-roteiro-' + (state.projectId || 'novo') + '.txt');
-  });
-
   // Small hook for diagnostics and automated checks.
-  window.RadarStudio = { state, render, redraw, hasImpact };
+  window.RadarStudio = { state, data, render, redraw, hasImpact, sourceLine, layout: () => lastLayout };
   renderPickers(); words(); redraw();
 })();

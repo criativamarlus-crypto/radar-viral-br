@@ -28,7 +28,7 @@ $newsOptions = array_values(array_map(static fn(array $n): array => [
 $scriptOptions = array_map(static fn(array $s): array => [
     'id' => $s['id'], 'news_id' => $s['news_id'], 'news_title' => $s['news_title'], 'news_source' => $s['news_source'],
     'headline' => $s['headlines'][0] ?? $s['news_title'], 'headlines' => $s['headlines'], 'hook' => $s['hook'], 'spoken' => $s['spoken'], 'expression' => $s['expression'], 'scene' => $s['scene'],
-    'layout' => $s['layout'], 'duration' => $s['duration'], 'scenes' => $s['scenes'], 'video_prompt' => $s['video_prompt'], 'video_prompts' => $s['video_prompts'],
+    'layout' => $s['layout'], 'duration' => $s['duration'], 'scenes' => $s['scenes'], 'direction' => $s['direction'], 'video_prompt' => $s['video_prompt'], 'video_prompts' => $s['video_prompts'],
 ], radar_scripts_list(100));
 
 $media = $news !== null ? $news['media'] : [];
@@ -36,7 +36,7 @@ $mediaOptions = array_map(static fn(array $m): array => ['id' => $m['id'], 'labe
 $characters = array_map(static fn(array $m): array => ['id' => $m['id'], 'label' => $m['label'], 'primary' => (int)$m['is_primary'] === 1], radar_character_images());
 
 $state = [
-    'news' => $news === null ? null : ['id' => $news['id'], 'title' => $news['title'], 'source' => $news['source'], 'url' => $news['url'], 'image' => $news['image'], 'image_credit' => $news['image_credit'], 'published_at' => $news['published_known'] ? $news['published_at'] : null],
+    'news' => $news === null ? null : ['id' => $news['id'], 'title' => $news['title'], 'source' => $news['source'], 'url' => $news['url'], 'image' => $news['image'], 'image_credit' => $news['image_credit'], 'category' => $news['category'], 'published_at' => $news['published_known'] ? $news['published_at'] : null],
     'newsOptions' => $newsOptions,
     'scripts' => $scriptOptions,
     'media' => $mediaOptions,
@@ -45,6 +45,7 @@ $state = [
     'scenes' => radar_character_scenes(),
     'tones' => RADAR_TONES,
     'defaultTemplate' => radar_video_default_template(),
+    'moods' => radar_direction_moods(),
     'defaultScenes' => RADAR_SCENES_DEFAULT,
     'reference' => ($reference = radar_character_reference()) === null ? null : ['id' => $reference['id'], 'width' => $reference['width'], 'height' => $reference['height']],
     'templates' => array_map(static fn(array $t): array => ['label' => $t['label'], 'description' => $t['description']], radar_video_templates()),
@@ -54,7 +55,7 @@ $state = [
 ];
 $json = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
 
-radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js'], 'wide' => true]);
+radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js', 'studio-pack.js'], 'wide' => true]);
 ?>
 <div class="page-head">
     <div><h1>Estúdio de React</h1><p>Monte a composição vertical 9:16 em um dos modelos. Prepara a imagem de referência, a camada de legenda/card e o prompt para a ferramenta de vídeo; não gera o vídeo final.</p></div>
@@ -109,6 +110,15 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js']
             <label>Expressão<select id="st-expression"></select></label>
             <label>Cenário<select id="st-scene"></select></label>
         </div>
+        <div class="panel form-grid" id="st-look">
+            <h2>Visual desta notícia</h2>
+            <p class="hint">O rosto fica sempre igual: a folha de referência só serve para isso. A roupa, os acessórios e a luz são criados para cada notícia, combinando com o tom do assunto, e o ângulo muda de cena em cena. Pode editar à vontade.</p>
+            <label>Roupa<textarea id="st-outfit" rows="2" maxlength="240" placeholder="Ex.: a navy blazer over a plain white t-shirt"></textarea></label>
+            <label>Acessórios<input id="st-accessories" maxlength="240" placeholder="Ex.: a slim steel watch"></label>
+            <label>Iluminação e clima<input id="st-lighting" maxlength="240" placeholder="Ex.: soft warm daylight from the side"></label>
+            <button type="button" class="btn ghost small" id="st-reroll">Sortear outro visual</button>
+            <p class="hint" id="st-look-hint"></p>
+        </div>
     </section>
 
     <section class="stack" aria-label="Prévia vertical">
@@ -134,6 +144,11 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js']
             <p class="hint" id="st-scenes-hint"></p>
             <div class="stack" id="st-prompts"></div>
             <textarea id="st-prompt" rows="3" readonly class="mono" hidden></textarea>
+        </div>
+        <div class="panel stack">
+            <button type="button" class="btn primary" id="st-copy-all">Copiar tudo (roteiro, prompts, coordenadas e imagens)</button>
+            <button type="button" class="btn ghost" id="st-download-pack">Baixar pacote completo (.zip)</button>
+            <p class="hint" id="st-pack-status" role="status" aria-live="polite">Um clique e vai tudo: a fala completa, o visual, as coordenadas, os prompts de cada cena e as imagens. Ao colar em um documento ou editor, o texto e as imagens vêm juntos.</p>
         </div>
         <div class="panel stack">
             <button type="button" class="btn primary" id="st-save">Salvar projeto</button>

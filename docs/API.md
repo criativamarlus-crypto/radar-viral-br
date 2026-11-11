@@ -38,7 +38,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 `Content-Type: application/json` (ou `multipart/form-data` no `upload`), campo `action`:
 
-`collect` (`trigger`: `manual`\|`auto`) · `save_news` · `delete_news` · `generate` (`news_id`, `scenes` 1–5 (padrão 3; cada cena tem até 25 s e vira um prompt de vídeo próprio), `tone`, `context`, `layout`: `caption_card` (padrão)\|`split`) · `script_update` · `script_delete` · `project_save` · `project_delete` · `video_prompt` (devolve `prompt` e `prompts`, um por cena) · `import_cover` · `fetch_og` · `screenshot` · `upload` (`kind`: `cover`\|`character`\|`upload`, `file`) · `media_delete` · `character_primary` · `source_test` · `ai_test`
+`collect` (`trigger`: `manual`\|`auto`) · `save_news` · `delete_news` · `generate` (`news_id`, `scenes` 1–5 (padrão 3; cada cena tem até 25 s e vira um prompt de vídeo próprio), `tone`, `context`, `layout`: `caption_card` (padrão)\|`split`) · `script_update` · `script_delete` · `project_save` · `project_delete` · `video_prompt` (aceita `direction` e devolve `prompt` e `prompts`, um por cena) · `direction` (sorteia outro visual: roupa, acessórios, luz e ângulo por cena) · `import_cover` · `fetch_og` · `screenshot` · `upload` (`kind`: `cover`\|`character`\|`upload`, `file`) · `media_delete` · `character_primary` · `source_test` · `ai_test`
 
 Imagens: apenas JPEG, PNG ou WebP, até 5 MB e 4096 px. São inspecionadas (tipo real, dimensões) e guardadas fora da raiz pública com nome aleatório; `GET /media.php?id=…` exige login.
 

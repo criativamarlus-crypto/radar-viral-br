@@ -192,6 +192,7 @@ try {
             $expressionKey = (string)($input['expression'] ?? '');
             $sceneKey = (string)($input['scene'] ?? '');
             $promptParts = [
+                'direction' => radar_direction_normalize($input['direction'] ?? null, 'manual') ?? radar_direction_default(),
                 'spoken' => mb_substr((string)($input['spoken'] ?? ''), 0, 4000),
                 'expression' => isset(radar_character_expressions()[$expressionKey]) ? $expressionKey : 'sorriso-largo',
                 'scene' => isset(radar_character_scenes()[$sceneKey]) ? $sceneKey : 'carro',
@@ -202,6 +203,17 @@ try {
             ];
             $scenePrompts = radar_video_prompts($promptParts);
             radar_json(['prompt' => radar_video_prompt($promptParts), 'prompts' => $scenePrompts, 'scenes' => count($scenePrompts)]);
+
+        case 'direction':
+            // A new look for the Studio ("Sortear outro visual"); never repeats the outfit that is on screen.
+            api_limit('direction', 60, 600);
+            $directionNews = radar_news_get(api_int($input['news_id'] ?? 0));
+            $directionExpression = (string)($input['expression'] ?? '');
+            radar_json(['direction' => radar_direction_generate(
+                ['category' => $directionNews['category'] ?? '', 'expression' => isset(radar_character_expressions()[$directionExpression]) ? $directionExpression : ''],
+                max(1, min(RADAR_SCENE_MAX_COUNT, api_int($input['scenes'] ?? 1) ?: 1)),
+                array_merge([radar_direction_text($input['outfit'] ?? '')], radar_direction_recent())
+            )]);
 
         case 'source_test':
             api_limit('source-test', 30, 600);

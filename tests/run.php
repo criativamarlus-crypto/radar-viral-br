@@ -703,12 +703,12 @@ check('screenshot capture stores a real capture with attribution and refuses Goo
 check('the master prompt keeps every permanent trait (Portuguese and English)', static function (): bool {
     $pt = mb_strtolower(radar_character_master_prompt('pt'));
     $en = strtolower(radar_character_master_prompt('en'));
-    foreach (['negro', 'gordo', 'rosto arredondado', 'cabelo preto curto', 'barba', 'óculos', 'corrente de ouro', 'relógio', 'camiseta preta', 'sorriso'] as $trait) {
+    foreach (['negro', 'gordo', 'rosto arredondado', 'cabelo preto curto', 'barba', 'óculos', 'sorriso', 'roupa e os acessórios não são fixos'] as $trait) {
         if (!str_contains($pt, $trait)) {
             return false;
         }
     }
-    foreach (['black brazilian man', 'heavyset', 'round face', 'short black hair', 'beard', 'glasses', 'gold chain', 'wristwatch', 'black casual t-shirt', 'smile', 'never like a tv news anchor'] as $trait) {
+    foreach (['black brazilian man', 'heavyset', 'round face', 'short black hair', 'beard', 'glasses', 'smile', 'never like a tv news anchor', 'clothes and accessories are not fixed'] as $trait) {
         if (!str_contains($en, $trait)) {
             return false;
         }
@@ -829,6 +829,23 @@ check('with a key, the AI call is a POST to the provider with the key only in a 
     return $seen['url'] === 'https://api.anthropic.com/v1/messages' && $seen['method'] === 'POST' && !str_contains($seen['body'], 'sk-ant-api-test') && in_array('x-api-key: sk-ant-api-test-key-0123456789', $seen['headers'], true)
         && $body['model'] === 'claude-sonnet-5-5' && str_contains($body['messages'][0]['content'], 'As linhas começam na segunda-feira.')
         && $script['mode'] === 'ia' && str_contains($script['mode_label'], 'anthropic') && $script['hook'] === 'Rapaz, tu viu isso aqui?' && str_contains($script['video_prompt'], 'Rapaz, tu viu isso aqui?') && implode(' ', radar_scene_split($script['spoken'], $script['scenes'])) === $script['spoken'];
+});
+check('a look written by the AI is kept and the AI is told which outfits to avoid; without one the code draws a look', static function () use ($aiJson, $anthropicReply): bool {
+    $seen = [];
+    $direction = ['outfit' => 'a deep teal quarter-zip sweater with a crisp white collar', 'accessories' => 'a slim steel watch', 'lighting' => 'soft overcast window light', 'angles' => ['low angle looking up', 'three-quarter view from his left', 'tight close-up'], 'gestures' => ['opens both palms', 'points at the lens', 'shrugs']];
+    $GLOBALS['radar_test_transport'] = static function (array $r) use ($aiJson, $anthropicReply, $direction, &$seen): array {
+        $seen = $r['one'];
+        return $anthropicReply($aiJson(['direction' => $direction]));
+    };
+    $with = radar_react_generate(500, ['scenes' => 3]);
+    unset($GLOBALS['radar_test_transport']);
+    $GLOBALS['radar_test_transport'] = static fn(array $r): array => $anthropicReply($aiJson());
+    $without = radar_react_generate(500, ['scenes' => 3]);
+    unset($GLOBALS['radar_test_transport']);
+    $content = json_decode($seen['body'], true)['messages'][0]['content'] ?? '';
+    return $with['mode'] === 'ia' && $with['direction']['outfit'] === $direction['outfit'] && $with['direction']['origin'] === 'ia' && str_contains($with['video_prompt'], 'three-quarter view from his left')
+        && str_contains($content, 'evitar_repetir') && str_contains(radar_ai_system_prompt(), 'direction') && str_contains(radar_ai_system_prompt(), 'nunca repita a roupa dentro das cenas')
+        && $without['mode'] === 'ia' && $without['direction']['origin'] === 'sorteio' && $without['direction']['outfit'] !== $direction['outfit'];
 });
 check('AI-written numbers absent from the source are flagged in the saved script', static function () use ($aiJson, $anthropicReply): bool {
     $GLOBALS['radar_test_transport'] = static fn(array $r): array => $anthropicReply($aiJson(['script' => 'Segundo o G1, serão 87 linhas novas.']));
@@ -988,6 +1005,103 @@ check('the reference sheet is a single image: a new one replaces the old one and
     $ok = $current !== null && $current['id'] === $second['id'] && $count === 1 && radar_media_path($first['id']) === null && count(radar_character_images()) === $before && (int)radar_media_get($second['id'])['is_primary'] === 0;
     radar_media_delete($second['id']);
     return $ok && radar_character_reference() === null;
+});
+check('every mood has outfits, accessories and light, and the tone of the news picks the mood', static function (): bool {
+    $pools = radar_direction_pools();
+    foreach (array_keys(radar_direction_moods()) as $mood) {
+        foreach (['outfit', 'accessories', 'lighting'] as $pool) {
+            if (count($pools[$pool][$mood] ?? []) < 4) {
+                return false;
+            }
+        }
+    }
+    return radar_direction_mood('Política') === 'serious' && radar_direction_mood('Cartão de crédito') === 'business' && radar_direction_mood('Finanças') === 'business' && radar_direction_mood('Futebol') === 'sport'
+        && radar_direction_mood('Famosos') === 'fun' && radar_direction_mood('Tecnologia') === 'tech' && radar_direction_mood('Geral') === 'casual' && radar_direction_mood('Famosos', 'serio') === 'serious';
+});
+check('a drawn look follows the mood, gives each scene its own angle and gesture, and avoids recent outfits', static function (): bool {
+    $pools = radar_direction_pools();
+    $outfits = [];
+    for ($i = 0; $i < 14; $i++) {
+        $look = radar_direction_generate(['category' => 'Finanças'], 3);
+        if (!in_array($look['outfit'], $pools['outfit']['business'], true) || !in_array($look['accessories'], $pools['accessories']['business'], true) || $look['mood'] !== 'business'
+            || count($look['angles']) !== 3 || count(array_unique($look['angles'])) !== 3 || count(array_unique($look['gestures'])) !== 3 || $look['origin'] !== 'sorteio') {
+            return false;
+        }
+        $outfits[$look['outfit']] = true;
+    }
+    $avoid = array_slice($pools['outfit']['sport'], 0, 7);
+    $seen = [];
+    for ($i = 0; $i < 20; $i++) {
+        $seen[] = radar_direction_generate(['category' => 'Futebol'], 1, $avoid)['outfit'];
+    }
+    $five = radar_direction_generate(['category' => 'Geral'], 5);
+    return count($outfits) >= 3 && array_intersect($seen, $avoid) === [] && count($five['angles']) === 5;
+});
+check('a seeded look is stable (old scripts keep their prompt) and different seeds give different looks', static function (): bool {
+    $a = radar_direction_generate(['category' => 'Famosos'], 3, [], 41);
+    $b = radar_direction_generate(['category' => 'Famosos'], 3, [], 41);
+    $outfits = [];
+    foreach (range(1, 30) as $seed) {
+        $outfits[radar_direction_generate(['category' => 'Famosos'], 3, [], $seed)['outfit']] = true;
+    }
+    return $a === $b && count($outfits) >= 4;
+});
+check('a look from the AI or the panel is cleaned, capped and refused without an outfit', static function (): bool {
+    $clean = radar_direction_normalize([
+        'outfit' => "  <b>a navy</b> blazer\nover a white tee http://evil.example.com/x  ", 'accessories' => str_repeat('watch ', 80), 'lighting' => '',
+        'angles' => ['low angle', '<i>high angle</i>', '', 7, 'a', 'b', 'c', 'd'], 'gestures' => 'not a list', 'mood' => 'invented', 'origin' => 'hack',
+    ]);
+    return $clean !== null && $clean['outfit'] === 'a navy blazer over a white tee' && mb_strlen($clean['accessories']) <= 240 && $clean['lighting'] === '' && count($clean['angles']) === 5 && $clean['angles'][1] === 'high angle'
+        && $clean['gestures'] === [] && $clean['mood'] === 'casual' && $clean['origin'] === 'ia'
+        && radar_direction_normalize(['outfit' => '   ']) === null && radar_direction_normalize('x') === null && radar_direction_normalize(null) === null;
+});
+check('the prompt dresses him for this news, changes the angle scene by scene and keeps the face the only fixed thing', static function (): bool {
+    $spoken = implode(' ', array_map(static fn(int $i): string => 'Parte ' . $i . ' ' . implode(' ', array_fill(0, 18, 'fala')) . ' fim.', range(1, 6)));
+    $direction = ['outfit' => 'a deep teal quarter-zip sweater with a crisp white collar', 'accessories' => 'a slim steel watch', 'lighting' => 'soft overcast window light', 'angles' => ['low angle looking up', 'three-quarter view from his left', 'tight close-up'], 'gestures' => ['opens both palms', 'points at the lens', 'shrugs'], 'mood' => 'business', 'origin' => 'ia'];
+    $prompts = radar_video_prompts(['spoken' => $spoken, 'expression' => 'serio', 'scene' => 'casa', 'headline' => 'H', 'source' => 'S', 'layout' => 'caption_card', 'scenes' => 3, 'direction' => $direction]);
+    if (count($prompts) !== 3) {
+        return false;
+    }
+    foreach ($prompts as $index => $prompt) {
+        if (!str_contains($prompt, 'WARDROBE (made for this news; keep it identical in every scene of this video): a deep teal quarter-zip sweater with a crisp white collar. Accessories: a slim steel watch.')
+            || !str_contains($prompt, 'CAMERA ANGLE FOR THIS SCENE: ' . $direction['angles'][$index]) || !str_contains($prompt, 'he ' . $direction['gestures'][$index]) || !str_contains($prompt, 'soft overcast window light')
+            || !str_contains($prompt, 'VARIATION (default rule') || !str_contains($prompt, 'Do not copy the clothes, accessories, pose or grey background') || !str_contains($prompt, 'only the camera angle and his gestures change')
+            || str_contains($prompt, 'gold chain and black t-shirt') || str_contains(radar_character_master_prompt('en'), 'gold chain')) {
+            return false;
+        }
+    }
+    $noDirection = radar_video_prompts(['spoken' => 'Oi.', 'expression' => 'serio', 'scene' => 'casa', 'headline' => 'H', 'source' => 'S'])[0];
+    return str_contains($noDirection, 'WARDROBE') && str_contains($noDirection, 'a plain black casual t-shirt');
+});
+check('every react gets its own look: three in a row never repeat the outfit, and it is stored with the script', static function (): bool {
+    $outfits = [];
+    for ($i = 0; $i < 3; $i++) {
+        $script = radar_react_generate(602, ['scenes' => 2]);
+        $outfits[] = $script['direction']['outfit'];
+        if (!str_contains($script['video_prompt'], $script['direction']['outfit']) || count($script['direction']['angles']) !== 2 || radar_script_get($script['id'])['direction']['outfit'] !== $script['direction']['outfit']) {
+            return false;
+        }
+    }
+    return count(array_unique($outfits)) === 3;
+});
+check('the look can be edited or drawn again on the script page; old scripts get a stable look when read', static function (): bool {
+    $script = radar_react_generate(602, ['scenes' => 2]);
+    $edited = radar_script_update($script['id'], ['outfit' => 'a mustard crew-neck sweatshirt', 'accessories' => 'a black beanie', 'lighting' => 'late-afternoon sun']);
+    $kept = radar_script_update($script['id'], ['hook' => 'Novo gancho para o teste.']);
+    $drawn = radar_script_update($script['id'], ['reroll_direction' => '1']);
+    radar_db_exec("INSERT INTO scripts (news_title, news_url, news_source, mode, duration, tone, hook, script, commentary, cta, expression, scene, video_prompt, created_at, updated_at) VALUES ('Velha', 'https://old.example.com/z', 'F', 'rascunho', 25, 'direto', 'g', 's', 'c', 'x', 'serio', 'casa', '', ?, ?)", [time(), time()]);
+    $legacyId = (int)radar_db()->lastInsertId();
+    $first = radar_script_get($legacyId);
+    $second = radar_script_get($legacyId);
+    return $edited['direction']['outfit'] === 'a mustard crew-neck sweatshirt' && $edited['direction']['origin'] === 'manual' && str_contains($edited['video_prompt'], 'a black beanie') && str_contains($edited['video_prompt'], 'late-afternoon sun')
+        && $kept['direction']['outfit'] === 'a mustard crew-neck sweatshirt' && $drawn['direction']['outfit'] !== 'a mustard crew-neck sweatshirt' && $drawn['direction']['origin'] === 'sorteio'
+        && $first['direction'] === $second['direction'] && $first['video_prompt'] === $second['video_prompt'] && str_contains($first['video_prompt'], $first['direction']['outfit']);
+});
+check('Studio projects keep the look', static function (): bool {
+    $direction = ['outfit' => 'a charcoal merino turtleneck', 'accessories' => 'a plain black watch', 'lighting' => 'neutral flat indoor light', 'angles' => ['eye-level'], 'gestures' => ['shrugs']];
+    $project = radar_project_save(null, ['title' => 'Com visual', 'headline' => 'H', 'direction' => $direction]);
+    $without = radar_project_save(null, ['title' => 'Sem visual', 'headline' => 'H']);
+    return ($project['direction']['outfit'] ?? '') === 'a charcoal merino turtleneck' && radar_project_get($project['id'])['direction']['accessories'] === 'a plain black watch' && $without['direction'] === null;
 });
 check('two video templates exist: the full-screen caption + news card (default, first) and the original split', static function (): bool {
     $templates = radar_video_templates();

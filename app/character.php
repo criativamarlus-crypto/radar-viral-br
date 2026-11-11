@@ -18,9 +18,9 @@ const RADAR_SCENE_TARGET_SECONDS = 22;
 function radar_character_master_prompt(string $language = 'pt'): string
 {
     if ($language === 'en') {
-        return 'Same recurring fictional Brazilian character in every shot: a Black Brazilian man, adult around 30 to 40 years old, heavyset and robust build, round face, short black hair, neat and discreet beard and mustache, modern dark-framed glasses, bright white and very expressive smile, thick gold chain necklace, gold wristwatch, plain black casual t-shirt. Natural, charismatic, memorable look. He looks like an ordinary person recording a spontaneous vertical video on a phone (in a car, at home or in a small office), never like a TV news anchor. Keep face, proportions, glasses, chain, watch and clothing identical in every generation, and use the attached reference images to preserve his identity.';
+        return 'Same recurring fictional Brazilian character in every shot: a Black Brazilian man, adult around 30 to 40 years old, heavyset and robust build, round face, short black hair, neat and discreet beard and mustache, modern dark-framed glasses, bright white and very expressive smile. Natural, charismatic, memorable look. He looks like an ordinary person recording a spontaneous vertical video on a phone (in a car, at home or in a small office), never like a TV news anchor. Keep his FACE and identity identical in every generation (face shape, features, skin tone, hair, beard, glasses and body build) and use the attached reference image only to preserve them. His clothes and accessories are not fixed: they follow the WARDROBE of each video.';
     }
-    return 'Personagem fictício brasileiro, sempre o mesmo em todos os vídeos: homem negro brasileiro, adulto de aproximadamente 30 a 40 anos, corpo gordo e robusto, rosto arredondado, cabelo preto curto, barba e bigode discretos, óculos modernos de armação escura, sorriso branco e muito expressivo, corrente de ouro grossa, relógio dourado e camiseta preta casual. Aparência natural, carismática e marcante. Parece uma pessoa comum gravando um vídeo espontâneo na vertical com o celular (no carro, em casa ou no escritório), nunca um apresentador de telejornal. Manter rosto, proporções, óculos, corrente, relógio e roupa idênticos em todas as gerações, usando as imagens de referência enviadas para preservar a identidade.';
+    return 'Personagem fictício brasileiro, sempre com o mesmo rosto em todos os vídeos: homem negro brasileiro, adulto de aproximadamente 30 a 40 anos, corpo gordo e robusto, rosto arredondado, cabelo preto curto, barba e bigode discretos, óculos modernos de armação escura, sorriso branco e muito expressivo. Aparência natural, carismática e marcante. Parece uma pessoa comum gravando um vídeo espontâneo na vertical com o celular (no carro, em casa ou no escritório), nunca um apresentador de telejornal. Rosto, proporções e óculos são idênticos em todas as gerações, usando a imagem de referência enviada só para preservar a identidade. A roupa e os acessórios não são fixos: mudam a cada notícia, combinando com o tom do assunto.';
 }
 
 /** @return array<int,string> */
@@ -154,9 +154,15 @@ function radar_video_standards(): array
         ],
         'same_character_every_scene' => [
             'label' => 'Mesmo personagem e mesma reação em todas as cenas',
-            'description' => 'Todo prompt manda anexar a folha de referência (frente, perfis e 3/4) e exige o mesmo homem, com o mesmo rosto, óculos, barba, corrente e camiseta, e a mesma reação em todas as cenas. Nada de segundo personagem, sósia ou pessoas extras.',
-            'rule' => 'CONTINUITY (the same rules in every scene of this video): exactly ONE person appears, always the same man from the reference sheet: same face, same skin tone, same hair, same beard, same glasses, same gold chain, same black t-shirt, same body and same voice. Never create a second or a different character, a look-alike, a double or extra people, and never change his appearance from one scene to the next.',
-            'avoid' => 'a second character, a different person, a look-alike or double, a changed face or outfit between scenes',
+            'description' => 'Todo prompt manda anexar a folha de referência só para manter o rosto e exige o mesmo homem em todas as cenas, com a mesma reação. A roupa e os acessórios ficam iguais dentro do vídeo; só o ângulo e os gestos mudam de cena para cena. Nada de segundo personagem, sósia ou pessoas extras.',
+            'rule' => 'CONTINUITY (the same rules in every scene of this video): exactly ONE person appears, always the same man from the reference sheet: same face and features, same skin tone, same hair, same beard, same glasses, same body build and same voice. His clothes and accessories are the ones in WARDROBE below and stay identical in every scene of this video; only the camera angle and his gestures change from scene to scene. Never create a second or a different character, a look-alike, a double or extra people, and never change his face between scenes.',
+            'avoid' => 'a second character, a different person, a look-alike or double, a changed face between scenes',
+        ],
+        'new_look_every_video' => [
+            'label' => 'Visual novo a cada notícia',
+            'description' => 'A folha de referência serve só para manter o rosto. A roupa, os acessórios, a iluminação e o ângulo são criados para cada notícia, combinando com o tom do assunto, e evitam repetir o visual dos vídeos anteriores.',
+            'rule' => 'VARIATION (default rule, do not override): the reference sheet is used ONLY to keep his face and identity. Do not copy its clothes, accessories, pose or grey background. Dress him as described in WARDROBE, which was chosen for the tone of this news and differs from the previous videos.',
+            'avoid' => 'copying the clothes or the grey background of the reference sheet',
         ],
     ];
 }
@@ -241,7 +247,7 @@ function radar_scene_split(string $spoken, int $scenes = 1): array
  * model) so the character block, the reference-image instruction and the fixed standards stay identical.
  * The dialogue is the user's own approved script, cut into scenes of at most 25 s.
  *
- * @param array{spoken:string,expression:string,scene:string,headline:string,source:string,layout?:string,scenes?:int} $parts
+ * @param array{spoken:string,expression:string,scene:string,headline:string,source:string,layout?:string,scenes?:int,direction?:array<string,mixed>} $parts
  * @return array<int,string>
  */
 function radar_video_prompts(array $parts): array
@@ -254,23 +260,31 @@ function radar_video_prompts(array $parts): array
     $standards = radar_video_standards();
     $chunks = radar_scene_split((string)$parts['spoken'], (int)($parts['scenes'] ?? 1));
     $total = count($chunks);
+    $direction = radar_direction_normalize($parts['direction'] ?? null, 'manual') ?? radar_direction_default();
+    $moods = radar_direction_moods();
     $prompts = [];
     foreach ($chunks as $index => $chunk) {
+        $view = radar_direction_for_scene($direction, $index);
         $prompts[] = implode("\n", [
             $total > 1
-                ? 'SCENE ' . ($index + 1) . ' OF ' . $total . ': one separate clip. The clips are edited together afterwards, so repeat exactly the same character, setting and camera framing in every scene.'
+                ? 'SCENE ' . ($index + 1) . ' OF ' . $total . ': one separate clip. The clips are edited together afterwards, so keep exactly the same character, wardrobe, setting and lighting in every scene; only the camera angle and his gestures change.'
                     . ($index > 0 ? ' This scene continues the same talk: he does not greet again or introduce himself again.' : '')
                 : 'SCENE 1 OF 1: one single clip.',
             '',
-            'REFERENCE IMAGE (attach the character reference sheet to the video tool together with this prompt, in every scene): one image with five views of the SAME man: front, left profile, right profile, 3/4 left and 3/4 right. It is the only source of his face, head shape, hair, beard, glasses, gold chain and black t-shirt. Copy him exactly from it and never redesign him.',
+            'REFERENCE IMAGE (attach the character reference sheet to the video tool together with this prompt, in every scene): one image with five views of the SAME man: front, left profile, right profile, 3/4 left and 3/4 right. Use it ONLY to keep his face and identity: face shape and features, skin tone, hair, beard, glasses and body build. Copy those exactly and never redesign him. Do not copy the clothes, accessories, pose or grey background of the sheet.',
             '',
             'CHARACTER (use the attached reference image, do not change identity):',
             radar_character_master_prompt('en'),
             '',
             $standards['same_character_every_scene']['rule'],
+            $standards['new_look_every_video']['rule'],
+            '',
+            'WARDROBE (made for this news; keep it identical in every scene of this video): ' . $direction['outfit'] . '.' . ($direction['accessories'] !== '' ? ' Accessories: ' . $direction['accessories'] . '.' : ' No extra accessories.'),
             '',
             'SHOT: vertical 9:16, about ' . radar_scene_seconds($chunk) . ' seconds (never more than ' . RADAR_SCENE_MAX_SECONDS . ' seconds), handheld smartphone selfie style, ' . $template['framing'] . ' and looking straight at the camera. Slight natural camera shake, no cinematic filters.',
+            'CAMERA ANGLE FOR THIS SCENE: ' . $view['angle'] . '. Keep his face inside the safe area described in the LAYOUT NOTE. Body language in this scene: he ' . $view['gesture'] . '.',
             'SETTING: ' . $setting . '.',
+            'LIGHTING AND MOOD: ' . ($direction['lighting'] !== '' ? $direction['lighting'] : 'soft natural daylight') . ' (' . ($moods[$direction['mood']] ?? $moods['casual']) . ' look).',
             'EXPRESSION AND ENERGY: ' . $expression['visual'] . '. Keep this same reaction and energy in every scene. Spontaneous, funny and expressive body language, natural hand gestures.',
             $template['layout'],
             '',
@@ -280,7 +294,7 @@ function radar_video_prompts(array $parts): array
             $standards['no_smile_after_speech']['rule'],
             '',
             'CONTEXT (do not show or invent any text on screen): reacting to the headline "' . trim($parts['headline']) . '" reported by ' . trim($parts['source']) . '.',
-            'AVOID: ' . $standards['no_smile_after_speech']['avoid'] . ', ' . $standards['same_character_every_scene']['avoid'] . ', news-anchor look, studio desk, teleprompter feel, extra people, subtitles burned into the video, logos, watermarks, distorted hands, a different face or body type, changing glasses/chain/watch/clothing.',
+            'AVOID: ' . $standards['no_smile_after_speech']['avoid'] . ', ' . $standards['same_character_every_scene']['avoid'] . ', ' . $standards['new_look_every_video']['avoid'] . ', news-anchor look, studio desk, teleprompter feel, extra people, subtitles burned into the video, logos, watermarks, distorted hands, a different face or body type, changing his face, glasses or body build, clothes that change between scenes, logos or readable text on clothes.',
         ]);
     }
     return $prompts;
