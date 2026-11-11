@@ -183,6 +183,10 @@ function radar_react_dialog(): string
     foreach (radar_video_templates() as $key => $template) {
         $layouts .= '<option value="' . radar_h($key) . '">' . radar_h($template['label']) . '</option>';
     }
+    $characters = '<option value="">Automático (pela categoria da notícia)</option>';
+    foreach (array_keys(radar_characters()) as $slug) {
+        $characters .= '<option value="' . radar_h($slug) . '">' . radar_h(radar_character_get($slug)['name']) . '</option>';
+    }
     $config = radar_ai_config();
     $mode = $config['provider'] !== 'none' && $config['has_key']
         ? 'A IA configurada (' . RADAR_AI_PROVIDERS[$config['provider']] . ') escreverá o roteiro.'
@@ -192,6 +196,7 @@ function radar_react_dialog(): string
         . '<p class="muted" id="react-news-title"></p><p class="hint">' . radar_h($mode) . '</p>'
         . '<div class="field-row"><label>Cenas<select id="react-scenes"><option value="1">1 cena (até 25 s)</option><option value="2">2 cenas (até 50 s)</option><option value="3" selected>3 cenas (até 75 s)</option><option value="4">4 cenas (até 100 s)</option><option value="5">5 cenas (até 125 s)</option></select></label>'
         . '<label>Tom<select id="react-tone">' . $tones . '</select></label></div>'
+        . '<label>Quem fala<select id="react-character">' . $characters . '</select></label>'
         . '<label>Modelo do vídeo<select id="react-layout">' . $layouts . '</select></label>'
         . '<label>O que você já conferiu? <span class="optional">opcional</span><textarea id="react-context" rows="3" maxlength="2000" placeholder="Fatos confirmados na matéria. Sem isso, o roteiro usa só a manchete e o resumo do veículo."></textarea></label>'
         . '<p class="error-text" id="react-error" role="alert" hidden></p>'
@@ -212,6 +217,7 @@ function radar_news_card(array $n, bool $showSave = true): string
         : '<div class="no-image">' . radar_icon('image') . '<span>Sem imagem</span></div>';
     $age = $n['published_known'] ? radar_age_label($n['age_minutes']) : 'visto ' . radar_age_label($n['age_minutes']);
     $coverage = $n['source_count'] > 1 ? '<span class="pill">' . (int)$n['source_count'] . ' veículos</span>' : '';
+    $speaker = count(radar_characters()) > 1 ? '<span class="pill">' . radar_h(radar_character_get(radar_character_for_category((string)$n['category']))['name']) . '</span>' : '';
     $trend = $n['trend_hits'] !== [] ? '<span class="pill trend">Em alta: ' . radar_h($n['trend_hits'][0]['query']) . '</span>' : '';
     $html = '<article class="card" data-news="' . (int)$n['id'] . '">'
         . '<a class="card-media" href="noticia.php?id=' . (int)$n['id'] . '" tabindex="-1" aria-hidden="true">' . $image
@@ -219,7 +225,7 @@ function radar_news_card(array $n, bool $showSave = true): string
         . '<div class="card-body"><span class="eyebrow">' . radar_h($n['category']) . '</span>'
         . '<h3><a href="noticia.php?id=' . (int)$n['id'] . '">' . radar_h($n['title']) . '</a></h3>'
         . '<p class="meta">' . radar_h($n['source']) . ' · ' . radar_h($age) . '</p>'
-        . '<div class="pills">' . $coverage . $trend . '</div>';
+        . '<div class="pills">' . $coverage . $trend . $speaker . '</div>';
     if ($n['score_summary'] !== '') {
         $html .= '<p class="why">' . radar_h($n['score_summary']) . '</p>';
     }

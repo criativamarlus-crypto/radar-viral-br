@@ -112,6 +112,7 @@
         scenes: Number($('#react-scenes').value),
         tone: $('#react-tone').value,
         layout: $('#react-layout')?.value || '',
+        character: $('#react-character')?.value || '',
         context: $('#react-context').value,
       });
       location.href = 'estudio.php?news=' + reactNewsId + '&roteiro=' + result.item.id;

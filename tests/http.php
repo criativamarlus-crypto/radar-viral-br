@@ -327,6 +327,27 @@ try {
     $mcpLook = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 2]);
     $mcpLookData = json_decode(json_decode($mcpLook['body'], true)['result']['content'][0]['text'] ?? '{}', true);
     check('the MCP react brings the look of the news and says the face never changes', static fn(): bool => ($mcpLookData['visual_desta_noticia']['roupa'] ?? '') !== '' && ($mcpLookData['visual_desta_noticia']['o_rosto_nunca_muda'] ?? false) === true && str_contains($mcpLookData['prompt_de_video'] ?? '', 'WARDROBE'));
+    $claraPage = localRequest('personagem.php?c=clara');
+    check('Meus Personagens shows Clara: identity, categories, reference upload and her own prompt', static fn(): bool => $claraPage['status'] === 200 && str_contains($claraPage['body'], 'Clara Contas') && str_contains($claraPage['body'], 'Traduzindo o economês para o seu bolso') && str_contains($claraPage['body'], 'name="categories[]" value="Cartão de crédito" checked')
+        && str_contains($claraPage['body'], 'name="character" value="clara"') && str_contains($claraPage['body'], 'Brazilian woman') && str_contains($claraPage['body'], 'Ela pode sorrir') && str_contains($claraPage['body'], 'Bora fazer a conta?'));
+    $saveCharacter = localRequest('personagem.php', 'POST', formBody(['csrf' => $writeCsrf, 'slug' => 'clara', 'name' => 'Clara Contas', 'categories' => ['Finanças', 'Cartão de crédito']]), FORM);
+    $afterSave = localRequest('personagem.php?c=clara');
+    check('the name and categories of a character can be saved from the panel', static fn(): bool => in_array($saveCharacter['status'], [302, 303], true) && str_contains($afterSave['body'], 'name="categories[]" value="Finanças" checked') && !str_contains($afterSave['body'], 'name="categories[]" value="Economia" checked'));
+    localRequest('personagem.php', 'POST', formBody(['csrf' => $writeCsrf, 'slug' => 'clara', 'name' => 'Clara Contas', 'categories' => ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia']]), FORM);
+    $genClara = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'scenes' => 2, 'character' => 'clara']);
+    $genClaraData = json_decode($genClara['body'], true)['item'] ?? [];
+    check('GERAR REACT takes the character and returns her name and her prompt', static fn(): bool => $genClara['status'] === 201 && ($genClaraData['character'] ?? '') === 'clara' && ($genClaraData['character_name'] ?? '') === 'Clara Contas' && str_contains($genClaraData['video_prompt'] ?? '', 'Brazilian woman'));
+    $promptClara = $post(['action' => 'video_prompt', 'character' => 'clara', 'spoken' => 'Oi. Tchau.', 'expression' => 'serio', 'scene' => 'casa', 'scenes' => 1, 'headline' => 'H', 'source' => 'S']);
+    $lookClara = $post(['action' => 'direction', 'character' => 'clara', 'news_id' => $firstNewsId, 'scenes' => 2]);
+    check('the Studio prompt and the new look follow the chosen character', static fn(): bool => str_contains(json_decode($promptClara['body'], true)['prompt'] ?? '', 'SAME woman') && str_contains(json_decode($promptClara['body'], true)['prompt'] ?? '', 'a plain black fitted sleeveless top')
+        && ($lookClara['status'] ?? 0) === 200 && !str_contains(json_decode($lookClara['body'], true)['direction']['accessories'] ?? '', 'gold chain and a gold wristwatch'));
+    $studioChar = localRequest('estudio.php?news=' . $firstNewsId);
+    check('the Studio offers the characters, their sheets and the one suggested for the news', static fn(): bool => str_contains($studioChar['body'], 'id="st-character"') && str_contains($studioChar['body'], '"characterList":[{"slug":"beto"') && str_contains($studioChar['body'], '"slug":"clara"') && str_contains($studioChar['body'], '"suggestedCharacter":"'));
+    check('the "Gerar react" dialog lets you pick who speaks, automatic by default', static fn(): bool => str_contains(localRequest('noticias.php?janela=24')['body'], 'id="react-character"') && str_contains(localRequest('noticias.php?janela=24')['body'], 'Automático (pela categoria da notícia)'));
+    $mcpClara = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 1, 'personagem' => 'clara']);
+    $mcpClaraData = json_decode(json_decode($mcpClara['body'], true)['result']['content'][0]['text'] ?? '{}', true);
+    $mcpBadCharacter = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'personagem' => 'inventado']);
+    check('the MCP accepts the character and refuses an unknown one', static fn(): bool => ($mcpClaraData['personagem'] ?? '') === 'Clara Contas' && str_contains($mcpClaraData['prompt_de_video'] ?? '', 'Brazilian woman') && (json_decode($mcpBadCharacter['body'], true)['error']['code'] ?? 0) === -32602);
     $collectFresh = $post(['action' => 'collect', 'trigger' => 'auto']);
     check('automatic collection does nothing while data is fresh (no useless requests to the sources)', static fn(): bool => $collectFresh['status'] === 200 && (json_decode($collectFresh['body'], true)['status'] ?? '') === 'fresh');
     $project = $post(['action' => 'project_save', 'title' => 'Projeto HTTP', 'headline' => 'Headline', 'script' => 'Falado', 'news_id' => $firstNewsId, 'cover_x' => 30, 'cover_zoom' => 1.5]);
@@ -355,7 +376,7 @@ try {
     $sheetUpload = localRequest('api.php', 'POST', $sheetBody, array_merge($sheetHeaders, ['X-CSRF-Token: ' . $writeCsrf]));
     $studioWithSheet = localRequest('estudio.php?news=' . $firstNewsId);
     $scenePageWithSheet = localRequest('roteiro.php?id=' . ($scenesData['id'] ?? 0));
-    check('after uploading the reference sheet the Studio and the script page offer it for download with the prompts', static fn(): bool => $sheetUpload['status'] === 201 && str_contains($studioWithSheet['body'], '"reference":{"id":"') && str_contains($studioWithSheet['body'], 'id="st-scenes"') && str_contains($studioWithSheet['body'], 'id="st-prompts"')
+    check('after uploading the reference sheet the Studio and the script page offer it for download with the prompts', static fn(): bool => $sheetUpload['status'] === 201 && str_contains($studioWithSheet['body'], '"references":{"beto":{"id":"') && str_contains($studioWithSheet['body'], 'id="st-scenes"') && str_contains($studioWithSheet['body'], 'id="st-prompts"')
         && str_contains($scenePageWithSheet['body'], 'Anexe esta imagem em cada cena') && str_contains($scenePageWithSheet['body'], 'download=1'));
     $mcpScenes = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 2]);
     $mcpScenesData = json_decode(json_decode($mcpScenes['body'], true)['result']['content'][0]['text'] ?? '{}', true);

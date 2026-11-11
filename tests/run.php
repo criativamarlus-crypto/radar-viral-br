@@ -1103,6 +1103,108 @@ check('Studio projects keep the look', static function (): bool {
     $without = radar_project_save(null, ['title' => 'Sem visual', 'headline' => 'H']);
     return ($project['direction']['outfit'] ?? '') === 'a charcoal merino turtleneck' && radar_project_get($project['id'])['direction']['accessories'] === 'a plain black watch' && $without['direction'] === null;
 });
+check('there are two characters, Beto (the default generalist) and Clara (finance), each with an identity of its own', static function (): bool {
+    $all = radar_characters();
+    $clara = radar_characters()['clara'];
+    return array_keys($all) === ['beto', 'clara'] && radar_character_default_slug() === 'beto' && radar_character_valid('clara') && !radar_character_valid('x') && radar_character_slug('nope') === 'beto' && radar_character_slug(null) === 'beto'
+        && $clara['gender'] === 'f' && $clara['name'] === 'Clara Contas' && str_contains($clara['identity_en'], 'Brazilian woman') && str_contains($clara['identity_pt'], 'mulher brasileira') && str_contains($clara['identity_en'], 'WARDROBE')
+        && count($clara['personality']) >= 4 && count($clara['pillars']) >= 4 && count($clara['hooks']) >= 3 && str_contains(implode(' ', $clara['personality']), 'não aconselha')
+        && radar_character_master_prompt('en', 'clara') !== radar_character_master_prompt('en', 'beto') && radar_character_master_prompt('en') === radar_character_master_prompt('en', 'beto')
+        && radar_character_personality('clara') !== radar_character_personality('beto');
+});
+check('the news category suggests who speaks: finance and cards go to Clara, the rest to the generalist; the panel can change it', static function (): bool {
+    $before = [radar_character_for_category('Cartão de crédito'), radar_character_for_category('Finanças pessoais'), radar_character_for_category('Economia'), radar_character_for_category('Futebol'), radar_character_for_category('Geral')];
+    radar_character_save('clara', '  Clara <b>Contas</b> ', ['Finanças', 'Inventada']);
+    $changed = [radar_character_for_category('Cartão de crédito'), radar_character_for_category('Finanças'), radar_character_get('clara')['name'], radar_character_get('clara')['categories']];
+    $invalidSlug = rejects(static fn() => radar_character_save('x', 'Nome', []), InvalidArgumentException::class);
+    $emptyName = rejects(static fn() => radar_character_save('clara', '   ', []), InvalidArgumentException::class);
+    $longName = rejects(static fn() => radar_character_save('clara', str_repeat('a', 41), []), InvalidArgumentException::class);
+    radar_character_save('clara', 'Clara Contas', ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia']);
+    return $before === ['clara', 'clara', 'clara', 'beto', 'beto'] && $changed[0] === 'beto' && $changed[1] === 'clara' && $changed[2] === 'Clara Contas' && $changed[3] === ['Finanças']
+        && $invalidSlug && $emptyName && $longName && radar_character_for_category('Cartão de crédito') === 'clara';
+});
+check('prompts speak of a woman for Clara and a man for Beto, with every pronoun token replaced', static function (): bool {
+    $spoken = implode(' ', array_map(static fn(int $i): string => 'Parte ' . $i . ' ' . implode(' ', array_fill(0, 18, 'fala')) . ' fim.', range(1, 6)));
+    $parts = ['spoken' => $spoken, 'expression' => 'pensativo', 'scene' => 'escritorio', 'headline' => 'H', 'source' => 'S', 'layout' => 'caption_card', 'scenes' => 3];
+    $clara = radar_video_prompt($parts + ['character' => 'clara']);
+    $beto = radar_video_prompt($parts + ['character' => 'beto']);
+    $default = radar_video_prompt($parts);
+    return str_contains($clara, 'SAME woman') && str_contains($clara, 'Brazilian woman') && str_contains($clara, 'she may smile') && str_contains($clara, 'keep her face and gestures') && str_contains($clara, 'Body language in this scene: she ')
+        && !str_contains($clara, 'Black Brazilian man') && !str_contains($clara, 'SAME man') && !str_contains($clara, ' he may smile') && preg_match('/(his|him|he)/', $clara) === 0
+        && str_contains($beto, 'SAME man') && str_contains($beto, 'Black Brazilian man') && str_contains($beto, 'he may smile') && !str_contains($beto, 'woman') && preg_match('/(she|her)/', $beto) === 0
+        && $default === $beto && preg_match('/\{(he|He|his|His|him|man|ele|Ele|homem|dele)\}/', $clara . $beto) === 0
+        && radar_video_standards('clara')['same_character_every_scene']['rule'] !== radar_video_standards('beto')['same_character_every_scene']['rule'] && str_contains(radar_video_standards('clara')['no_smile_after_speech']['description'], 'Ela pode sorrir');
+});
+check('each character draws her own wardrobe and accessories, and never the other one\'s', static function (): bool {
+    $beto = radar_direction_pools('beto');
+    $clara = radar_direction_pools('clara');
+    foreach (array_keys(radar_direction_moods()) as $mood) {
+        if ($clara['accessories'][$mood] === $beto['accessories'][$mood] || count($clara['outfit'][$mood]) < count($beto['outfit'][$mood])) {
+            return false;
+        }
+    }
+    for ($i = 0; $i < 12; $i++) {
+        $look = radar_direction_generate(['category' => 'Cartão de crédito', 'character' => 'clara'], 3);
+        if (!in_array($look['accessories'], $clara['accessories']['business'], true) || str_contains($look['accessories'], 'gold chain') && !str_contains($look['accessories'], 'thin')) {
+            return false;
+        }
+    }
+    return radar_direction_default('clara')['outfit'] === 'a plain black fitted sleeveless top' && radar_direction_default()['outfit'] === 'a plain black casual t-shirt'
+        && in_array('a tailored camel blazer over a black fitted tank top', $clara['outfit']['business'], true) && !in_array('a tailored camel blazer over a black fitted tank top', $beto['outfit']['business'], true);
+});
+check('images and the reference sheet belong to one character: the other one is not touched', static function () use ($png): bool {
+    $betoImages = count(radar_character_images('beto'));
+    $betoSheet = radar_character_reference('beto');
+    $sheet = radar_media_save_bytes($png, 'reference', ['character' => 'clara', 'label' => 'Folha da Clara']);
+    $still = radar_media_save_bytes($png, 'character', ['character' => 'clara', 'label' => 'Frente']);
+    $second = radar_media_save_bytes($png . '', 'character', ['character' => 'clara', 'label' => 'Outra']);
+    $secondSheet = radar_media_save_bytes($png . '', 'reference', ['character' => 'clara', 'label' => 'Folha nova']);
+    $ok = count(radar_character_images('beto')) === $betoImages && radar_character_reference('beto') === $betoSheet && radar_character_reference('clara')['id'] === $secondSheet['id'] && radar_media_path($sheet['id']) === null
+        && count(radar_character_images('clara')) === 2 && radar_character_primary('clara')['id'] === $still['id'] && (int)radar_media_get($second['id'])['is_primary'] === 0
+        && radar_media_get($still['id'])['character_slug'] === 'clara' && radar_media_get($secondSheet['id'])['character_slug'] === 'clara';
+    radar_character_set_primary($second['id']);
+    $switched = radar_character_primary('clara')['id'] === $second['id'] && radar_character_primary('beto') === radar_character_primary();
+    radar_media_delete($second['id']);
+    $next = radar_character_primary('clara')['id'] === $still['id'];
+    radar_media_delete($still['id']);
+    radar_media_delete($secondSheet['id']);
+    return $ok && $switched && $next && radar_character_reference('clara') === null && radar_character_images('clara') === [];
+});
+check('a finance react is made by Clara unless another character is chosen, and the script keeps who speaks', static function (): bool {
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (603, 'ch1', 'Fonte F', 'Rotativo do cartão chega a 451% ao ano', 'https://f.example.com/1', 'Juros do cartão rotativo seguem altos, segundo o Banco Central.', ?, ?, ?, 'Cartão de crédito', 60, 1)", [time() - 900, time() - 900, time()]);
+    $auto = radar_react_generate(603, ['scenes' => 2]);
+    $forced = radar_react_generate(603, ['scenes' => 2, 'character' => 'beto']);
+    $invalid = radar_react_generate(603, ['scenes' => 2, 'character' => 'inventado']);
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (604, 'ch2', 'Fonte P', 'Senado vota projeto na terça', 'https://f.example.com/2', 'Resumo do veículo.', ?, ?, ?, 'Política', 60, 1)", [time() - 900, time() - 900, time()]);
+    $politics = radar_react_generate(604, ['scenes' => 2]);
+    $reloaded = radar_script_get($auto['id']);
+    return $auto['character'] === 'clara' && $auto['character_name'] === 'Clara Contas' && str_contains($auto['video_prompt'], 'Brazilian woman') && !str_contains($auto['video_prompt'], 'Black Brazilian man')
+        && in_array(explode(' ', $auto['hook'])[0], ['Bora', 'Presta', 'Deixa', 'Vamos'], true) && str_contains($auto['commentary'], 'não é recomendação financeira')
+        && $forced['character'] === 'beto' && str_contains($forced['video_prompt'], 'Black Brazilian man') && $invalid['character'] === 'clara' && $politics['character'] === 'beto'
+        && $reloaded['character'] === 'clara' && count($auto['direction']['angles']) === 2;
+});
+check('switching the character of a script rebuilds the prompt and draws a wardrobe from the new character', static function (): bool {
+    $script = radar_react_generate(603, ['scenes' => 1, 'character' => 'beto']);
+    $changed = radar_script_update($script['id'], ['character' => 'clara']);
+    $same = radar_script_update($script['id'], ['hook' => 'Gancho novo para o teste.']);
+    $invalid = radar_script_update($script['id'], ['character' => 'inventado']);
+    return $script['character'] === 'beto' && $changed['character'] === 'clara' && str_contains($changed['video_prompt'], 'Brazilian woman') && $changed['direction']['outfit'] !== $script['direction']['outfit']
+        && $same['character'] === 'clara' && $same['direction']['outfit'] === $changed['direction']['outfit'] && $invalid['character'] === 'clara';
+});
+check('the AI is told who speaks: name, gender and way of speaking of the character', static function (): bool {
+    $news = ['title' => 'Juros do cartão', 'source' => 'G1', 'url' => 'https://g1.example.com/x', 'category' => 'Cartão de crédito', 'published_at' => null, 'summary' => '', 'source_count' => 1, 'image' => null];
+    $clara = radar_ai_user_message($news, 66, 'direto', '', 3, [], 'clara');
+    $beto = radar_ai_user_message($news, 66, 'direto', '', 3, [], 'beto');
+    return str_contains($clara, 'Clara Contas') && str_contains($clara, 'feminino') && str_contains($clara, 'Bora fazer a conta?') && str_contains($clara, 'mulher brasileira') && !str_contains($clara, 'homem negro')
+        && str_contains($beto, '"nome_do_personagem": "Beto"') && str_contains($beto, 'masculino') && str_contains($beto, 'homem negro');
+});
+check('an older script and project read as Beto', static function (): bool {
+    radar_db_exec("INSERT INTO scripts (news_title, news_url, news_source, mode, duration, tone, hook, script, commentary, cta, expression, scene, video_prompt, created_at, updated_at) VALUES ('Velha 2', 'https://old.example.com/w', 'F', 'rascunho', 25, 'direto', 'g', 's', 'c', 'x', 'serio', 'casa', '', ?, ?)", [time(), time()]);
+    $script = radar_script_get((int)radar_db()->lastInsertId());
+    $project = radar_project_save(null, ['title' => 'Antigo', 'headline' => 'H']);
+    $clara = radar_project_save(null, ['title' => 'Da Clara', 'headline' => 'H', 'character' => 'clara']);
+    return $script['character'] === 'beto' && str_contains($script['video_prompt'], 'Black Brazilian man') && $project['character'] === 'beto' && $clara['character'] === 'clara' && radar_project_get($clara['id'])['character'] === 'clara';
+});
 check('two video templates exist: the full-screen caption + news card (default, first) and the original split', static function (): bool {
     $templates = radar_video_templates();
     foreach (['split', 'caption_card'] as $key) {

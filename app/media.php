@@ -83,22 +83,23 @@ function radar_media_save_bytes(string $bytes, string $kind, array $meta = []): 
         @unlink($temp);
         throw $error;
     }
-    $isPrimary = $kind === 'character' && (!empty($meta['is_primary']) || radar_db_value("SELECT 1 FROM media WHERE kind = 'character' LIMIT 1") === null);
+    $slug = radar_character_slug($meta['character'] ?? null);
+    $isPrimary = $kind === 'character' && (!empty($meta['is_primary']) || radar_db_value("SELECT 1 FROM media WHERE kind = 'character' AND character_slug = ? LIMIT 1", [$slug]) === null);
     if ($isPrimary) {
-        radar_db_exec("UPDATE media SET is_primary = 0 WHERE kind = 'character'");
+        radar_db_exec("UPDATE media SET is_primary = 0 WHERE kind = 'character' AND character_slug = ?", [$slug]);
     }
     radar_db_exec(
-        'INSERT INTO media (id, kind, news_id, mime, width, height, bytes, label, is_primary, source_url, credit, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO media (id, kind, news_id, mime, width, height, bytes, label, is_primary, source_url, credit, note, created_at, character_slug) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             $id, $kind, $meta['news_id'] ?? null, $info['mime'], $info['width'], $info['height'], strlen($bytes),
             mb_substr((string)($meta['label'] ?? ''), 0, 120), $isPrimary ? 1 : 0, $meta['source_url'] ?? null,
             isset($meta['credit']) ? mb_substr((string)$meta['credit'], 0, 200) : null,
-            isset($meta['note']) ? mb_substr((string)$meta['note'], 0, 400) : null, time(),
+            isset($meta['note']) ? mb_substr((string)$meta['note'], 0, 400) : null, time(), $slug,
         ]
     );
     if ($kind === 'reference') {
         // There is a single reference sheet: the new one replaces the old one.
-        foreach (radar_db_all("SELECT id FROM media WHERE kind = 'reference' AND id != ?", [$id]) as $old) {
+        foreach (radar_db_all("SELECT id FROM media WHERE kind = 'reference' AND character_slug = ? AND id != ?", [$slug, $id]) as $old) {
             radar_media_delete((string)$old['id']);
         }
     }
@@ -125,7 +126,7 @@ function radar_media_delete(string $id): bool
     radar_db_exec('UPDATE projects SET character_media_id = NULL WHERE character_media_id = ?', [$id]);
     radar_db_exec('DELETE FROM media WHERE id = ?', [$id]);
     if ($row['kind'] === 'character' && (int)$row['is_primary'] === 1) {
-        $next = radar_db_value("SELECT id FROM media WHERE kind = 'character' ORDER BY created_at DESC LIMIT 1");
+        $next = radar_db_value("SELECT id FROM media WHERE kind = 'character' AND character_slug = ? ORDER BY created_at DESC LIMIT 1", [$row['character_slug']]);
         if (is_string($next)) {
             radar_character_set_primary($next);
         }

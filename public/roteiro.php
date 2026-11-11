@@ -24,7 +24,7 @@ if ($script === null) {
     exit;
 }
 $csrf = radar_csrf_token();
-$reference = radar_character_reference();
+$reference = radar_character_reference($script['character']);
 $expressions = radar_character_expressions();
 $scenes = radar_character_scenes();
 
@@ -33,7 +33,7 @@ radar_page_start('Roteiro de react', 'roteiros.php');
 <p><a href="roteiros.php">← Roteiros criados</a></p>
 <div class="page-head">
     <div><h1>Roteiro de react</h1>
-        <p><?= radar_h($script['mode_label']) ?> · <?= count($script['video_prompts']) ?> <?= count($script['video_prompts']) === 1 ? 'cena' : 'cenas' ?> · ~<?= (int)$script['estimated_seconds'] ?> s falados · tom <?= radar_h($script['tone']) ?></p></div>
+        <p><?= radar_h($script['character_name']) ?> · <?= radar_h($script['mode_label']) ?> · <?= count($script['video_prompts']) ?> <?= count($script['video_prompts']) === 1 ? 'cena' : 'cenas' ?> · ~<?= (int)$script['estimated_seconds'] ?> s falados · tom <?= radar_h($script['tone']) ?></p></div>
     <div class="row-actions">
         <a class="btn primary" href="estudio.php?roteiro=<?= (int)$script['id'] ?>">Abrir no Estúdio</a>
         <a class="btn ghost" href="api.php?action=script&amp;id=<?= (int)$script['id'] ?>&amp;format=txt">Exportar .txt</a>
@@ -82,6 +82,7 @@ radar_page_start('Roteiro de react', 'roteiros.php');
             <div class="field-row">
                 <label>Expressão do personagem<select name="expression"><?php foreach ($expressions as $key => $info): ?><option value="<?= radar_h($key) ?>"<?= $script['expression'] === $key ? ' selected' : '' ?>><?= radar_h($info['label']) ?></option><?php endforeach; ?></select></label>
                 <label>Cenário<select name="scene"><?php foreach ($scenes as $key => $label): ?><option value="<?= radar_h($key) ?>"<?= $script['scene'] === $key ? ' selected' : '' ?>><?= radar_h($label) ?></option><?php endforeach; ?></select></label>
+                <label>Personagem<select name="character"><?php foreach (radar_characters() as $slug => $preset): ?><option value="<?= radar_h($slug) ?>"<?= $script['character'] === $slug ? ' selected' : '' ?>><?= radar_h(radar_character_get($slug)['name']) ?></option><?php endforeach; ?></select></label>
                 <label>Cenas<select name="scenes"><?php for ($n = 1; $n <= RADAR_SCENE_MAX_COUNT; $n++): ?><option value="<?= $n ?>"<?= $script['scenes'] === $n ? ' selected' : '' ?>><?= $n ?> <?= $n === 1 ? 'cena' : 'cenas' ?> (até <?= $n * RADAR_SCENE_MAX_SECONDS ?> s)</option><?php endfor; ?></select></label>
                 <label>Modelo do vídeo<select name="layout"><?php foreach (radar_video_templates() as $key => $template): ?><option value="<?= radar_h($key) ?>"<?= $script['layout'] === $key ? ' selected' : '' ?>><?= radar_h($template['label']) ?></option><?php endforeach; ?></select></label>
             </div>
@@ -106,7 +107,7 @@ radar_page_start('Roteiro de react', 'roteiros.php');
             <?php if ($reference !== null): ?>
                 <div class="reference-box"><img src="media.php?id=<?= radar_h($reference['id']) ?>" alt="Folha de referência do personagem"><div><strong>Anexe esta imagem em cada cena</strong><br><span class="hint">A ferramenta de vídeo pega a imagem junto com a fala e mantém o mesmo personagem e a mesma reação.</span><br><a class="btn ghost small" href="media.php?id=<?= radar_h($reference['id']) ?>&amp;download=1">Baixar imagem de referência</a></div></div>
             <?php else: ?>
-                <div class="notice warn">Falta a folha de referência do personagem. Cadastre em <a href="personagem.php">Meu Personagem</a> para baixar e anexar aqui.</div>
+                <div class="notice warn">Falta a folha de referência de <?= radar_h($script['character_name']) ?>. Cadastre em <a href="personagem.php?c=<?= radar_h($script['character']) ?>">Meus Personagens</a> para baixar e anexar aqui.</div>
             <?php endif; ?>
             <p class="hint">Visual: <strong><?= radar_h($script['direction']['outfit']) ?></strong><?= $script['direction']['accessories'] !== '' ? ' · ' . radar_h($script['direction']['accessories']) : '' ?></p>
             <?php foreach ($script['video_prompts'] as $index => $scenePrompt): ?>

@@ -40,10 +40,15 @@ function radar_direction_mood(string $category, string $expression = ''): string
     };
 }
 
-/** @return array<string,array<string,array<int,string>>> pool => mood => options */
-function radar_direction_pools(): array
+/**
+ * Outfits (shared base plus what the character adds), accessories (the character's own) and light, by mood.
+ *
+ * @return array<string,array<string,array<int,string>>> pool => mood => options
+ */
+function radar_direction_pools(?string $slug = null): array
 {
-    return [
+    $preset = radar_characters()[radar_character_slug($slug)];
+    $pools = [
         'outfit' => [
             'serious' => [
                 'a charcoal grey crew-neck sweater over a plain white collared shirt',
@@ -111,56 +116,20 @@ function radar_direction_pools(): array
                 'a sand-colored short-sleeve button-up shirt',
             ],
         ],
-        'accessories' => [
-            'serious' => [
-                'a plain black watch and no other jewelry',
-                'a thin silver chain under the collar and a steel watch',
-                'a dark leather-strap watch',
-                'no jewelry at all, only a simple black watch',
-            ],
-            'business' => [
-                'a steel wristwatch with a brown leather strap and a thin silver chain',
-                'a minimalist silver watch and a small silver ring',
-                'a navy pocket square and a slim black watch',
-                'a thin gold chain and a classic gold-tone wristwatch',
-                'a leather bracelet and a steel watch',
-            ],
-            'sport' => [
-                'a black sports watch and a white sweatband on the wrist',
-                'a plain dark baseball cap with no logo, worn forward',
-                'a smartwatch with a black silicone strap',
-                'a thin sweatband on the forehead under the cap line and a sports watch',
-            ],
-            'fun' => [
-                'a chunky gold chain and a colorful beaded bracelet',
-                'wireless headphones resting around the neck and a bright wristband',
-                'a bucket hat in a solid color and a thick gold chain',
-                'a stack of colorful bracelets and a silver chain',
-                'a thick gold chain and a gold wristwatch',
-            ],
-            'tech' => [
-                'wireless earbuds in his ears and a smartwatch',
-                'a black smartwatch and a lanyard with a plain badge',
-                'a silver wristwatch and a small silver ring',
-                'over-ear headphones around the neck',
-            ],
-            'casual' => [
-                'a thick gold chain and a gold wristwatch',
-                'a black beanie and a plain watch',
-                'a leather bracelet and a silver watch',
-                'a dark baseball cap with no logo and a thin silver chain',
-                'no accessories except a simple watch',
-            ],
-        ],
         'lighting' => [
             'serious' => ['cool overcast daylight with soft shadows', 'low-key lighting with a soft warm rim light', 'neutral flat indoor light, calm and clean', 'dim window light with a quiet, tense mood'],
             'business' => ['bright even indoor light, clean and professional', 'soft warm daylight from the side', 'cool morning light through a window', 'clean neutral light with a subtle warm background lamp'],
             'sport' => ['bright sunny daylight with crisp contrast', 'golden-hour sunlight with long warm highlights', 'energetic high-contrast daylight', 'stadium-evening feel, warm light with a cooler background'],
             'fun' => ['golden-hour sunlight through the window, warm and playful', 'bright saturated daylight with a lively mood', 'neon pink and blue accent light in the background', 'warm party-like light with soft colorful bokeh'],
-            'tech' => ['cool blue accent light with a dark desk lamp glow', 'soft screen glow on his face with ambient room light', 'clean white light with a hint of teal in the background', 'low evening light with a monitor glow behind him'],
+            'tech' => ['cool blue accent light with a dark desk lamp glow', 'soft screen glow on {his} face with ambient room light', 'clean white light with a hint of teal in the background', 'low evening light with a monitor glow behind him'],
             'casual' => ['soft warm daylight from a window', 'overcast natural light, relaxed and honest', 'late-afternoon sun with gentle shadows', 'bright even daylight'],
         ],
     ];
+    foreach (array_keys(radar_direction_moods()) as $mood) {
+        $pools['outfit'][$mood] = array_values(array_unique(array_merge($pools['outfit'][$mood], $preset['outfits_extra'][$mood] ?? [])));
+        $pools['accessories'][$mood] = $preset['accessories'][$mood] ?? ['no accessories except a simple watch'];
+    }
+    return $pools;
 }
 
 /** @return array<int,string> */
@@ -168,14 +137,14 @@ function radar_direction_angle_pool(): array
 {
     return [
         'eye-level handheld selfie angle, slightly off-center',
-        'slightly low angle looking up at him, giving him presence',
-        'slightly high angle, like a phone held a little above his head',
-        'three-quarter view from his left side; he turns to the camera when he speaks',
-        'three-quarter view from his right side; he glances away, then back at the lens',
-        'tight close-up with his face filling the middle of the frame',
-        'medium shot with a slow handheld push-in toward his face',
+        'slightly low angle looking up at {him}, giving {him} presence',
+        'slightly high angle, like a phone held a little above {his} head',
+        'three-quarter view from {his} left side; {he} turns to the camera when {he} speaks',
+        'three-quarter view from {his} right side; {he} glances away, then back at the lens',
+        'tight close-up with {his} face filling the middle of the frame',
+        'medium shot with a slow handheld push-in toward {his} face',
         'camera tilted about 5 degrees for energy, eye-level',
-        'starts with a profile glimpse, then he turns and faces the lens',
+        'starts with a profile glimpse, then {he} turns and faces the lens',
         'steady medium shot with a gentle slide to the side',
     ];
 }
@@ -184,25 +153,26 @@ function radar_direction_angle_pool(): array
 function radar_direction_gesture_pool(): array
 {
     return [
-        'counts a point on his fingers',
+        'counts a point on {his} fingers',
         'opens both palms toward the camera',
         'points at the lens with one finger',
-        'rests his hand on his chin, thinking',
+        'rests {his} hand on {his} chin, thinking',
         'shrugs with raised eyebrows',
         'leans in close as if sharing a secret',
-        'slowly shakes his head, then nods',
+        'slowly shakes {his} head, then nods',
         'taps the air with one hand to stress a word',
         'raises one hand like a "wait a second"',
-        'leans back and crosses his arms for a moment',
+        'leans back and crosses {his} arms for a moment',
     ];
 }
 
-/** The look used by callers that do not pass a direction (kept simple and neutral). @return array<string,mixed> */
-function radar_direction_default(): array
+/** The look used by callers that do not pass a direction: the character's starting look. @return array<string,mixed> */
+function radar_direction_default(?string $slug = null): array
 {
+    $preset = radar_characters()[radar_character_slug($slug)];
     return [
-        'outfit' => 'a plain black casual t-shirt',
-        'accessories' => 'a thick gold chain necklace and a gold wristwatch',
+        'outfit' => $preset['default_outfit'],
+        'accessories' => $preset['default_accessories'],
         'lighting' => 'soft natural daylight',
         'angles' => ['eye-level handheld selfie angle'],
         'gestures' => ['natural hand gestures'],
@@ -215,14 +185,14 @@ function radar_direction_default(): array
  * Make a new look for a news item. Random every time unless a seed is given (old scripts use their id, so
  * their prompt stays the same on every read). Looks listed in $avoid are skipped when possible.
  *
- * @param array{category?:string,expression?:string} $context
+ * @param array{category?:string,expression?:string,character?:string} $context
  * @param array<int,string> $avoid outfits used recently
  * @return array<string,mixed>
  */
 function radar_direction_generate(array $context, int $scenes, array $avoid = [], ?int $seed = null): array
 {
     $mood = radar_direction_mood((string)($context['category'] ?? ''), (string)($context['expression'] ?? ''));
-    $pools = radar_direction_pools();
+    $pools = radar_direction_pools($context['character'] ?? null);
     $counter = 0;
     $rand = static function (int $max) use (&$counter, $seed): int {
         $counter++;

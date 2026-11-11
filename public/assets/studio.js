@@ -13,7 +13,11 @@
   // The chosen video template survives the reload that happens when another news is picked.
   const requestedTemplate = new URLSearchParams(location.search).get('modelo') || '';
   const chosenTemplate = Object.prototype.hasOwnProperty.call(data.templates, requestedTemplate) ? requestedTemplate : data.defaultTemplate;
+  // The character that covers the news category, unless the person chose another (it survives a news change).
+  const requestedCharacter = new URLSearchParams(location.search).get('personagem') || '';
+  const chosenCharacter = data.characterList.some((c) => c.slug === requestedCharacter) ? requestedCharacter : data.suggestedCharacter;
   const state = {
+    character: project ? project.character : (initialScript ? initialScript.character : chosenCharacter),
     newsId: data.news ? data.news.id : null,
     scriptId: data.scriptId,
     projectId: project ? project.id : null,
@@ -35,10 +39,14 @@
     prompt: project ? project.video_prompt : '',
   };
   if (!data.templates[state.template]) state.template = data.defaultTemplate;
-  if (!state.characterId) {
-    const primary = data.characters.find((c) => c.primary) || data.characters[0];
+  const characterImages = () => data.characters.filter((c) => c.character === state.character);
+  const primaryImage = () => { const list = characterImages(); return list.find((c) => c.primary) || list[0] || null; };
+  const characterName = () => (data.characterList.find((c) => c.slug === state.character) || { name: '' }).name;
+  if (!state.characterId || !characterImages().some((c) => c.id === state.characterId)) {
+    const primary = primaryImage();
     state.characterId = primary ? primary.id : null;
   }
+  let characterTouched = false;
   if (!state.coverId && data.media.length) state.coverId = data.media[0].id;
 
   const canvas = $('st-canvas');
@@ -288,7 +296,7 @@
     newsSelect.append(option);
   }
   newsSelect.addEventListener('change', () => {
-    if (newsSelect.value) location.href = 'estudio.php?news=' + encodeURIComponent(newsSelect.value) + '&modelo=' + encodeURIComponent(state.template);
+    if (newsSelect.value) location.href = 'estudio.php?news=' + encodeURIComponent(newsSelect.value) + '&modelo=' + encodeURIComponent(state.template) + (characterTouched ? '&personagem=' + encodeURIComponent(state.character) : '');
   });
 
   const scriptSelect = $('st-script-select');
@@ -310,6 +318,7 @@
   }
   fillSelect($('st-expression'), data.expressions, state.expression);
   fillSelect($('st-scene'), data.scenes, state.scene);
+  fillSelect($('st-character'), Object.fromEntries(data.characterList.map((c) => [c.slug, c.name])), state.character);
   fillSelect($('st-template'), Object.fromEntries(Object.entries(data.templates).map(([k, t]) => [k, t.label])), state.template);
 
   function renderPickers() {
@@ -347,7 +356,7 @@
     }
     const chars = $('st-chars');
     chars.replaceChildren();
-    for (const c of data.characters) {
+    for (const c of characterImages()) {
       const button = document.createElement('button');
       button.type = 'button';
       button.setAttribute('aria-pressed', String(state.characterId === c.id));
@@ -358,7 +367,7 @@
       button.addEventListener('click', () => { state.characterId = c.id; renderPickers(); redraw(); });
       chars.append(button);
     }
-    $('st-char-hint').textContent = data.characters.length ? '' : 'Nenhuma imagem do personagem. Cadastre em “Meu Personagem”.';
+    $('st-char-hint').textContent = characterImages().length ? '' : 'Nenhuma imagem de ' + characterName() + '. Cadastre em “Meus Personagens”.';
   }
 
   function wordCount() { return (state.spoken.match(/[\p{L}\p{N}]+/gu) || []).length; }
@@ -408,9 +417,10 @@
     const box = $('st-reference');
     if (!box) return;
     box.replaceChildren();
-    if (data.reference) {
+    const reference = data.references[state.character];
+    if (reference) {
       const img = document.createElement('img');
-      img.src = 'media.php?id=' + encodeURIComponent(data.reference.id); img.alt = 'Folha de referência do personagem'; img.loading = 'lazy';
+      img.src = 'media.php?id=' + encodeURIComponent(reference.id); img.alt = 'Folha de referência do personagem'; img.loading = 'lazy';
       const info = document.createElement('div');
       const strong = document.createElement('strong');
       strong.textContent = 'Anexe esta imagem em cada cena';
@@ -418,15 +428,15 @@
       hint.className = 'hint';
       hint.textContent = 'A ferramenta de vídeo pega a imagem junto com a fala e mantém o mesmo personagem e a mesma reação.';
       const link = document.createElement('a');
-      link.className = 'btn ghost small'; link.href = 'media.php?id=' + encodeURIComponent(data.reference.id) + '&download=1'; link.textContent = 'Baixar imagem de referência';
+      link.className = 'btn ghost small'; link.href = 'media.php?id=' + encodeURIComponent(reference.id) + '&download=1'; link.textContent = 'Baixar imagem de referência';
       info.append(strong, hint, link);
       box.append(img, info);
     } else {
       const note = document.createElement('div');
       note.className = 'notice warn';
       const link = document.createElement('a');
-      link.href = 'personagem.php'; link.textContent = 'Meu Personagem';
-      note.append('Falta a folha de referência do personagem. Cadastre em ', link, ' para baixar e anexar aqui.');
+      link.href = 'personagem.php?c=' + encodeURIComponent(state.character); link.textContent = 'Meus Personagens';
+      note.append('Falta a folha de referência de ' + characterName() + '. Cadastre em ', link, ' para baixar e anexar aqui.');
       box.append(note);
     }
   }
@@ -437,7 +447,7 @@
     promptTimer = setTimeout(async () => {
       try {
         const result = await api({
-          action: 'video_prompt', spoken: state.spoken, expression: state.expression, scene: state.scene,
+          action: 'video_prompt', character: state.character, spoken: state.spoken, expression: state.expression, scene: state.scene,
           direction: state.direction, scenes: state.scenes, headline: data.news ? data.news.title : state.headline, source: data.news ? data.news.source : '', layout: state.template,
         });
         state.prompt = result.prompt; state.prompts = result.prompts;
@@ -527,7 +537,7 @@
     const button = $('st-reroll');
     button.disabled = true;
     try {
-      const result = await api({ action: 'direction', news_id: state.newsId || 0, scenes: state.scenes, expression: state.expression, outfit: state.direction ? state.direction.outfit : '' });
+      const result = await api({ action: 'direction', character: state.character, news_id: state.newsId || 0, scenes: state.scenes, expression: state.expression, outfit: state.direction ? state.direction.outfit : '' });
       state.direction = result.direction;
       fillLook(); refreshPrompt();
     } catch (error) { toast(error.message, true); }
@@ -538,6 +548,19 @@
   $('st-expression').addEventListener('change', (e) => { state.expression = e.target.value; refreshPrompt(); });
   if ($('st-scenes')) $('st-scenes').addEventListener('change', (e) => { state.scenes = Number(e.target.value); refreshPrompt(); });
   $('st-scene').addEventListener('change', (e) => { state.scene = e.target.value; refreshPrompt(); });
+  function characterHint() {
+    const info = data.characterList.find((c) => c.slug === state.character);
+    $('st-character-hint').textContent = info ? info.tagline + (data.suggestedCharacter === state.character && data.news ? ' · sugerida pela categoria “' + data.news.category + '”.' : '.') : '';
+  }
+  $('st-character').addEventListener('change', (e) => {
+    state.character = e.target.value;
+    characterTouched = true;
+    const primary = primaryImage();
+    state.characterId = primary ? primary.id : null;
+    renderPickers(); renderReference(); characterHint(); redraw();
+    rerollLook(); // another character, another wardrobe; this also rebuilds the prompts
+    toast('Personagem trocado para ' + characterName() + '. O texto falado continua o mesmo; use “Gerar outro roteiro” para a fala ficar no jeito do novo personagem.');
+  });
   for (const [id, key] of [['st-x', 'x'], ['st-y', 'y'], ['st-zoom', 'zoom']]) {
     const el = $(id);
     el.value = state[key];
@@ -549,6 +572,13 @@
     state.scriptId = script.id;
     state.spoken = script.spoken; state.expression = script.expression; state.scene = script.scene;
     state.scenes = script.scenes; state.prompt = script.video_prompt; state.prompts = script.video_prompts; state.direction = script.direction;
+    if (script.character && script.character !== state.character) {
+      state.character = script.character;
+      const primary = primaryImage();
+      state.characterId = primary ? primary.id : null;
+      $('st-character').value = state.character;
+      renderPickers(); renderReference();
+    }
     if ($('st-scenes')) $('st-scenes').value = String(state.scenes);
     if (!keepTemplate && data.templates[script.layout]) state.template = script.layout;
     state.headline = state.template === 'caption_card' && data.news ? data.news.title : script.headline;
@@ -594,14 +624,14 @@
     setGenStatus('Gerando o roteiro…');
     try {
       const result = await api({
-        action: 'generate', news_id: data.news.id, scenes: Number($('st-scenes').value) || data.defaultScenes,
+        action: 'generate', character: state.character, news_id: data.news.id, scenes: Number($('st-scenes').value) || data.defaultScenes,
         tone: toneSelect ? toneSelect.value : 'bem-humorado', layout: state.template,
       });
       const item = result.item;
       const script = {
         id: item.id, news_id: item.news_id, news_title: item.news_title, news_source: item.news_source,
         headline: (item.headlines && item.headlines[0]) || item.news_title, headlines: item.headlines || [], hook: item.hook,
-        spoken: item.spoken, expression: item.expression, scene: item.scene, layout: item.layout, scenes: item.scenes, direction: item.direction, video_prompt: item.video_prompt, video_prompts: item.video_prompts,
+        spoken: item.spoken, expression: item.expression, scene: item.scene, layout: item.layout, scenes: item.scenes, character: item.character, direction: item.direction, video_prompt: item.video_prompt, video_prompts: item.video_prompts,
       };
       data.scripts.unshift(script);
       scriptSelect.append(scriptOption(script));
@@ -641,7 +671,7 @@
       generateScript();
     }
   }
-  renderPrompts(); renderReference(); fillLook();
+  renderPrompts(); renderReference(); fillLook(); characterHint();
   if (!state.direction && !(data.news && !project && !initialScript)) rerollLook();
   if (project) {
     // Projects keep their text; the prompts are rebuilt so they follow today's standards and scene cuts.
@@ -661,7 +691,7 @@
     try {
       const result = await api({
         action: 'project_save', id: state.projectId || 0, script_id: state.scriptId || 0, news_id: state.newsId || 0,
-        title: state.title, headline: state.headline, caption: state.caption, template: state.template, direction: state.direction, script: state.spoken, video_prompt: state.prompt,
+        title: state.title, headline: state.headline, caption: state.caption, template: state.template, character: state.character, direction: state.direction, script: state.spoken, video_prompt: state.prompt,
         cover_media_id: state.coverId || '', character_media_id: state.characterId || '',
         cover_x: state.x, cover_y: state.y, cover_zoom: state.zoom, expression: state.expression,
       });

@@ -9,6 +9,7 @@
   const toast = window.RadarToast || (() => {});
   const SEPARATOR = '='.repeat(60);
 
+  const characterName = () => (data.characterList.find((c) => c.slug === state.character) || { name: '' }).name;
   const px = (n) => Math.round(n);
   const pct = (n, total) => (n / total * 100).toFixed(1).replace('.', ',') + '%';
   const box = (r, W, H) => 'x ' + px(r.x) + ' px (' + pct(r.x, W) + '), y ' + px(r.y) + ' px (' + pct(r.y, H) + '), largura ' + px(r.w) + ' px (' + pct(r.w, W) + '), altura ' + px(r.h) + ' px (' + pct(r.h, H) + ')';
@@ -48,7 +49,7 @@
     const lines = [];
     const add = (...parts) => lines.push(...parts);
     add('RADAR VIRAL BR · PACOTE COMPLETO DO REACT', SEPARATOR, '');
-    add('Título: ' + (state.title || '—'), 'Modelo do vídeo: ' + data.templates[state.template].label);
+    add('Personagem: ' + characterName(), 'Título: ' + (state.title || '—'), 'Modelo do vídeo: ' + data.templates[state.template].label);
     if (data.news) {
       add('', 'NOTÍCIA', 'Manchete real: ' + data.news.title, 'Fonte: ' + data.news.source, 'Categoria: ' + (data.news.category || '—'), 'Link: ' + data.news.url);
       if (data.news.published_at) add('Publicada em: ' + data.news.published_at);
@@ -96,8 +97,9 @@
   async function collectFiles() {
     const files = [];
     const push = (blob, name, label, note) => { if (blob) files.push({ blob, name, label, note }); };
-    const sheet = data.reference ? await mediaBlob(data.reference.id) : null;
-    if (sheet) push(sheet, '01-folha-de-referencia-do-personagem.' + extension(sheet.type), 'Folha de referência do personagem', 'anexe em TODAS as cenas (só serve para manter o rosto)');
+    const reference = data.references[state.character];
+    const sheet = reference ? await mediaBlob(reference.id) : null;
+    if (sheet) push(sheet, '01-folha-de-referencia-do-personagem.' + extension(sheet.type), 'Folha de referência de ' + characterName(), 'anexe em TODAS as cenas (só serve para manter o rosto)');
     push(await composition(false), '02-composicao-referencia-1080x1920.png', 'Composição 9:16 de referência', 'como o vídeo final deve ficar');
     push(await composition(true), '03-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', 'Camada transparente', 'vai por cima do vídeo gerado');
     const coverBlob = await mediaBlob(state.coverId);

@@ -256,5 +256,7 @@ body.login-page { display: grid; place-items: center; min-height: 100vh; padding
 /* consent form */
 fieldset.panel { margin: 0; } legend { padding: 0 .4rem; font-weight: 700; }
 label.check { display: block; font-weight: 400; margin: .3rem 0; }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .1rem .8rem; border: 1px solid var(--border); border-radius: .5rem; padding: .6rem .8rem; }
+.check-grid legend { padding: 0 .4rem; color: var(--muted); font-size: .85rem; }
 
 body.login-page main { width: min(420px, 100%); }

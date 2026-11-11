@@ -217,7 +217,7 @@ PROMPT;
  * @param array<string,mixed> $news  decoded news row
  * @return string JSON document sent as the user message
  */
-function radar_ai_user_message(array $news, int $duration, string $tone, string $context, int $scenes = 1, array $avoid = []): string
+function radar_ai_user_message(array $news, int $duration, string $tone, string $context, int $scenes = 1, array $avoid = [], ?string $slug = null): string
 {
     $words = (int)round($duration * 2.5);
     $payload = [
@@ -238,8 +238,12 @@ function radar_ai_user_message(array $news, int $duration, string $tone, string 
             'segundos_maximos_por_cena' => RADAR_SCENE_MAX_SECONDS,
             'palavras_aproximadas_no_total' => $words,
             'tom' => $tone,
-            'personagem' => radar_character_master_prompt('pt'),
-            'personalidade' => radar_character_personality(),
+            'nome_do_personagem' => radar_character_get($slug)['name'],
+            'genero_do_personagem' => radar_character_get($slug)['gender'] === 'f' ? 'feminino (use sempre o feminino ao se referir à personagem)' : 'masculino',
+            'personagem' => radar_character_master_prompt('pt', $slug),
+            'personalidade' => radar_character_personality($slug),
+            'jeito_de_falar' => radar_character_get($slug)['voice'],
+            'bordoes' => radar_character_get($slug)['catchphrases'],
             'evitar_repetir' => array_slice($avoid, 0, 8),
         ],
     ];
@@ -370,17 +374,18 @@ function radar_ai_trim_words(string $text, int $budget): string
  *
  * @return array<string,mixed>
  */
-function radar_ai_fallback(array $news, int $duration, string $tone, string $context, ?string $failure = null): array
+function radar_ai_fallback(array $news, int $duration, string $tone, string $context, ?string $failure = null, ?string $slug = null): array
 {
-    $hooks = ['Rapaz, tu viu isso aqui?', 'Agora me explica uma coisa!', 'Olha essa notícia que tá dando o que falar!'];
-    $hook = $tone === 'direto' ? 'Vamos entender essa notícia rapidinho.' : $hooks[hexdec(substr(hash('sha256', $news['title']), 0, 6)) % count($hooks)];
+    $character = radar_characters()[radar_character_slug($slug)];
+    $hooks = $character['hooks'];
+    $hook = $tone === 'direto' ? $character['direct_hook'] : $hooks[hexdec(substr(hash('sha256', $news['title']), 0, 6)) % count($hooks)];
     $title = rtrim($news['title'], '.!?');
     $base = "Segundo {$news['source']}, a manchete é: “{$title}”.";
     $finance = in_array($news['category'], radar_finance_categories(), true);
     $commentary = $finance
         ? 'Na minha opinião, esse é um assunto para entender com calma. E atenção: isso não é recomendação financeira, cada caso é um caso. Opinião minha, tá?'
-        : 'Na minha opinião, esse é um assunto que merece a gente conversar com calma. Opinião minha, tá?';
-    $cta = 'E você, o que achou? Comenta aqui embaixo.';
+        : $character['commentary'];
+    $cta = $character['cta'];
     $room = (int)round($duration * 2.5) - radar_ai_words($hook . ' ' . $base . ' ' . $commentary . ' ' . $cta);
     $script = $base;
     $extras = [];
@@ -405,7 +410,7 @@ function radar_ai_fallback(array $news, int $duration, string $tone, string $con
         'commentary' => $commentary,
         'cta' => $cta,
         'expression' => in_array($news['category'], array_merge(['Política', 'Economia', 'Notícias internacionais'], radar_finance_categories()), true) ? 'pensativo' : 'surpreso',
-        'scene' => 'carro',
+        'scene' => $character['scene'],
         'fact_check_notes' => ['O texto foi montado só com a manchete' . ($news['summary'] !== '' ? ' e o resumo do veículo' : '') . '. Leia a matéria na fonte antes de gravar.'],
         'warnings' => [$failure === null
             ? 'Modo rascunho: nenhuma IA configurada. Configure um provedor em Configurações de IA para roteiros personalizados.'

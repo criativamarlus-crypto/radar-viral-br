@@ -82,7 +82,7 @@ $tools = [
     ['name' => 'listar_reacts', 'description' => 'Lista os roteiros de react já preparados (headlines, gancho, roteiro, comentário, CTA e prompt de vídeo com o personagem fixo). Opcionalmente de uma notícia.',
         'inputSchema' => ['type' => 'object', 'properties' => ['noticia_id' => ['type' => 'integer', 'minimum' => 1], 'limite' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 30]], 'additionalProperties' => false], 'annotations' => ['readOnlyHint' => true]],
     ['name' => 'preparar_react', 'description' => 'Prepara um react para uma notícia: 3 headlines, gancho, roteiro de 15 a 35 s, comentário (opinião), CTA e prompt de vídeo com o personagem fixo. Usa a IA configurada no servidor; sem IA, gera um rascunho conservador. Requer token com acesso "preparar react". Cria um roteiro salvo.',
-        'inputSchema' => ['type' => 'object', 'properties' => ['noticia_id' => ['type' => 'integer', 'minimum' => 1], 'cenas' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 5, 'description' => 'Quantidade de cenas do vídeo (padrão 3). Cada cena tem até 25 segundos e vira um prompt de vídeo próprio.'], 'duracao_segundos' => ['type' => 'integer', 'minimum' => 15, 'maximum' => 35, 'description' => 'Antigo: duração de uma cena só. Prefira "cenas".'], 'tom' => ['type' => 'string', 'enum' => array_keys(RADAR_TONES)], 'modelo_video' => ['type' => 'string', 'enum' => array_keys(radar_video_templates()), 'description' => '"caption_card" (padrão) = vídeo em tela cheia com frase de impacto no topo e card da notícia embaixo; "split" = notícia em cima e personagem embaixo.'], 'contexto_confirmado' => ['type' => 'string', 'maxLength' => 2000, 'description' => 'Fatos que o usuário já conferiu na matéria.']], 'required' => ['noticia_id'], 'additionalProperties' => false],
+        'inputSchema' => ['type' => 'object', 'properties' => ['noticia_id' => ['type' => 'integer', 'minimum' => 1], 'cenas' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 5, 'description' => 'Quantidade de cenas do vídeo (padrão 3). Cada cena tem até 25 segundos e vira um prompt de vídeo próprio.'], 'duracao_segundos' => ['type' => 'integer', 'minimum' => 15, 'maximum' => 35, 'description' => 'Antigo: duração de uma cena só. Prefira "cenas".'], 'personagem' => ['type' => 'string', 'enum' => array_keys(radar_characters()), 'description' => 'Quem fala. Sem isso, vale o personagem da categoria da notícia (ex.: a Clara para finanças e cartão de crédito).'], 'tom' => ['type' => 'string', 'enum' => array_keys(RADAR_TONES)], 'modelo_video' => ['type' => 'string', 'enum' => array_keys(radar_video_templates()), 'description' => '"caption_card" (padrão) = vídeo em tela cheia com frase de impacto no topo e card da notícia embaixo; "split" = notícia em cima e personagem embaixo.'], 'contexto_confirmado' => ['type' => 'string', 'maxLength' => 2000, 'description' => 'Fatos que o usuário já conferiu na matéria.']], 'required' => ['noticia_id'], 'additionalProperties' => false],
         'annotations' => ['readOnlyHint' => false, 'destructiveHint' => false, 'idempotentHint' => false]],
 ];
 
@@ -116,7 +116,7 @@ $allowed = [
     'consultar_tendencias' => [],
     'obter_noticia' => ['id'], 'obter_imagens' => ['id'],
     'listar_reacts' => ['noticia_id', 'limite'],
-    'preparar_react' => ['noticia_id', 'cenas', 'duracao_segundos', 'tom', 'modelo_video', 'contexto_confirmado'],
+    'preparar_react' => ['noticia_id', 'cenas', 'duracao_segundos', 'personagem', 'tom', 'modelo_video', 'contexto_confirmado'],
 ];
 if (!isset($allowed[$name]) || array_diff(array_keys($arguments), $allowed[$name]) !== []) {
     $fail(-32602, 'Ferramenta ou argumentos inválidos.');
@@ -199,6 +199,9 @@ try {
             if (isset($arguments['modelo_video']) && (!is_string($arguments['modelo_video']) || !radar_video_template_valid($arguments['modelo_video']))) {
                 $fail(-32602, 'modelo_video inválido.');
             }
+            if (isset($arguments['personagem']) && (!is_string($arguments['personagem']) || !radar_character_valid($arguments['personagem']))) {
+                $fail(-32602, 'personagem inválido.');
+            }
             if (isset($arguments['cenas']) && (!is_int($arguments['cenas']) || $arguments['cenas'] < 1 || $arguments['cenas'] > RADAR_SCENE_MAX_COUNT)) {
                 $fail(-32602, 'cenas deve ser um número de 1 a ' . RADAR_SCENE_MAX_COUNT . '.');
             }
@@ -207,10 +210,10 @@ try {
             }
             @set_time_limit(120);
             $script = radar_react_generate($arguments['noticia_id'], [
-                'scenes' => $arguments['cenas'] ?? null, 'duration' => isset($arguments['cenas']) ? null : ($arguments['duracao_segundos'] ?? null), 'tone' => $arguments['tom'] ?? 'bem-humorado', 'context' => $arguments['contexto_confirmado'] ?? '', 'layout' => $arguments['modelo_video'] ?? radar_video_default_template(),
+                'scenes' => $arguments['cenas'] ?? null, 'duration' => isset($arguments['cenas']) ? null : ($arguments['duracao_segundos'] ?? null), 'character' => $arguments['personagem'] ?? '', 'tone' => $arguments['tom'] ?? 'bem-humorado', 'context' => $arguments['contexto_confirmado'] ?? '', 'layout' => $arguments['modelo_video'] ?? radar_video_default_template(),
             ]);
             $data = [
-                'id' => $script['id'], 'origem' => $script['mode_label'], 'noticia' => $script['news_title'], 'fonte' => $script['news_source'], 'link' => $script['news_url'],
+                'id' => $script['id'], 'personagem' => $script['character_name'], 'origem' => $script['mode_label'], 'noticia' => $script['news_title'], 'fonte' => $script['news_source'], 'link' => $script['news_url'],
                 'headlines' => $script['headlines'], 'gancho' => $script['hook'], 'roteiro' => $script['script'], 'comentario_opiniao' => $script['commentary'], 'cta' => $script['cta'],
                 'texto_falado_completo' => $script['spoken'], 'segundos_estimados' => $script['estimated_seconds'], 'prompt_de_video' => $script['video_prompt'],
                 'cenas' => count($script['video_prompts']), 'prompts_de_video_por_cena' => $script['video_prompts'],

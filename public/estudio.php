@@ -28,12 +28,20 @@ $newsOptions = array_values(array_map(static fn(array $n): array => [
 $scriptOptions = array_map(static fn(array $s): array => [
     'id' => $s['id'], 'news_id' => $s['news_id'], 'news_title' => $s['news_title'], 'news_source' => $s['news_source'],
     'headline' => $s['headlines'][0] ?? $s['news_title'], 'headlines' => $s['headlines'], 'hook' => $s['hook'], 'spoken' => $s['spoken'], 'expression' => $s['expression'], 'scene' => $s['scene'],
-    'layout' => $s['layout'], 'duration' => $s['duration'], 'scenes' => $s['scenes'], 'direction' => $s['direction'], 'video_prompt' => $s['video_prompt'], 'video_prompts' => $s['video_prompts'],
+    'layout' => $s['layout'], 'duration' => $s['duration'], 'scenes' => $s['scenes'], 'character' => $s['character'], 'direction' => $s['direction'], 'video_prompt' => $s['video_prompt'], 'video_prompts' => $s['video_prompts'],
 ], radar_scripts_list(100));
 
 $media = $news !== null ? $news['media'] : [];
 $mediaOptions = array_map(static fn(array $m): array => ['id' => $m['id'], 'label' => $m['label'], 'kind' => $m['kind'], 'credit' => $m['credit']], array_values(array_filter($media, static fn(array $m): bool => in_array($m['kind'], ['cover', 'screenshot', 'upload'], true))));
-$characters = array_map(static fn(array $m): array => ['id' => $m['id'], 'label' => $m['label'], 'primary' => (int)$m['is_primary'] === 1], radar_character_images());
+$characters = array_map(static fn(array $m): array => ['id' => $m['id'], 'label' => $m['label'], 'primary' => (int)$m['is_primary'] === 1, 'character' => $m['character_slug']], radar_character_images_all());
+$characterList = [];
+$references = [];
+foreach (array_keys(radar_characters()) as $characterSlug) {
+    $info = radar_character_get($characterSlug);
+    $characterList[] = ['slug' => $characterSlug, 'name' => $info['name'], 'tagline' => $info['tagline'], 'gender' => $info['gender']];
+    $sheet = radar_character_reference($characterSlug);
+    $references[$characterSlug] = $sheet === null ? null : ['id' => $sheet['id'], 'width' => $sheet['width'], 'height' => $sheet['height']];
+}
 
 $state = [
     'news' => $news === null ? null : ['id' => $news['id'], 'title' => $news['title'], 'source' => $news['source'], 'url' => $news['url'], 'image' => $news['image'], 'image_credit' => $news['image_credit'], 'category' => $news['category'], 'published_at' => $news['published_known'] ? $news['published_at'] : null],
@@ -47,7 +55,9 @@ $state = [
     'defaultTemplate' => radar_video_default_template(),
     'moods' => radar_direction_moods(),
     'defaultScenes' => RADAR_SCENES_DEFAULT,
-    'reference' => ($reference = radar_character_reference()) === null ? null : ['id' => $reference['id'], 'width' => $reference['width'], 'height' => $reference['height']],
+    'characterList' => $characterList,
+    'references' => $references,
+    'suggestedCharacter' => radar_character_for_category((string)($news['category'] ?? '')),
     'templates' => array_map(static fn(array $t): array => ['label' => $t['label'], 'description' => $t['description']], radar_video_templates()),
     'project' => $project,
     'scriptId' => $script['id'] ?? null,
@@ -105,6 +115,8 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js',
         </div>
         <div class="panel form-grid">
             <h2>3 · Personagem</h2>
+            <label>Quem fala<select id="st-character"></select></label>
+            <p class="hint" id="st-character-hint"></p>
             <div class="picker" id="st-chars" role="group" aria-label="Imagens do personagem"></div>
             <p class="hint" id="st-char-hint"></p>
             <label>Expressão<select id="st-expression"></select></label>

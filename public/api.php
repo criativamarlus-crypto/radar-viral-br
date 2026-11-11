@@ -129,6 +129,7 @@ try {
                 'scenes' => isset($input['scenes']) ? api_int($input['scenes']) : null, 'duration' => isset($input['duration']) && !isset($input['scenes']) ? api_int($input['duration']) : null,
                 'tone' => (string)($input['tone'] ?? 'bem-humorado'), 'context' => (string)($input['context'] ?? ''),
                 'expression' => (string)($input['expression'] ?? ''), 'scene' => (string)($input['scene'] ?? ''), 'layout' => radar_str($input['layout'] ?? ''),
+                'character' => radar_str($input['character'] ?? ''),
             ]);
             radar_json(['item' => $script], 201);
 
@@ -178,7 +179,7 @@ try {
             $media = radar_media_save_bytes($bytes, $kind, [
                 'news_id' => $newsId > 0 && radar_db_value('SELECT 1 FROM news WHERE id = ?', [$newsId]) !== null ? $newsId : null,
                 'label' => (string)($input['label'] ?? ($kind === 'character' ? 'Referência do personagem' : ($kind === 'reference' ? 'Folha de referência do personagem' : 'Imagem enviada'))),
-                'credit' => (string)($input['credit'] ?? ''),
+                'credit' => (string)($input['credit'] ?? ''), 'character' => radar_str($input['character'] ?? ''),
                 'note' => in_array($kind, ['character', 'reference'], true) ? 'Imagem de referência enviada pelo administrador.' : 'Imagem enviada manualmente pelo administrador; o direito de uso é de sua responsabilidade.',
             ]);
             radar_json(['media' => $media], 201);
@@ -191,8 +192,10 @@ try {
         case 'video_prompt':
             $expressionKey = (string)($input['expression'] ?? '');
             $sceneKey = (string)($input['scene'] ?? '');
+            $promptCharacter = radar_character_slug(radar_str($input['character'] ?? ''));
             $promptParts = [
-                'direction' => radar_direction_normalize($input['direction'] ?? null, 'manual') ?? radar_direction_default(),
+                'character' => $promptCharacter,
+                'direction' => radar_direction_normalize($input['direction'] ?? null, 'manual') ?? radar_direction_default($promptCharacter),
                 'spoken' => mb_substr((string)($input['spoken'] ?? ''), 0, 4000),
                 'expression' => isset(radar_character_expressions()[$expressionKey]) ? $expressionKey : 'sorriso-largo',
                 'scene' => isset(radar_character_scenes()[$sceneKey]) ? $sceneKey : 'carro',
@@ -210,7 +213,7 @@ try {
             $directionNews = radar_news_get(api_int($input['news_id'] ?? 0));
             $directionExpression = (string)($input['expression'] ?? '');
             radar_json(['direction' => radar_direction_generate(
-                ['category' => $directionNews['category'] ?? '', 'expression' => isset(radar_character_expressions()[$directionExpression]) ? $directionExpression : ''],
+                ['category' => $directionNews['category'] ?? '', 'expression' => isset(radar_character_expressions()[$directionExpression]) ? $directionExpression : '', 'character' => radar_str($input['character'] ?? '')],
                 max(1, min(RADAR_SCENE_MAX_COUNT, api_int($input['scenes'] ?? 1) ?: 1)),
                 array_merge([radar_direction_text($input['outfit'] ?? '')], radar_direction_recent())
             )]);
