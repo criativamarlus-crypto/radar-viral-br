@@ -387,7 +387,7 @@ function radar_tv_prompts(array $parts): array
             '',
             'FORMAT: vertical 9:16, about ' . $duration . ' seconds' . ($duration > $seconds ? ' (the narration needs more than the planned ' . $seconds . ' seconds: never speed up the voice and never cut the sentence)' : ', matching the narration without speeding up the voice') . ', professional TV-studio camera work, smooth and steady, no cinematic filters.',
             'CAMERA FOR THIS SCENE: ' . $camera . '; ' . ($scene['camera_movement'] ?? 'slow gentle push-in') . '. Keep her face away from the very top and bottom edges of the frame.',
-            'SETTING: ' . $character['scenery_en'] . ' The only sign allowed on screen is the studio sign with her name.',
+            'SETTING: ' . $character['scenery_en'] . ' The signs and screens are the ones in the TEMPLATE IMAGE; no other text is added.',
             'LIGHTING AND MOOD: ' . ($direction['lighting'] !== '' ? $direction['lighting'] : 'pink, purple and gold studio lighting') . ' (' . ($moods[$direction['mood']] ?? $moods['casual']) . ' mood).',
             '',
             'OBJECTIVE OF THIS SCENE: ' . radar_direction_text($scene['objective_en'] ?? radar_tv_objective_en((string)($scene['role'] ?? 'desenvolvimento')), 300),
@@ -400,9 +400,8 @@ function radar_tv_prompts(array $parts): array
             '"' . $chunk . '"',
             '',
             'SPEECH RULES: she says exactly these words with natural lip-sync; do not add, remove, change or invent any word, and add no other speech.',
-            $layout === 'tv_studio'
-                ? 'SCREEN TEXT: none inside the video. Titles and subtitles are added later in editing' . ($title !== '' ? ' (title for this scene: "' . $title . '"; subtitle: "' . $caption . '")' : '') . '. If a news image is attached to this prompt, show it unchanged on the big studio screen behind her, with no text on it; otherwise the screen shows soft pink and purple light. Never invent headlines or words on the screen.'
-                : $brief,
+            $brief,
+            $layout === 'tv_studio' && $title !== '' ? 'EDITING DATA (added in post-production, never drawn in the video): title of this scene "' . $title . '"; subtitle "' . $caption . '".' : '',
             '',
             'CONTINUITY: ' . radar_direction_text($scene['continuity'] ?? '', 500),
             '',

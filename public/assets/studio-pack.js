@@ -56,7 +56,7 @@
     const next = () => String(++count).padStart(2, '0');
     // The template comes first: it is the frame the video AI must deliver (it only swaps the person in the background).
     const tvStudio = state.template === 'tv_studio';
-    if (!tvStudio) plan.push({ kind: 'template', name: next() + '-template-1080x1920.png', label: 'IMAGEM DO TEMPLATE (a principal)', note: 'primeiro quadro (start frame) da cena: a IA mantém a faixa, o título e o card exatamente assim e troca só a personagem do fundo' });
+    plan.push({ kind: 'template', name: next() + '-template-1080x1920.png', label: 'IMAGEM DO TEMPLATE (a principal)', note: tvStudio ? 'primeiro quadro (start frame) da cena: o estúdio, o letreiro e o enquadramento como estão; só a personagem se move e fala' : 'primeiro quadro (start frame) da cena: a IA mantém a faixa, o título e o card exatamente assim e troca só a personagem do fundo' });
     // Every reference image of the character goes with the prompts (the video tool needs all of them in every scene).
     for (const reference of data.references[state.character] || []) {
       const photo = reference.role === 'photo';
@@ -143,7 +143,7 @@
     const add = (...parts) => lines.push(...parts);
     add('RADAR VIRAL BR · PACOTE COMPLETO DO REACT', SEPARATOR, '',
       state.template === 'tv_studio'
-        ? 'COMO USAR: cada cena abaixo é um bloco completo (imagens, roupa e estúdio, roteiro e prompt). A imagem-mestre é a referência oficial (anexe-a primeiro): rosto, roupa e joias da personagem não mudam. Não há texto dentro do vídeo: título e legendas entram na edição.' + ' ' + 'Se a ferramenta aceitar uma imagem só, use a PRANCHA (as referências na mesma imagem).'
+        ? 'COMO USAR: cada cena abaixo é um bloco completo (imagens, roupa e estúdio, roteiro e prompt). O template é o primeiro quadro de cada cena: a IA mantém o estúdio, o letreiro e o enquadramento e só a personagem se move e fala. A imagem-mestre é a referência oficial: rosto, roupa e joias da personagem não mudam. Não há texto dentro do vídeo: título e legendas entram na edição.' + ' ' + 'Se a ferramenta aceitar uma imagem só, use a PRANCHA (template + referências na mesma imagem).'
         : 'COMO USAR: cada cena abaixo é um bloco completo (imagens, roupa e cenário, coordenadas, roteiro e prompt). A roupa e o cenário mudam a cada notícia: valem os desta notícia, não os do vídeo anterior. O template é o primeiro quadro de cada cena: a IA mantém a faixa, o título e o card e troca só a personagem do fundo. Se a ferramenta aceitar uma imagem só, use a PRANCHA (template + referências na mesma imagem).', '');
     add('Personagem: ' + characterName(), 'Título: ' + (state.title || '—'), 'Modelo do vídeo: ' + data.templates[state.template].label);
     if (data.news) {

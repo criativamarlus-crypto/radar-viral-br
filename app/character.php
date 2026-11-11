@@ -191,7 +191,7 @@ function radar_master_reference_paragraph(array $references): string
     }
     $count = count($references);
     return 'REFERENCE IMAGES (attach ALL ' . $count . ' image' . ($count > 1 ? 's' : '') . ' to the video tool together with this prompt, in every scene; if the tool takes fewer, attach the master image first and then as many as it accepts, in this order): ' . implode('; ', $items)
-        . '. The MASTER image is the official reference and wins over every text description: copy {his} face, age, hair, glasses, clothes and jewelry from it and never reinvent them. Use the other images only to confirm the same identity from other angles. Do NOT copy from them the background, the signs, the words written on the signs, the poses or the lighting: the only sign allowed is the one described in the SETTING.';
+        . '. The MASTER image is the official reference and wins over every text description: copy {his} face, age, hair, glasses, clothes and jewelry from it and never reinvent them. Use the other images only to confirm the same identity from other angles. Do NOT copy from them the background, the signs, the words written on the signs, the poses or the lighting: the studio, its signs and its screens come from the TEMPLATE IMAGE.';
 }
 
 /** @return array<string,mixed>|null */
@@ -265,7 +265,11 @@ function radar_template_brief(string $layout, array $texts): string
     $single = 'SINGLE-IMAGE OPTION (if the video tool accepts only ONE image): attach the REFERENCE BOARD instead of the separate images. It is one image with the TEMPLATE on the left (the frame to keep, exactly as described above) and the CHARACTER REFERENCES on the right (used only for {his} face).';
     $intro = 'TEMPLATE IMAGE (attach the template image to the video tool together with this prompt, in every scene; if the tool accepts a start image or first frame, use it as the FIRST FRAME): a vertical 9:16 image of the exact final frame. Recreate this frame EXACTLY and keep it for the whole clip. KEEP UNCHANGED and completely static, with no movement, no redrawing and no changed letter: the black top band with its text, and the news card with its photo, yellow line, headline, white border and shadow. ONLY the person in the background changes: {he} is the character of the REFERENCE IMAGES ({his} face; {his} clothes come from WARDROBE and the camera from CAMERA ANGLE) and {he} is the only thing that moves (speaking with lip-sync, gestures, natural motion). The person in the template image is just a placeholder photo.';
     if ($layout === 'tv_studio') {
-        return 'SCREEN TEXT: none inside the video. Titles and subtitles are added later in editing. If a news image is attached, show it unchanged on the big studio screen behind the presenter, with no text on it.';
+        return implode("\n", [
+            'TEMPLATE IMAGE (attach the template image to the video tool together with this prompt, in every scene; if the tool accepts a start image or first frame, use it as the FIRST FRAME): a vertical 9:16 image of the exact starting frame of the clip. Keep its composition for the whole clip: the studio, the desk, the lit sign, the screens, the lighting and the framing. {He} is the character of the REFERENCE IMAGES ({his} face, clothes and jewelry come from the MASTER image) and {he} is the only thing that moves (speaking with lip-sync, gestures, natural motion). The pose of the person in the template image is only the starting point: the expression follows the EMOTIONAL TONE and the FACIAL EXPRESSION of this scene.',
+            'SCREEN TEXT: none inside the video. Titles and subtitles are added later in editing; the signs and screens stay exactly as they are in the template image and no other word is added. If a news image is also attached, it may appear unchanged on the big studio screen, with no text on it.',
+            'SINGLE-IMAGE OPTION (if the video tool accepts only ONE image): attach the REFERENCE BOARD instead of the separate images. It is one image with the TEMPLATE on the left (the frame to keep) and the CHARACTER REFERENCES on the right (used only for {his} face, clothes and jewelry).',
+        ]);
     }
     if ($layout === 'caption_card') {
         $caption = mb_strtoupper(radar_direction_text($texts['caption'] ?? '', 200) ?: $headline);

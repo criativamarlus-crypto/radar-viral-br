@@ -447,3 +447,23 @@ check('the default look of Dona Maricota never changes the outfit, only light, c
     return $a['outfit'] === $b['outfit'] && $a['outfit'] === radar_characters()[$maricota]['default_outfit'] && $a['accessories'] === $b['accessories'] && count($a['angles']) === 3 && count($a['gestures']) === 3 && $a['lighting'] !== $b['lighting'] || $a['mood'] !== $b['mood']
         && $default['outfit'] === $a['outfit'] && $classic['outfit'] !== radar_characters()[$maricota]['default_outfit'] && str_contains($b['lighting'], 'soft') || str_contains($b['lighting'], 'calm');
 });
+check('whichever of the three templates is chosen, every Dona Maricota prompt carries the template image as the first frame, the single-image board and the references', static function () use ($maricota): bool {
+    foreach (array_keys(radar_video_templates()) as $layout) {
+        $prompts = radar_video_prompts(['character' => $maricota, 'spoken' => "Primeira fala da cena um.\n\nSegunda fala da cena dois.\n\nTerceira fala da cena três.", 'expression' => 'surpreso', 'scene' => 'estudio', 'headline' => 'Manchete real da notícia', 'source' => 'Folha', 'scenes' => 3, 'layout' => $layout, 'caption' => 'FRASE', 'source_line' => 'FOLHA • 11/11/2026']);
+        if (count($prompts) !== 3) {
+            return false;
+        }
+        foreach ($prompts as $prompt) {
+            foreach (['TEMPLATE IMAGE (attach the template image to the video tool', 'use it as the FIRST FRAME', 'SINGLE-IMAGE OPTION', 'REFERENCE BOARD', 'REFERENCE IMAGE', 'THIS IS THE SAME OFFICIAL CHARACTER REGISTERED IN THE PANEL'] as $needle) {
+                if (!str_contains($prompt, $needle)) {
+                    fwrite(STDERR, "  template $layout lacks: $needle\n");
+                    return false;
+                }
+            }
+        }
+    }
+    $studio = radar_video_prompts(['character' => $maricota, 'spoken' => 'Uma fala só.', 'expression' => 'surpreso', 'scene' => 'estudio', 'headline' => 'H', 'source' => 'S', 'scenes' => 1, 'layout' => 'tv_studio'])[0];
+    $card = radar_video_prompts(['character' => $maricota, 'spoken' => 'Uma fala só.', 'expression' => 'surpreso', 'scene' => 'estudio', 'headline' => 'Manchete real', 'source' => 'Folha', 'scenes' => 1, 'layout' => 'caption_card', 'caption' => 'FRASE DE IMPACTO', 'source_line' => 'FOLHA • 11/11/2026'])[0];
+    return str_contains($studio, 'SCREEN TEXT: none inside the video') && str_contains($studio, 'the studio, the desk, the lit sign') && str_contains($card, 'FRASE DE IMPACTO') && str_contains($card, 'FOLHA • 11/11/2026') && str_contains($card, 'MANCHETE REAL')
+        && str_contains($studio, 'its screens come from the TEMPLATE IMAGE') && str_contains($studio, 'The signs and screens are the ones in the TEMPLATE IMAGE');
+});
