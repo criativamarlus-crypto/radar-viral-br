@@ -285,6 +285,7 @@ try {
         && str_contains($studioPage['body'], 'caption_card') && str_contains($studioPage['body'], 'FRASE DE IMPACTO') && str_contains($studioPage['body'], 'Notícia em cima, personagem embaixo'));
     $studioNews = localRequest('estudio.php?news=' . $firstNewsId);
     $studioEmpty = localRequest('estudio.php');
+    check('pages reference scripts and styles with a fingerprinted URL', static fn(): bool => preg_match('#src="assets/studio\.js\?v=[a-f0-9]{10}"#', $studioNews['body']) === 1 && preg_match('#href="assets/app\.css\?v=[a-f0-9]{10}"#', $studioNews['body']) === 1 && preg_match('#src="assets/app\.js\?v=[a-f0-9]{10}"#', $studioNews['body']) === 1);
     check('the Studio can write the script itself: generator controls and tones are offered once a news is chosen', static fn(): bool => $studioNews['status'] === 200 && str_contains($studioNews['body'], 'id="st-generate"') && str_contains($studioNews['body'], 'id="st-gen-status"') && str_contains($studioNews['body'], 'id="st-duration"') && str_contains($studioNews['body'], 'id="st-tone"')
         && str_contains($studioNews['body'], '"tones":{"bem-humorado":"Bem-humorado"') && !str_contains($studioEmpty['body'], 'id="st-generate"') && str_contains($studioEmpty['body'], 'o roteiro já é gerado aqui'));
     $newsWithDialog = localRequest('noticias.php?janela=24');

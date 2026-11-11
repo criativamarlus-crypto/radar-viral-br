@@ -110,10 +110,10 @@ function radar_page_start(string $title, string $active, array $options = []): v
         . '<meta name="csrf-token" content="' . radar_h($csrf) . '">'
         . '<meta name="auto-collect" content="' . ($stale ? '1' : '0') . '">'
         . '<title>' . radar_h($title) . ' · Radar Viral BR</title>'
-        . '<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">'
-        . '<link rel="stylesheet" href="assets/app.css">';
+        . '<link rel="icon" href="' . radar_h(radar_asset('favicon.svg')) . '" type="image/svg+xml">'
+        . '<link rel="stylesheet" href="' . radar_h(radar_asset('app.css')) . '">';
     foreach ($scripts as $script) {
-        echo '<script src="assets/' . radar_h($script) . '" defer></script>';
+        echo '<script src="' . radar_h(radar_asset($script)) . '" defer></script>';
     }
     echo '</head><body class="' . radar_h($options['body_class'] ?? '') . '">' . radar_icon_sprite();
     echo '<a class="skip-link" href="#main">Pular para o conteúdo</a>';
@@ -155,10 +155,22 @@ function radar_simple_page(string $title, string $bodyHtml, array $options = [])
     http_response_code((int)($options['status'] ?? 200));
     echo '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         . '<meta name="color-scheme" content="dark"><meta name="robots" content="noindex,nofollow">' . $meta
-        . '<title>' . radar_h($title) . ' · Radar Viral BR</title><link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/app.css">'
-        . '<script src="/assets/oauth.js" defer></script></head><body class="login-page"><main><section class="auth-card">'
+        . '<title>' . radar_h($title) . ' · Radar Viral BR</title><link rel="icon" href="' . radar_h(radar_asset('favicon.svg', '/assets/')) . '" type="image/svg+xml"><link rel="stylesheet" href="' . radar_h(radar_asset('app.css', '/assets/')) . '">'
+        . '<script src="' . radar_h(radar_asset('oauth.js', '/assets/')) . '" defer></script></head><body class="login-page"><main><section class="auth-card">'
         . '<p class="eyebrow">RADAR VIRAL BR</p>' . $bodyHtml . '</section></main></body></html>';
     exit;
+}
+
+/**
+ * URL of a file in public/assets with a content fingerprint. Nginx and Cloudflare cache static files for
+ * years, so a changed script or stylesheet needs a new URL or the browser keeps running the old one.
+ */
+function radar_asset(string $name, string $base = 'assets/'): string
+{
+    $name = basename($name);
+    $file = __DIR__ . '/../public/assets/' . $name;
+    $version = is_file($file) ? substr((string)md5_file($file), 0, 10) : '0';
+    return $base . rawurlencode($name) . '?v=' . $version;
 }
 
 function radar_react_dialog(): string

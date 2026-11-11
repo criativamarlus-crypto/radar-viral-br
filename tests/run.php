@@ -793,6 +793,13 @@ check('Studio projects save, update and delete with validated media', static fun
     return $project['cover_x'] === 100.0 && $project['cover_zoom'] === 3.0 && $project['expression'] === 'sorriso-largo' && $project['headline'] === 'Headline x'
         && $updated['title'] === 'Renomeado' && $updated['cover_media_id'] === null && $badMedia && $empty && $deleted && radar_project_get($project['id']) === null;
 });
+check('asset URLs carry a content fingerprint, so a deploy is never hidden behind the years-long static cache', static function (): bool {
+    $css = radar_asset('app.css');
+    $abs = radar_asset('oauth.js', '/assets/');
+    $file = dirname(__DIR__) . '/public/assets/app.css';
+    return preg_match('#\Aassets/app\.css\?v=[a-f0-9]{10}\z#', $css) === 1 && substr(md5_file($file), 0, 10) === substr($css, -10)
+        && preg_match('#\A/assets/oauth\.js\?v=[a-f0-9]{10}\z#', $abs) === 1 && radar_asset('../../config.example.php') === 'assets/config.example.php?v=0';
+});
 check('two video templates exist: the full-screen caption + news card (default, first) and the original split', static function (): bool {
     $templates = radar_video_templates();
     foreach (['split', 'caption_card'] as $key) {

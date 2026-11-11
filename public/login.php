@@ -57,8 +57,8 @@ if (!$configured) {
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="robots" content="noindex,nofollow">
     <title>Entrar · Radar Viral BR</title>
-    <link rel="stylesheet" href="/assets/app.css">
-    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="<?= radar_h(radar_asset('app.css', '/assets/')) ?>">
+    <link rel="icon" href="<?= radar_h(radar_asset('favicon.svg', '/assets/')) ?>" type="image/svg+xml">
 </head>
 <body class="login-page">
 <main>
