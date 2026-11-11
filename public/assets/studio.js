@@ -288,7 +288,7 @@
   let drawTimer = 0;
   function redraw() {
     cancelAnimationFrame(drawTimer);
-    drawTimer = requestAnimationFrame(() => render(canvas, canvas.width, canvas.height));
+    drawTimer = requestAnimationFrame(() => render(canvas, canvas.width, canvas.height).then(() => { if (sceneTextFn) renderPrompts(); }));
   }
 
   /* ---------- controls ---------- */
@@ -383,10 +383,13 @@
   }
 
   /** One block per scene (each prompt is complete and made for one clip of at most 25 s). */
+  // studio-pack.js plugs in the complete block of each scene (images, coordinates, script and prompt together).
+  let sceneTextFn = null;
+  let fullTextFn = null;
   function renderPrompts() {
     const box = $('st-prompts');
     if (!box) return;
-    $('st-prompt').value = state.prompt;
+    $('st-prompt').value = fullTextFn ? fullTextFn() : state.prompt;
     box.replaceChildren();
     const list = state.prompts.length ? state.prompts : (state.prompt ? [state.prompt] : []);
     list.forEach((text, index) => {
@@ -398,7 +401,7 @@
       title.textContent = 'Cena ' + (index + 1) + ' de ' + list.length;
       const button = document.createElement('button');
       button.type = 'button'; button.className = 'btn ghost small';
-      button.dataset.copy = 'st-prompt-' + index; button.textContent = 'Copiar cena ' + (index + 1);
+      button.dataset.copyScene = String(index); button.textContent = 'Copiar cena ' + (index + 1) + ' (tudo junto)';
       head.append(title, button);
       const look = state.direction;
       let note = null;
@@ -408,12 +411,12 @@
         note.textContent = 'Ângulo: ' + look.angles[index % look.angles.length] + (look.gestures && look.gestures.length ? ' · Gesto: ' + look.gestures[index % look.gestures.length] : '');
       }
       const area = document.createElement('textarea');
-      area.id = 'st-prompt-' + index; area.readOnly = true; area.rows = 8; area.className = 'mono'; area.value = text;
+      area.id = 'st-prompt-' + index; area.readOnly = true; area.rows = sceneTextFn ? 18 : 8; area.className = 'mono'; area.value = sceneTextFn ? sceneTextFn(index) : text;
       if (note) block.append(head, note, area); else block.append(head, area);
       box.append(block);
     });
     $('st-scenes-hint').textContent = list.length
-      ? list.length + (list.length === 1 ? ' cena' : ' cenas') + ' de até 25 s. Cada prompt é completo: cole um por vez na ferramenta de vídeo, sempre com as imagens de referência, a imagem do template e a imagem da notícia anexadas (“Copiar tudo” e “Baixar pacote” já levam todas).'
+      ? list.length + (list.length === 1 ? ' cena' : ' cenas') + ' de até 25 s. Cada cena é um bloco completo: imagens a anexar, coordenadas, roteiro e prompt juntos. Cole uma cena por vez na ferramenta de vídeo (“Copiar cena” leva o bloco e a prancha com o template e as referências).'
         + (list.length > state.scenes ? ' O roteiro é longo: precisa de ' + list.length + ' cenas para ficar em até 25 s cada. Encurte o texto para ter menos.' : '')
       : '';
   }
@@ -739,7 +742,10 @@
   $('st-export-overlay').addEventListener('click', () => exportPng(true));
 
   // Small hook for diagnostics and automated checks.
-  window.RadarStudio = { state, data, render, redraw, hasImpact, sourceLine, layout: () => lastLayout };
+  window.RadarStudio = {
+    state, data, render, redraw, hasImpact, sourceLine, layout: () => lastLayout,
+    setSceneText(fns) { sceneTextFn = fns.scene; fullTextFn = fns.full; renderPrompts(); },
+  };
   renderPickers(); words(); redraw();
 
   /** The article thumbnail has to be in the card: the source's cover is stored (with its credit) as soon as the Studio opens. */

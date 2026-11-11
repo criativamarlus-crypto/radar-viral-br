@@ -1,5 +1,6 @@
-/* Radar Viral BR — Estúdio: "Copiar tudo". One click puts the whole react on the clipboard (the full text and the
-   images), or downloads the same package as a .zip. Runs after studio.js and reads its state. */
+/* Radar Viral BR — Estúdio: cada cena como UM bloco completo (imagens a anexar, coordenadas, roteiro e prompt) e
+   "Copiar tudo" em uma cópia só (texto + HTML com imagens + a prancha como imagem), ou o mesmo pacote em .zip.
+   Roda depois do studio.js e lê o estado dele. */
 (() => {
   'use strict';
   const S = window.RadarStudio;
@@ -12,9 +13,13 @@
   const characterName = () => (data.characterList.find((c) => c.slug === state.character) || { name: '' }).name;
   const px = (n) => Math.round(n);
   const pct = (n, total) => (n / total * 100).toFixed(1).replace('.', ',') + '%';
-  const box = (r, W, H) => 'x ' + px(r.x) + ' px (' + pct(r.x, W) + '), y ' + px(r.y) + ' px (' + pct(r.y, H) + '), largura ' + px(r.w) + ' px (' + pct(r.w, W) + '), altura ' + px(r.h) + ' px (' + pct(r.h, H) + ')';
+  /** A rectangle in the 1080 × 1920 frame, whatever size it was last drawn at (the preview is smaller). */
+  const box = (r, L) => {
+    const k = 1080 / L.W;
+    return 'x ' + px(r.x * k) + ' px (' + pct(r.x, L.W) + '), y ' + px(r.y * k) + ' px (' + pct(r.y, L.H) + '), largura ' + px(r.w * k) + ' px (' + pct(r.w, L.W) + '), altura ' + px(r.h * k) + ' px (' + pct(r.h, L.H) + ')';
+  };
 
-  const extension = (mime) => ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[mime] || 'img');
+  const mediaExt = (id) => { const m = /\.([a-z0-9]+)$/i.exec(id || ''); return m ? m[1].toLowerCase() : 'img'; };
   const read = (blob) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
@@ -42,79 +47,106 @@
     return canvasBlob(canvas);
   }
 
-  /** The text of the whole react: story, speech, look, every coordinate, the images to attach and every scene prompt. */
-  function buildText(files) {
+  /* ---------- what goes with the prompts ---------- */
+
+  /** Every image of this react with its file name, in the order they are numbered. No downloads: names come from the state. */
+  function plannedFiles() {
+    const plan = [];
+    let count = 0;
+    const next = () => String(++count).padStart(2, '0');
+    // The template comes first: it is the frame the video AI must deliver (it only swaps the person in the background).
+    plan.push({ kind: 'template', name: next() + '-template-1080x1920.png', label: 'IMAGEM DO TEMPLATE (a principal)', note: 'primeiro quadro (start frame) da cena: a IA mantém a faixa, o título e o card exatamente assim e troca só a personagem do fundo' });
+    // Every reference image of the character goes with the prompts (the video tool needs all of them in every scene).
+    for (const reference of data.references[state.character] || []) {
+      const photo = reference.role === 'photo';
+      plan.push({ kind: 'reference', role: reference.role, mediaId: reference.id, name: next() + '-referencia-' + (photo ? 'foto' : 'folha-de-vistas') + '.' + mediaExt(reference.id),
+        label: (photo ? 'Foto de referência' : 'Folha de referência') + ' de ' + characterName() + (reference.label ? ' (' + reference.label + ')' : ''), note: 'só serve para manter o rosto' });
+    }
+    plan.push({ kind: 'overlay', name: next() + '-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', label: 'Camada transparente', note: 'vai por cima do vídeo gerado, na edição' });
+    if (state.coverId) plan.push({ kind: 'news', mediaId: state.coverId, name: next() + '-imagem-da-noticia.' + mediaExt(state.coverId), label: 'Imagem da notícia (miniatura do artigo)', note: 'vai dentro do card, com o crédito da fonte' });
+    if (state.characterId) plan.push({ kind: 'other', mediaId: state.characterId, name: next() + '-personagem-no-estudio.' + mediaExt(state.characterId), label: 'Imagem do personagem usada no Estúdio', note: '' });
+    return plan;
+  }
+
+  async function collectFiles() {
+    const files = [];
+    for (const item of plannedFiles()) {
+      const blob = item.kind === 'template' ? await composition(false) : item.kind === 'overlay' ? await composition(true) : await mediaBlob(item.mediaId);
+      if (blob) files.push({ ...item, blob });
+    }
+    return files;
+  }
+
+  const scenePrompts = () => (state.prompts.length ? state.prompts : (state.prompt ? [state.prompt] : []));
+
+  /** What this scene says out loud (read back from its own prompt, which is where the server cut the text). */
+  function dialogueOf(prompt) {
+    const match = /lip-sync, exactly as written\):\n"([\s\S]*?)"\n\n/.exec(prompt || '');
+    return match ? match[1] : '';
+  }
+
+  function coordinateLines() {
+    const L = S.layout();
+    const lines = [];
+    if (state.template === 'caption_card') {
+      lines.push('Frase de impacto (faixa preta do topo, MAIÚSCULAS): ' + ((state.caption || '').toUpperCase() || '—'),
+        'Manchete no card (a real, em MAIÚSCULAS): ' + ((state.headline || '').toUpperCase() || '—'),
+        'Linha amarela do card: ' + S.sourceLine());
+      if (L && L.template === 'caption_card') {
+        lines.push('Faixa preta do topo: ' + box(L.band, L), 'Card da notícia: ' + box(L.card, L),
+          '  Imagem da notícia dentro do card: ' + box(L.image, L), '  Barra preta com FONTE • DATA e manchete: ' + box(L.bar, L),
+          'Área livre para o rosto e os gestos: ' + box(L.safe, L));
+      }
+    } else {
+      lines.push('Headline sobre a imagem: ' + (state.headline || '—'));
+      if (L && L.template === 'split') lines.push('Metade de cima (notícia): ' + box(L.news, L), 'Metade de baixo (personagem): ' + box(L.character, L));
+    }
+    lines.push('Enquadramento da imagem da notícia: horizontal ' + Math.round(state.x) + '%, vertical ' + Math.round(state.y) + '%, zoom ' + Number(state.zoom).toFixed(2).replace('.', ','));
+    const cover = data.media.find((m) => m.id === state.coverId);
+    if (cover) lines.push('Imagem da notícia: ' + cover.label + (cover.credit ? ' (crédito: ' + cover.credit + ')' : ''));
+    return lines;
+  }
+
+  /** ONE self-contained block for a scene: the images to attach, the coordinates, the whole script and the prompt. */
+  function sceneText(index) {
+    const prompts = scenePrompts();
+    const total = prompts.length;
+    const lines = ['########## CENA ' + (index + 1) + ' DE ' + total + ' · tudo desta cena junto ##########', ''];
+    lines.push('1) IMAGENS PARA ANEXAR NESTA CENA (todas, ou só a PRANCHA se a ferramenta aceitar uma imagem):');
+    plannedFiles().filter((f) => ['template', 'reference', 'news'].includes(f.kind))
+      .forEach((f, i) => lines.push('   ' + (i + 1) + '. ' + f.label + (f.note ? ' — ' + f.note : '') + ' [' + f.name + ']'));
+    lines.push('   Prancha única: 00-prancha-template-e-referencias.png (o template e as referências da personagem na mesma imagem)');
+    lines.push('', '2) COORDENADAS DA COMPOSIÇÃO (tela de 1080 × 1920 px; origem no canto superior esquerdo)', ...coordinateLines());
+    lines.push('', '3) ROTEIRO COMPLETO (a fala desta cena está marcada com >>)');
+    prompts.forEach((prompt, j) => lines.push((j === index ? '>> ' : '   ') + 'Cena ' + (j + 1) + ': ' + (dialogueOf(prompt) || state.spoken)));
+    lines.push('', '4) PROMPT PARA A IA DE VÍDEO (cole este texto)', '', prompts[index] || '');
+    return lines.join('\n');
+  }
+
+  /** The text of the whole react: the story and the look once, then every scene as one complete block. */
+  function buildText() {
     const script = data.scripts.find((s) => s.id === state.scriptId);
-    const card = state.template === 'caption_card';
     const lines = [];
     const add = (...parts) => lines.push(...parts);
-    add('RADAR VIRAL BR · PACOTE COMPLETO DO REACT', SEPARATOR, '', 'COMO USAR: o template é o primeiro quadro de cada cena (a IA mantém a faixa, o título e o card e troca só a personagem do fundo). Se a ferramenta aceitar uma imagem só, use a PRANCHA (template + referências na mesma imagem).', '');
+    add('RADAR VIRAL BR · PACOTE COMPLETO DO REACT', SEPARATOR, '',
+      'COMO USAR: cada cena abaixo é um bloco completo (imagens, coordenadas, roteiro e prompt). O template é o primeiro quadro de cada cena: a IA mantém a faixa, o título e o card e troca só a personagem do fundo. Se a ferramenta aceitar uma imagem só, use a PRANCHA (template + referências na mesma imagem).', '');
     add('Personagem: ' + characterName(), 'Título: ' + (state.title || '—'), 'Modelo do vídeo: ' + data.templates[state.template].label);
     if (data.news) {
       add('', 'NOTÍCIA', 'Manchete real: ' + data.news.title, 'Fonte: ' + data.news.source, 'Categoria: ' + (data.news.category || '—'), 'Link: ' + data.news.url);
       if (data.news.published_at) add('Publicada em: ' + data.news.published_at);
     }
-    add('', SEPARATOR, 'ROTEIRO FALADO (completo, em português)', SEPARATOR, state.spoken || '—');
     if (script && script.headlines && script.headlines.length) add('', 'Headlines sugeridas:', ...script.headlines.map((h) => '- ' + h));
-
     const d = state.direction;
     if (d && d.outfit) {
-      add('', SEPARATOR, 'VISUAL DESTA NOTÍCIA (o rosto nunca muda; o resto foi criado para o tom do assunto)', SEPARATOR,
+      add('', 'VISUAL DESTA NOTÍCIA (o rosto nunca muda; o resto foi criado para o tom do assunto)',
         'Tom: ' + (data.moods[d.mood] || d.mood), 'Roupa: ' + d.outfit, 'Acessórios: ' + (d.accessories || 'nenhum extra'), 'Iluminação: ' + (d.lighting || '—'));
       (d.angles || []).forEach((angle, i) => add('Cena ' + (i + 1) + ' · ângulo: ' + angle + (d.gestures && d.gestures[i] ? ' · gesto: ' + d.gestures[i] : '')));
     }
-
-    add('', SEPARATOR, 'COMPOSIÇÃO 9:16 (tela de 1080 × 1920 px; origem no canto superior esquerdo)', SEPARATOR);
-    const L = S.layout();
-    if (card) {
-      add('Frase de impacto (faixa preta do topo, MAIÚSCULAS): ' + ((state.caption || '').toUpperCase() || '—'),
-        'Manchete no card (a real, em MAIÚSCULAS): ' + ((state.headline || '').toUpperCase() || '—'),
-        'Linha amarela do card: ' + S.sourceLine());
-      if (L && L.template === 'caption_card') {
-        add('Faixa preta do topo: ' + box(L.band, L.W, L.H), 'Card da notícia: ' + box(L.card, L.W, L.H),
-          '  Imagem da notícia dentro do card: ' + box(L.image, L.W, L.H), '  Barra preta com FONTE • DATA e manchete: ' + box(L.bar, L.W, L.H),
-          'Área livre para o rosto e os gestos: ' + box(L.safe, L.W, L.H));
-      }
-    } else {
-      add('Headline sobre a imagem: ' + (state.headline || '—'));
-      if (L && L.template === 'split') add('Metade de cima (notícia): ' + box(L.news, L.W, L.H), 'Metade de baixo (personagem): ' + box(L.character, L.W, L.H));
-    }
-    add('Enquadramento da imagem da notícia: horizontal ' + Math.round(state.x) + '%, vertical ' + Math.round(state.y) + '%, zoom ' + Number(state.zoom).toFixed(2).replace('.', ','));
-    const cover = data.media.find((m) => m.id === state.coverId);
-    if (cover) add('Imagem da notícia: ' + cover.label + (cover.credit ? ' (crédito: ' + cover.credit + ')' : ''));
-
-    add('', SEPARATOR, 'IMAGENS PARA ANEXAR NA FERRAMENTA DE VÍDEO / EDIÇÃO', SEPARATOR);
-    files.forEach((file, i) => add((i + 1) + ') ' + file.label + (file.note ? ' — ' + file.note : '') + ' [' + file.name + ']'));
-    if (!files.length) add('Nenhuma imagem disponível.');
-
-    const prompts = state.prompts.length ? state.prompts : (state.prompt ? [state.prompt] : []);
-    add('', SEPARATOR, 'PROMPTS DE VÍDEO (' + prompts.length + (prompts.length === 1 ? ' cena' : ' cenas') + ' de até 25 s; cole uma por vez, sempre com a imagem do template, as imagens de referência e a imagem da notícia anexadas)', SEPARATOR);
-    prompts.forEach((prompt, i) => add('', '##### CENA ' + (i + 1) + ' DE ' + prompts.length + ' #####', prompt));
+    const extras = plannedFiles().filter((f) => f.kind === 'overlay' || f.kind === 'other');
+    if (extras.length) add('', 'EXTRAS PARA A EDIÇÃO (não vão para a IA de vídeo)', ...extras.map((f) => '- ' + f.label + (f.note ? ' — ' + f.note : '') + ' [' + f.name + ']'));
+    const prompts = scenePrompts();
+    prompts.forEach((_, i) => add('', SEPARATOR, sceneText(i)));
     return lines.join('\n') + '\n';
-  }
-
-  /** Every image that belongs to this react, with a plain file name. */
-  async function collectFiles() {
-    const files = [];
-    const push = (blob, name, label, note, kind, role) => { if (blob) files.push({ blob, name, label, note, kind: kind || 'other', role }); };
-    let count = 0;
-    const next = () => String(++count).padStart(2, '0');
-    // The template comes first: it is the frame the video AI must deliver (it only swaps the person in the background).
-    push(await composition(false), next() + '-template-1080x1920.png', 'IMAGEM DO TEMPLATE (a principal)', 'use como primeiro quadro (start frame) de cada cena: a IA mantém a faixa, o título e o card exatamente assim e troca só a personagem do fundo', 'template');
-    // Every reference image of the character goes with the prompts (the video tool needs all of them in every scene).
-    for (const reference of data.references[state.character] || []) {
-      const blob = await mediaBlob(reference.id);
-      if (blob) {
-        const photo = reference.role === 'photo';
-        push(blob, next() + '-referencia-' + (photo ? 'foto' : 'folha-de-vistas') + '.' + extension(blob.type), (photo ? 'Foto de referência' : 'Folha de referência') + ' de ' + characterName() + (reference.label ? ' (' + reference.label + ')' : ''), 'anexe em TODAS as cenas (só serve para manter o rosto)', 'reference', reference.role);
-      }
-    }
-    push(await composition(true), next() + '-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', 'Camada transparente', 'vai por cima do vídeo gerado', 'overlay');
-    const coverBlob = await mediaBlob(state.coverId);
-    if (coverBlob) push(coverBlob, next() + '-imagem-da-noticia.' + extension(coverBlob.type), 'Imagem da notícia (miniatura do artigo)', 'anexe também: vai dentro do card, com o crédito da fonte', 'news');
-    const characterBlob = await mediaBlob(state.characterId);
-    if (characterBlob) push(characterBlob, next() + '-personagem-no-estudio.' + extension(characterBlob.type), 'Imagem do personagem usada no Estúdio', '');
-    return files;
   }
 
   /**
@@ -156,11 +188,12 @@
     return canvasBlob(canvas);
   }
 
-  async function buildPack() {
+  /** `only`: the index of one scene (its block alone), or undefined for the whole react. */
+  async function buildPack(only) {
     const files = await collectFiles();
     const board = await makeBoard(files);
-    const text = buildText(files);
-    const parts = ['<h1>Radar Viral BR · pacote completo do react</h1>'];
+    const text = only === undefined ? buildText() : sceneText(only);
+    const parts = ['<h1>Radar Viral BR · ' + (only === undefined ? 'pacote completo do react' : 'cena ' + (only + 1)) + '</h1>'];
     if (board) parts.push('<h3>Prancha única: template + referências da personagem</h3><img src="' + (await read(board)) + '" alt="Prancha com o template e as referências" style="max-width:640px;height:auto">');
     parts.push('<pre style="white-space:pre-wrap;font-family:Consolas,monospace;font-size:12px">' + escapeHtml(text) + '</pre>');
     for (const file of files) {
@@ -238,25 +271,34 @@
   }
 
   // Small hook for diagnostics and automated checks.
-  window.RadarStudioPack = { buildPack, buildText, makeZip, crc32, makeBoard, collectFiles };
+  window.RadarStudioPack = { buildPack, buildText, sceneText, makeZip, crc32, makeBoard, collectFiles, plannedFiles };
 
-  $('st-copy-all').addEventListener('click', (event) => withBusy(event.currentTarget, 'Preparando…', async () => {
-    if (!state.spoken.trim() && !state.prompt) { status('Escreva ou gere o roteiro antes de copiar.', true); return; }
-    const packPromise = buildPack();
-    if (navigator.clipboard && window.ClipboardItem) {
-      // One copy carries the text, the same text with the images, and the board as an image: each place you paste into takes what it understands.
-      await navigator.clipboard.write([new ClipboardItem({
-        'text/plain': packPromise.then((pack) => new Blob([pack.text], { type: 'text/plain' })),
-        'text/html': packPromise.then((pack) => new Blob([pack.html], { type: 'text/html' })),
-        'image/png': packPromise.then((pack) => pack.board),
-      })]);
-    } else {
-      await navigator.clipboard.writeText((await packPromise).text);
-    }
-    const pack = await packPromise;
-    status('Copiado de uma vez: o texto completo (' + state.prompts.length + ' prompt(s), coordenadas e visual) e a prancha com o template e as referências como imagem. Cole na ferramenta de vídeo: o texto vai no prompt e, onde ela aceitar imagem, a prancha vem junto. Em um documento ou editor vêm todas as ' + pack.files.length + ' imagens.');
-    toast('Pacote completo copiado.');
-  }));
+  /** One copy carries the text, the same text with the images, and the board as an image: each place you paste into takes what it understands. */
+  function copyPack(button, only) {
+    return withBusy(button, 'Preparando…', async () => {
+      if (!state.spoken.trim() && !state.prompt) { status('Escreva ou gere o roteiro antes de copiar.', true); return; }
+      const packPromise = buildPack(only);
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/plain': packPromise.then((pack) => new Blob([pack.text], { type: 'text/plain' })),
+          'text/html': packPromise.then((pack) => new Blob([pack.html], { type: 'text/html' })),
+          'image/png': packPromise.then((pack) => pack.board),
+        })]);
+      } else {
+        await navigator.clipboard.writeText((await packPromise).text);
+      }
+      const pack = await packPromise;
+      const what = only === undefined ? 'todas as ' + scenePrompts().length + ' cenas' : 'a cena ' + (only + 1);
+      status('Copiado de uma vez (' + what + '): imagens a anexar, coordenadas, roteiro e prompt no texto, e a prancha com o template e as referências como imagem. Cole na ferramenta de vídeo: o texto vai no prompt e, onde ela aceitar imagem, a prancha vem junto. Em um documento ou editor vêm todas as ' + pack.files.length + ' imagens.');
+      toast('Copiado.');
+    });
+  }
+  $('st-copy-all').addEventListener('click', (event) => copyPack(event.currentTarget));
+  $('st-copy-scenes').addEventListener('click', (event) => copyPack(event.currentTarget));
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-copy-scene]');
+    if (button) copyPack(button, Number(button.dataset.copyScene));
+  });
 
   $('st-download-pack').addEventListener('click', (event) => withBusy(event.currentTarget, 'Montando…', async () => {
     const pack = await buildPack();
@@ -269,6 +311,13 @@
   }));
 
   $('st-export-txt').addEventListener('click', (event) => withBusy(event.currentTarget, 'Montando…', async () => {
-    download(new Blob([buildText(await collectFiles())], { type: 'text/plain;charset=utf-8' }), 'radar-roteiro-' + (state.projectId || state.scriptId || 'novo') + '.txt');
+    download(new Blob([buildText()], { type: 'text/plain;charset=utf-8' }), 'radar-roteiro-' + (state.projectId || state.scriptId || 'novo') + '.txt');
   }));
+
+  // From now on every scene block of the Studio shows (and copies) the complete text.
+  S.setSceneText({ scene: sceneText, full: buildText });
+  // The coordinates come from a drawing of the frame: make one right away, so the blocks have them even before the first redraw.
+  const warm = document.createElement('canvas');
+  warm.width = 540; warm.height = 960;
+  S.render(warm, 540, 960).then(() => S.setSceneText({ scene: sceneText, full: buildText }));
 })();

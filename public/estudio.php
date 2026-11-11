@@ -150,7 +150,7 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js',
             <label>Roteiro falado<textarea id="st-script" rows="7" maxlength="4000" placeholder="O texto que o personagem fala"></textarea><span class="hint" id="st-words"></span></label>
         </div>
         <div class="panel script-block">
-            <div class="head"><span>Prompts de vídeo</span><button type="button" class="btn primary small" data-copy="st-prompt">Copiar todas as cenas</button></div>
+            <div class="head"><span>Prompts de vídeo</span><button type="button" class="btn primary small" id="st-copy-scenes">Copiar todas as cenas (tudo junto)</button></div>
             <div class="reference-box" id="st-reference"></div>
             <p class="hint" id="st-scenes-hint"></p>
             <div class="stack" id="st-prompts"></div>
