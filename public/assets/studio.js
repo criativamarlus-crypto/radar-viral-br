@@ -417,26 +417,36 @@
     const box = $('st-reference');
     if (!box) return;
     box.replaceChildren();
-    const reference = data.references[state.character];
-    if (reference) {
-      const img = document.createElement('img');
-      img.src = 'media.php?id=' + encodeURIComponent(reference.id); img.alt = 'Folha de referência do personagem'; img.loading = 'lazy';
-      const info = document.createElement('div');
+    const list = data.references[state.character] || [];
+    if (list.length) {
+      const title = document.createElement('p');
       const strong = document.createElement('strong');
-      strong.textContent = 'Anexe esta imagem em cada cena';
+      strong.textContent = 'Anexe ' + (list.length === 1 ? 'esta imagem' : 'estas ' + list.length + ' imagens') + ' em cada cena';
       const hint = document.createElement('span');
       hint.className = 'hint';
-      hint.textContent = 'A ferramenta de vídeo pega a imagem junto com a fala e mantém o mesmo personagem e a mesma reação.';
-      const link = document.createElement('a');
-      link.className = 'btn ghost small'; link.href = 'media.php?id=' + encodeURIComponent(reference.id) + '&download=1'; link.textContent = 'Baixar imagem de referência';
-      info.append(strong, hint, link);
-      box.append(img, info);
+      hint.textContent = ' A ferramenta de vídeo pega as imagens junto com a fala e mantém o mesmo personagem e a mesma reação.';
+      title.append(strong, hint);
+      const grid = document.createElement('div');
+      grid.className = 'reference-list';
+      for (const reference of list) {
+        const figure = document.createElement('figure');
+        const img = document.createElement('img');
+        img.src = 'media.php?id=' + encodeURIComponent(reference.id); img.alt = reference.label || 'Imagem de referência'; img.loading = 'lazy';
+        const caption = document.createElement('figcaption');
+        caption.append((reference.role === 'photo' ? 'Foto' : 'Folha com vistas') + (reference.label ? ' · ' + reference.label : ''), document.createElement('br'));
+        const link = document.createElement('a');
+        link.className = 'btn ghost small'; link.href = 'media.php?id=' + encodeURIComponent(reference.id) + '&download=1'; link.textContent = 'Baixar';
+        caption.append(link);
+        figure.append(img, caption);
+        grid.append(figure);
+      }
+      box.append(title, grid);
     } else {
       const note = document.createElement('div');
       note.className = 'notice warn';
       const link = document.createElement('a');
       link.href = 'personagem.php?c=' + encodeURIComponent(state.character); link.textContent = 'Meus Personagens';
-      note.append('Falta a folha de referência de ' + characterName() + '. Cadastre em ', link, ' para baixar e anexar aqui.');
+      note.append('Faltam as imagens de referência de ' + characterName() + '. Cadastre em ', link, ' para baixar e anexar aqui.');
       box.append(note);
     }
   }

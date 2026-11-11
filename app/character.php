@@ -12,6 +12,8 @@ const RADAR_CHARACTER_VERSION = 1;
 const RADAR_SCENE_MAX_SECONDS = 25;
 const RADAR_SCENE_MAX_COUNT = 5;
 const RADAR_SCENES_DEFAULT = 3;
+/** Reference images (sheets and photos) a character can keep: all of them travel with every video prompt. */
+const RADAR_REFERENCES_MAX = 6;
 /** What the writer aims for in each scene, leaving room under the 25 s limit. */
 const RADAR_SCENE_TARGET_SECONDS = 22;
 
@@ -78,14 +80,49 @@ function radar_character_images_all(): array
 }
 
 /**
- * The reference sheet of a character (one image with the front, profile and 3/4 views). It goes with the
- * video prompt: the video tool gets it attached to every scene so it keeps the same face.
+ * The reference images of a character: sheets with several views and photos. ALL of them go with the video
+ * prompt, so the video tool keeps the same face. Sheets come first.
  *
- * @return array<string,mixed>|null
+ * @return array<int,array<string,mixed>>
  */
+function radar_character_references(?string $slug = null): array
+{
+    return radar_db_all("SELECT id, mime, width, height, label, role, character_slug FROM media WHERE kind = 'reference' AND character_slug = ? ORDER BY CASE role WHEN 'sheet' THEN 0 ELSE 1 END, created_at, rowid", [radar_character_slug($slug)]);
+}
+
+/** The first reference image (the sheet when there is one), or null. @return array<string,mixed>|null */
 function radar_character_reference(?string $slug = null): ?array
 {
-    return radar_db_one("SELECT id, mime, width, height, label, character_slug FROM media WHERE kind = 'reference' AND character_slug = ? ORDER BY created_at DESC LIMIT 1", [radar_character_slug($slug)]);
+    return radar_character_references($slug)[0] ?? null;
+}
+
+/** What the prompt needs to know about the references: the kind and the label of each. @return array<int,array{role:string,label:string}> */
+function radar_character_reference_roles(?string $slug = null): array
+{
+    return array_map(static fn(array $r): array => ['role' => (string)$r['role'] === 'photo' ? 'photo' : 'sheet', 'label' => (string)$r['label']], radar_character_references($slug));
+}
+
+/**
+ * The paragraph of every scene prompt that tells the video tool which images to attach. With no images, or
+ * only a sheet, it is the classic text; with photos it numbers every image.
+ *
+ * @param array<int,array{role:string,label:string}> $references
+ */
+function radar_reference_paragraph(array $references): string
+{
+    $count = count($references);
+    if ($count === 0 || ($count === 1 && ($references[0]['role'] ?? 'sheet') === 'sheet')) {
+        return 'REFERENCE IMAGE (attach the character reference sheet to the video tool together with this prompt, in every scene): one image with five views of the SAME {man}: front, left profile, right profile, 3/4 left and 3/4 right. Use it ONLY to keep {his} face and identity: face shape and features, skin tone, hair, facial hair (if any), glasses and body build. Copy those exactly and never redesign {him}. Do not copy the clothes, accessories, pose or grey background of the sheet.';
+    }
+    $items = [];
+    foreach (array_values($references) as $index => $reference) {
+        $label = radar_direction_text($reference['label'] ?? '', 80);
+        $items[] = ($index + 1) . ') ' . (($reference['role'] ?? 'sheet') === 'sheet'
+            ? 'a character sheet with several views of the SAME {man} (front, profiles and 3/4 views)'
+            : 'a photo of the SAME {man}' . ($label !== '' ? ' (' . $label . ')' : ''));
+    }
+    return 'REFERENCE IMAGE' . ($count > 1 ? 'S (attach ALL ' . $count . ' images' : ' (attach this image') . ' to the video tool together with this prompt, in every scene): ' . implode('; ', $items)
+        . '. Use ' . ($count > 1 ? 'them' : 'it') . ' ONLY to keep {his} face and identity: face shape and features, skin tone, hair, facial hair (if any), glasses and body build. Copy those exactly and never redesign {him}. Do not copy the clothes, accessories, pose or background of the ' . ($count > 1 ? 'images' : 'image') . '.';
 }
 
 /** @return array<string,mixed>|null */
@@ -158,15 +195,15 @@ function radar_video_standards(?string $slug = null): array
         ],
         'same_character_every_scene' => [
             'label' => 'Mesmo personagem e mesma reação em todas as cenas',
-            'description' => 'Todo prompt manda anexar a folha de referência só para manter o rosto e exige o mesmo personagem em todas as cenas, com a mesma reação. A roupa e os acessórios ficam iguais dentro do vídeo; só o ângulo e os gestos mudam de cena para cena. Nada de segundo personagem, sósia ou pessoas extras.',
-            'rule' => 'CONTINUITY (the same rules in every scene of this video): exactly ONE person appears, always the same {man} from the reference sheet: same face and features, same skin tone, same hair, same facial hair (if any), same glasses, same body build and same voice. {His} clothes and accessories are the ones in WARDROBE below and stay identical in every scene of this video; only the camera angle and {his} gestures change from scene to scene. Never create a second or a different character, a look-alike, a double or extra people, and never change {his} face between scenes.',
+            'description' => 'Todo prompt manda anexar todas as imagens de referência (folha e fotos) só para manter o rosto e exige o mesmo personagem em todas as cenas, com a mesma reação. A roupa e os acessórios ficam iguais dentro do vídeo; só o ângulo e os gestos mudam de cena para cena. Nada de segundo personagem, sósia ou pessoas extras.',
+            'rule' => 'CONTINUITY (the same rules in every scene of this video): exactly ONE person appears, always the same {man} from the reference images: same face and features, same skin tone, same hair, same facial hair (if any), same glasses, same body build and same voice. {His} clothes and accessories are the ones in WARDROBE below and stay identical in every scene of this video; only the camera angle and {his} gestures change from scene to scene. Never create a second or a different character, a look-alike, a double or extra people, and never change {his} face between scenes.',
             'avoid' => 'a second character, a different person, a look-alike or double, a changed face between scenes',
         ],
         'new_look_every_video' => [
             'label' => 'Visual novo a cada notícia',
-            'description' => 'A folha de referência serve só para manter o rosto. A roupa, os acessórios, a iluminação e o ângulo são criados para cada notícia, combinando com o tom do assunto, e evitam repetir o visual dos vídeos anteriores.',
-            'rule' => 'VARIATION (default rule, do not override): the reference sheet is used ONLY to keep {his} face and identity. Do not copy its clothes, accessories, pose or grey background. Dress {him} as described in WARDROBE, which was chosen for the tone of this news and differs from the previous videos.',
-            'avoid' => 'copying the clothes or the grey background of the reference sheet',
+            'description' => 'As imagens de referência servem só para manter o rosto. A roupa, os acessórios, a iluminação e o ângulo são criados para cada notícia, combinando com o tom do assunto, e evitam repetir o visual dos vídeos anteriores.',
+            'rule' => 'VARIATION (default rule, do not override): the reference images are used ONLY to keep {his} face and identity. Do not copy their clothes, accessories, pose or background. Dress {him} as described in WARDROBE, which was chosen for the tone of this news and differs from the previous videos.',
+            'avoid' => 'copying the clothes or the background of the reference images',
         ],
     ];
     foreach ($standards as $key => $standard) {
@@ -257,7 +294,7 @@ function radar_scene_split(string $spoken, int $scenes = 1): array
  * model) so the character block, the reference-image instruction and the fixed standards stay identical.
  * The dialogue is the user's own approved script, cut into scenes of at most 25 s.
  *
- * @param array{spoken:string,expression:string,scene:string,headline:string,source:string,layout?:string,scenes?:int,direction?:array<string,mixed>,character?:string} $parts
+ * @param array{spoken:string,expression:string,scene:string,headline:string,source:string,layout?:string,scenes?:int,direction?:array<string,mixed>,character?:string,references?:array<int,array{role:string,label:string}>} $parts
  * @return array<int,string>
  */
 function radar_video_prompts(array $parts): array
@@ -272,6 +309,7 @@ function radar_video_prompts(array $parts): array
     $chunks = radar_scene_split((string)$parts['spoken'], (int)($parts['scenes'] ?? 1));
     $total = count($chunks);
     $direction = radar_direction_normalize($parts['direction'] ?? null, 'manual') ?? radar_direction_default($slug);
+    $referenceText = radar_reference_paragraph($parts['references'] ?? radar_character_reference_roles($slug));
     $moods = radar_direction_moods();
     $prompts = [];
     foreach ($chunks as $index => $chunk) {
@@ -282,7 +320,7 @@ function radar_video_prompts(array $parts): array
                     . ($index > 0 ? ' This scene continues the same talk: {he} does not greet again or introduce {him}self again.' : '')
                 : 'SCENE 1 OF 1: one single clip.',
             '',
-            'REFERENCE IMAGE (attach the character reference sheet to the video tool together with this prompt, in every scene): one image with five views of the SAME {man}: front, left profile, right profile, 3/4 left and 3/4 right. Use it ONLY to keep {his} face and identity: face shape and features, skin tone, hair, facial hair (if any), glasses and body build. Copy those exactly and never redesign {him}. Do not copy the clothes, accessories, pose or grey background of the sheet.',
+            $referenceText,
             '',
             'CHARACTER (use the attached reference image, do not change identity):',
             radar_character_master_prompt('en', $slug),

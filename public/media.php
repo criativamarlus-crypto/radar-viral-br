@@ -24,7 +24,7 @@ try {
     header('Content-Type: ' . $info['mime']);
     $disposition = ($_GET['download'] ?? '') === '1' ? 'attachment' : 'inline';
     $isReference = radar_db_value("SELECT 1 FROM media WHERE id = ? AND kind = 'reference'", [$id]) !== null;
-    header('Content-Disposition: ' . $disposition . '; filename="' . ($isReference ? 'personagem-folha-de-referencia' : 'radar-' . substr($id, 0, 12)) . '.' . $info['extension'] . '"');
+    header('Content-Disposition: ' . $disposition . '; filename="' . ($isReference ? 'personagem-referencia-' . substr($id, 0, 8) : 'radar-' . substr($id, 0, 12)) . '.' . $info['extension'] . '"');
     header('Content-Length: ' . filesize($path));
     if ($_SERVER['REQUEST_METHOD'] !== 'HEAD') {
         readfile($path);

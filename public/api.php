@@ -179,7 +179,7 @@ try {
             $media = radar_media_save_bytes($bytes, $kind, [
                 'news_id' => $newsId > 0 && radar_db_value('SELECT 1 FROM news WHERE id = ?', [$newsId]) !== null ? $newsId : null,
                 'label' => (string)($input['label'] ?? ($kind === 'character' ? 'Referência do personagem' : ($kind === 'reference' ? 'Folha de referência do personagem' : 'Imagem enviada'))),
-                'credit' => (string)($input['credit'] ?? ''), 'character' => radar_str($input['character'] ?? ''),
+                'credit' => (string)($input['credit'] ?? ''), 'character' => radar_str($input['character'] ?? ''), 'role' => radar_str($input['role'] ?? ''),
                 'note' => in_array($kind, ['character', 'reference'], true) ? 'Imagem de referência enviada pelo administrador.' : 'Imagem enviada manualmente pelo administrador; o direito de uso é de sua responsabilidade.',
             ]);
             radar_json(['media' => $media], 201);

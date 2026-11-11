@@ -8,8 +8,9 @@ declare(strict_types=1);
  *   php bin/import-character.php --character=clara --reference=folha.webp [--primary=frente.png] [--label="Frente"]
  *
  *   --character  which character (a slug such as beto or clara); the default character when omitted.
- *   --reference  the reference sheet (front, profiles, 3/4 views). It replaces the current one and goes
- *                with every video prompt, so the video tool keeps the same character in every scene.
+ *   --reference  a reference image (the sheet with the front, profile and 3/4 views, or a photo). It is added to
+ *                the others and ALL of them go with every video prompt, so the video tool keeps the same face.
+ *   --role       sheet (several views, the default) or photo.
  *   --primary    an image for the Studio preview; it becomes the main character image.
  *
  * Exit codes: 0 saved, 1 an image was refused, 2 wrong usage.
@@ -21,7 +22,7 @@ if (PHP_SAPI !== 'cli') {
 
 require dirname(__DIR__) . '/app/bootstrap.php';
 
-$options = getopt('', ['character:', 'reference:', 'primary:', 'label:']);
+$options = getopt('', ['character:', 'reference:', 'primary:', 'label:', 'role:']);
 $characterSlug = isset($options['character']) ? (is_array($options['character']) ? (string)$options['character'][0] : (string)$options['character']) : '';
 if ($characterSlug !== '' && !radar_character_valid($characterSlug)) {
     fwrite(STDERR, 'Personagem desconhecido: ' . $characterSlug . ' (use ' . implode(', ', array_keys(radar_characters())) . ")\n");
@@ -41,10 +42,11 @@ try {
         }
         $media = radar_media_save_bytes($bytes, 'reference', [
             'character' => $characterSlug,
-            'label' => 'Folha de referência do personagem',
+            'role' => isset($options['role']) ? $first($options['role']) : 'sheet',
+            'label' => isset($options['label']) && !isset($options['primary']) ? $first($options['label']) : (isset($options['role']) && $first($options['role']) === 'photo' ? 'Foto' : 'Folha de referência'),
             'note' => 'Imagem de referência importada pela linha de comando.',
         ]);
-        printf("Folha de referência salva (%dx%d).\n", $media['width'], $media['height']);
+        printf("Imagem de referência salva (%dx%d, %s).\n", $media['width'], $media['height'], $media['role']);
     }
     if (isset($options['primary'])) {
         $bytes = @file_get_contents($first($options['primary']));

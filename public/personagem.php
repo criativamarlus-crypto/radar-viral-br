@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $character = radar_character_get($slug);
 $images = radar_character_images($slug);
-$reference = radar_character_reference($slug);
+$references = radar_character_references($slug);
 $expressions = radar_character_expressions();
 $csrf = radar_csrf_token();
 
@@ -84,20 +84,33 @@ radar_page_start('Meus Personagens', 'personagem.php');
 </section>
 
 <section class="panel section" aria-labelledby="sheet-h">
-    <h2 id="sheet-h">Folha de referência de <?= radar_h($character['name']) ?> (vai junto com o prompt de vídeo)</h2>
-    <p class="hint">Uma imagem com as vistas do personagem (frente, perfis e 3/4). Todo prompt de vídeo manda anexá-la em cada cena, só para a ferramenta manter o rosto e a mesma reação.</p>
-    <?php if ($reference !== null): ?>
-        <div class="reference-box"><img src="media.php?id=<?= radar_h($reference['id']) ?>" alt="Folha de referência de <?= radar_h($character['name']) ?>"><div><strong><?= radar_h($reference['label'] ?: 'Folha de referência') ?></strong><br><span class="hint"><?= (int)$reference['width'] ?>×<?= (int)$reference['height'] ?></span><br>
-            <a class="btn ghost small" href="media.php?id=<?= radar_h($reference['id']) ?>&amp;download=1">Baixar</a>
-            <button type="button" class="btn danger small" data-act="media_delete" data-id="<?= radar_h($reference['id']) ?>" data-confirm="Excluir a folha de referência?">Excluir</button></div></div>
+    <h2 id="sheet-h">Imagens de referência de <?= radar_h($character['name']) ?> (vão junto com o prompt de vídeo)</h2>
+    <p class="hint">Folha com as vistas (frente, perfis e 3/4) e fotos. <strong>Todas</strong> entram na lista de imagens de cada prompt de vídeo: a ferramenta precisa receber todas em cada cena, só para manter o rosto e a mesma reação. Até <?= (int)RADAR_REFERENCES_MAX ?> imagens.</p>
+    <?php if ($references !== []): ?>
+        <div class="reference-list">
+            <?php foreach ($references as $reference): ?>
+                <figure>
+                    <img src="media.php?id=<?= radar_h($reference['id']) ?>" alt="<?= radar_h($reference['label'] ?: 'Imagem de referência') ?>" loading="lazy">
+                    <figcaption><?= radar_h($reference['role'] === 'photo' ? 'Foto' : 'Folha com vistas') ?><?= $reference['label'] !== '' ? ' · ' . radar_h($reference['label']) : '' ?> · <?= (int)$reference['width'] ?>×<?= (int)$reference['height'] ?><br>
+                        <a class="btn ghost small" href="media.php?id=<?= radar_h($reference['id']) ?>&amp;download=1">Baixar</a>
+                        <button type="button" class="btn danger small" data-act="media_delete" data-id="<?= radar_h($reference['id']) ?>" data-confirm="Excluir esta imagem de referência?">Excluir</button></figcaption>
+                </figure>
+            <?php endforeach; ?>
+        </div>
     <?php else: ?>
-        <div class="notice warn">Nenhuma folha de referência de <?= radar_h($character['name']) ?>. Envie abaixo a imagem com as vistas do personagem.</div>
+        <div class="notice warn">Nenhuma imagem de referência de <?= radar_h($character['name']) ?>. Envie abaixo a folha com as vistas e/ou uma foto.</div>
     <?php endif; ?>
-    <form class="form-grid section" data-upload enctype="multipart/form-data">
-        <input type="hidden" name="kind" value="reference"><input type="hidden" name="character" value="<?= radar_h($slug) ?>"><input type="hidden" name="label" value="Folha de referência de <?= radar_h($character['name']) ?>">
-        <label><?= $reference !== null ? 'Substituir a folha' : 'Enviar a folha' ?> (JPEG, PNG ou WebP, até 5 MB)<input type="file" name="file" accept="image/jpeg,image/png,image/webp" required></label>
-        <button class="btn primary" type="submit"><?= $reference !== null ? 'Substituir' : 'Enviar' ?></button>
-    </form>
+    <?php if (count($references) < RADAR_REFERENCES_MAX): ?>
+        <form class="form-grid section" data-upload enctype="multipart/form-data">
+            <input type="hidden" name="kind" value="reference"><input type="hidden" name="character" value="<?= radar_h($slug) ?>">
+            <div class="field-row">
+                <label>Imagem (JPEG, PNG ou WebP, até 5 MB)<input type="file" name="file" accept="image/jpeg,image/png,image/webp" required></label>
+                <label>Tipo<select name="role"><option value="sheet">Folha com várias vistas</option><option value="photo">Foto do personagem</option></select></label>
+                <label>Descrição <span class="optional">opcional</span><input name="label" maxlength="80" placeholder="Ex.: selfie ao ar livre"></label>
+            </div>
+            <button class="btn primary" type="submit">Adicionar imagem de referência</button>
+        </form>
+    <?php endif; ?>
 </section>
 
 <div class="grid-2 section">

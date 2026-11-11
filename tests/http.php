@@ -310,9 +310,9 @@ try {
     $promptScenesData = json_decode($promptScenes['body'], true);
     check('the Studio asks for the prompts of every scene', static fn(): bool => $promptScenes['status'] === 200 && ($promptScenesData['scenes'] ?? 0) === 3 && count($promptScenesData['prompts'] ?? []) === 3 && str_contains($promptScenesData['prompt'] ?? '', 'SCENE 3 OF 3'));
     $scenePage = localRequest('roteiro.php?id=' . ($scenesData['id'] ?? 0));
-    check('the script page shows one prompt per scene, with the reference-sheet notice', static fn(): bool => str_contains($scenePage['body'], 'Cena 1 de') && str_contains($scenePage['body'], 'id="scene-prompt-0"') && str_contains($scenePage['body'], 'name="scenes"') && str_contains($scenePage['body'], 'Falta a folha de referência'));
+    check('the script page shows one prompt per scene, with the reference-sheet notice', static fn(): bool => str_contains($scenePage['body'], 'Cena 1 de') && str_contains($scenePage['body'], 'id="scene-prompt-0"') && str_contains($scenePage['body'], 'name="scenes"') && str_contains($scenePage['body'], 'Faltam as imagens de referência'));
     $characterPage = localRequest('personagem.php');
-    check('Meu Personagem has the reference-sheet upload and shows the fixed standards', static fn(): bool => str_contains($characterPage['body'], 'Folha de referência') && str_contains($characterPage['body'], 'name="kind" value="reference"') && str_contains($characterPage['body'], 'Mesmo personagem e mesma reação em todas as cenas'));
+    check('Meu Personagem has the reference-sheet upload and shows the fixed standards', static fn(): bool => str_contains($characterPage['body'], 'Imagens de referência de') && str_contains($characterPage['body'], 'name="kind" value="reference"') && str_contains($characterPage['body'], 'name="role"') && str_contains($characterPage['body'], 'Foto do personagem') && str_contains($characterPage['body'], 'Mesmo personagem e mesma reação em todas as cenas'));
     $lookDraw = $post(['action' => 'direction', 'news_id' => $firstNewsId, 'scenes' => 3, 'expression' => 'serio', 'outfit' => 'a plain white t-shirt']);
     $lookData = json_decode($lookDraw['body'], true)['direction'] ?? [];
     check('the Studio can draw another look for the news, with an angle for every scene', static fn(): bool => $lookDraw['status'] === 200 && ($lookData['outfit'] ?? '') !== '' && count($lookData['angles'] ?? []) === 3 && ($lookData['outfit'] ?? '') !== 'a plain white t-shirt' && ($lookData['origin'] ?? '') === 'sorteio');
@@ -376,7 +376,7 @@ try {
     $sheetUpload = localRequest('api.php', 'POST', $sheetBody, array_merge($sheetHeaders, ['X-CSRF-Token: ' . $writeCsrf]));
     $studioWithSheet = localRequest('estudio.php?news=' . $firstNewsId);
     $scenePageWithSheet = localRequest('roteiro.php?id=' . ($scenesData['id'] ?? 0));
-    check('after uploading the reference sheet the Studio and the script page offer it for download with the prompts', static fn(): bool => $sheetUpload['status'] === 201 && str_contains($studioWithSheet['body'], '"references":{"beto":{"id":"') && str_contains($studioWithSheet['body'], 'id="st-scenes"') && str_contains($studioWithSheet['body'], 'id="st-prompts"')
+    check('after uploading the reference sheet the Studio and the script page offer it for download with the prompts', static fn(): bool => $sheetUpload['status'] === 201 && str_contains($studioWithSheet['body'], '"references":{"beto":[{"id":"') && str_contains($studioWithSheet['body'], '"role":"sheet"') && str_contains($studioWithSheet['body'], 'id="st-scenes"') && str_contains($studioWithSheet['body'], 'id="st-prompts"')
         && str_contains($scenePageWithSheet['body'], 'Anexe esta imagem em cada cena') && str_contains($scenePageWithSheet['body'], 'download=1'));
     $mcpScenes = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 2]);
     $mcpScenesData = json_decode(json_decode($mcpScenes['body'], true)['result']['content'][0]['text'] ?? '{}', true);

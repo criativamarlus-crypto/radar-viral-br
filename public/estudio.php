@@ -39,8 +39,7 @@ $references = [];
 foreach (array_keys(radar_characters()) as $characterSlug) {
     $info = radar_character_get($characterSlug);
     $characterList[] = ['slug' => $characterSlug, 'name' => $info['name'], 'tagline' => $info['tagline'], 'gender' => $info['gender']];
-    $sheet = radar_character_reference($characterSlug);
-    $references[$characterSlug] = $sheet === null ? null : ['id' => $sheet['id'], 'width' => $sheet['width'], 'height' => $sheet['height']];
+    $references[$characterSlug] = array_map(static fn(array $r): array => ['id' => $r['id'], 'width' => $r['width'], 'height' => $r['height'], 'role' => $r['role'], 'label' => $r['label']], radar_character_references($characterSlug));
 }
 
 $state = [

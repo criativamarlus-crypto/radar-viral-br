@@ -24,7 +24,7 @@ if ($script === null) {
     exit;
 }
 $csrf = radar_csrf_token();
-$reference = radar_character_reference($script['character']);
+$references = radar_character_references($script['character']);
 $expressions = radar_character_expressions();
 $scenes = radar_character_scenes();
 
@@ -104,10 +104,15 @@ radar_page_start('Roteiro de react', 'roteiros.php');
         </div>
         <div class="panel script-block">
             <div class="head"><span>F. Prompts de vídeo · <?= count($script['video_prompts']) ?> <?= count($script['video_prompts']) === 1 ? 'cena' : 'cenas' ?></span><button type="button" class="btn primary small" data-copy="video-prompt">Copiar todas</button></div>
-            <?php if ($reference !== null): ?>
-                <div class="reference-box"><img src="media.php?id=<?= radar_h($reference['id']) ?>" alt="Folha de referência do personagem"><div><strong>Anexe esta imagem em cada cena</strong><br><span class="hint">A ferramenta de vídeo pega a imagem junto com a fala e mantém o mesmo personagem e a mesma reação.</span><br><a class="btn ghost small" href="media.php?id=<?= radar_h($reference['id']) ?>&amp;download=1">Baixar imagem de referência</a></div></div>
+            <?php if ($references !== []): ?>
+                <p><strong>Anexe <?= count($references) === 1 ? 'esta imagem' : 'estas ' . count($references) . ' imagens' ?> em cada cena</strong> <span class="hint">A ferramenta de vídeo pega as imagens junto com a fala e mantém o mesmo personagem e a mesma reação.</span></p>
+                <div class="reference-list">
+                    <?php foreach ($references as $reference): ?>
+                        <figure><img src="media.php?id=<?= radar_h($reference['id']) ?>" alt="<?= radar_h($reference['label'] ?: 'Imagem de referência') ?>" loading="lazy"><figcaption><?= radar_h($reference['role'] === 'photo' ? 'Foto' : 'Folha com vistas') ?><?= $reference['label'] !== '' ? ' · ' . radar_h($reference['label']) : '' ?><br><a class="btn ghost small" href="media.php?id=<?= radar_h($reference['id']) ?>&amp;download=1">Baixar</a></figcaption></figure>
+                    <?php endforeach; ?>
+                </div>
             <?php else: ?>
-                <div class="notice warn">Falta a folha de referência de <?= radar_h($script['character_name']) ?>. Cadastre em <a href="personagem.php?c=<?= radar_h($script['character']) ?>">Meus Personagens</a> para baixar e anexar aqui.</div>
+                <div class="notice warn">Faltam as imagens de referência de <?= radar_h($script['character_name']) ?>. Cadastre em <a href="personagem.php?c=<?= radar_h($script['character']) ?>">Meus Personagens</a> para baixar e anexar aqui.</div>
             <?php endif; ?>
             <p class="hint">Visual: <strong><?= radar_h($script['direction']['outfit']) ?></strong><?= $script['direction']['accessories'] !== '' ? ' · ' . radar_h($script['direction']['accessories']) : '' ?></p>
             <?php foreach ($script['video_prompts'] as $index => $scenePrompt): ?>

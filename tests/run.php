@@ -996,15 +996,51 @@ check('a text that needs more scenes than asked gets a warning', static function
     }
     return $warned === (count($script['video_prompts']) > 1);
 });
-check('the reference sheet is a single image: a new one replaces the old one and it never becomes a character image', static function () use ($png): bool {
+check('a character keeps several reference images (sheet first, then photos), up to the limit, and they are never character stills', static function () use ($png): bool {
     $before = count(radar_character_images());
-    $first = radar_media_save_bytes($png, 'reference', ['label' => 'Folha 1']);
-    $second = radar_media_save_bytes($png . '', 'reference', ['label' => 'Folha 2']);
-    $current = radar_character_reference();
-    $count = (int)radar_db_value("SELECT COUNT(*) FROM media WHERE kind = 'reference'");
-    $ok = $current !== null && $current['id'] === $second['id'] && $count === 1 && radar_media_path($first['id']) === null && count(radar_character_images()) === $before && (int)radar_media_get($second['id'])['is_primary'] === 0;
-    radar_media_delete($second['id']);
-    return $ok && radar_character_reference() === null;
+    $photo = radar_media_save_bytes($png, 'reference', ['label' => 'Selfie', 'role' => 'photo']);
+    $sheet = radar_media_save_bytes($png . '', 'reference', ['label' => 'Folha', 'role' => 'sheet']);
+    $odd = radar_media_save_bytes($png . ' ', 'reference', ['label' => 'Sem tipo']);
+    $list = radar_character_references();
+    $roles = radar_character_reference_roles();
+    $ok = count($list) === 3 && $list[0]['id'] === $sheet['id'] && $list[1]['id'] === $odd['id'] && $list[2]['id'] === $photo['id'] && radar_character_reference()['id'] === $sheet['id']
+        && $roles[0] === ['role' => 'sheet', 'label' => 'Folha'] && $roles[2] === ['role' => 'photo', 'label' => 'Selfie'] && radar_media_get($odd['id'])['role'] === 'sheet'
+        && count(radar_character_images()) === $before && (int)radar_media_get($photo['id'])['is_primary'] === 0;
+    $extra = [];
+    for ($i = 0; $i < RADAR_REFERENCES_MAX - 3; $i++) {
+        $extra[] = radar_media_save_bytes($png . str_repeat('x', $i + 2), 'reference', ['role' => 'photo']);
+    }
+    $full = rejects(static fn() => radar_media_save_bytes($png . 'overflow', 'reference'), InvalidArgumentException::class);
+    foreach ([$photo, $sheet, $odd, ...$extra] as $media) {
+        radar_media_delete($media['id']);
+    }
+    return $ok && $full && radar_character_references() === [] && radar_character_reference() === null;
+});
+check('the prompt lists every reference image: the classic text for one sheet, numbered images when there are photos', static function (): bool {
+    $base = ['spoken' => 'Fala curta.', 'expression' => 'serio', 'scene' => 'casa', 'headline' => 'H', 'source' => 'S', 'character' => 'clara'];
+    $none = radar_video_prompts($base + ['references' => []])[0];
+    $sheetOnly = radar_video_prompts($base + ['references' => [['role' => 'sheet', 'label' => '']]])[0];
+    $photoOnly = radar_video_prompts($base + ['references' => [['role' => 'photo', 'label' => 'selfie ao ar livre']]])[0];
+    $both = radar_video_prompts($base + ['references' => [['role' => 'sheet', 'label' => ''], ['role' => 'photo', 'label' => 'selfie <b>ao ar livre</b>'], ['role' => 'photo', 'label' => '']]])[0];
+    $classic = 'REFERENCE IMAGE (attach the character reference sheet to the video tool together with this prompt, in every scene): one image with five views of the SAME woman: front, left profile, right profile, 3/4 left and 3/4 right.';
+    return str_contains($none, $classic) && str_contains($sheetOnly, $classic) && $none === $sheetOnly
+        && str_contains($photoOnly, 'REFERENCE IMAGE (attach this image to the video tool together with this prompt, in every scene): 1) a photo of the SAME woman (selfie ao ar livre)') && !str_contains($photoOnly, 'REFERENCE IMAGES')
+        && str_contains($both, 'REFERENCE IMAGES (attach ALL 3 images to the video tool together with this prompt, in every scene): 1) a character sheet with several views of the SAME woman (front, profiles and 3/4 views); 2) a photo of the SAME woman (selfie ao ar livre); 3) a photo of the SAME woman.')
+        && str_contains($both, 'Use them ONLY to keep her face and identity') && str_contains($both, 'pose or background of the images') && !str_contains($both, '<b>');
+});
+check('every prompt of a character carries the reference images it has, without being told', static function () use ($png): bool {
+    $photo = radar_media_save_bytes($png, 'reference', ['character' => 'clara', 'label' => 'Selfie', 'role' => 'photo']);
+    $sheet = radar_media_save_bytes($png . '', 'reference', ['character' => 'clara', 'label' => '', 'role' => 'sheet']);
+    $withBoth = radar_video_prompts(['spoken' => 'Oi.', 'expression' => 'serio', 'scene' => 'casa', 'headline' => 'H', 'source' => 'S', 'character' => 'clara'])[0];
+    $beto = radar_video_prompts(['spoken' => 'Oi.', 'expression' => 'serio', 'scene' => 'casa', 'headline' => 'H', 'source' => 'S', 'character' => 'beto'])[0];
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (605, 'rf1', 'Fonte R', 'Fatura do cartão sobe', 'https://f.example.com/5', 'Resumo.', ?, ?, ?, 'Cartão de crédito', 60, 1)", [time() - 900, time() - 900, time()]);
+    $script = radar_react_generate(605, ['scenes' => 1]);
+    $reloaded = radar_script_get($script['id']);
+    radar_media_delete($photo['id']);
+    radar_media_delete($sheet['id']);
+    return str_contains($withBoth, 'REFERENCE IMAGES (attach ALL 2 images') && str_contains($withBoth, '(Selfie)') && !str_contains($beto, 'ALL 2 images')
+        && str_contains($script['video_prompt'], 'REFERENCE IMAGES (attach ALL 2 images') && str_contains($reloaded['video_prompts'][0], 'REFERENCE IMAGES (attach ALL 2 images')
+        && !str_contains(radar_script_get($script['id'])['video_prompt'], 'ALL 2 images');
 });
 check('every mood has outfits, accessories and light, and the tone of the news picks the mood', static function (): bool {
     $pools = radar_direction_pools();
@@ -1158,8 +1194,8 @@ check('images and the reference sheet belong to one character: the other one is 
     $sheet = radar_media_save_bytes($png, 'reference', ['character' => 'clara', 'label' => 'Folha da Clara']);
     $still = radar_media_save_bytes($png, 'character', ['character' => 'clara', 'label' => 'Frente']);
     $second = radar_media_save_bytes($png . '', 'character', ['character' => 'clara', 'label' => 'Outra']);
-    $secondSheet = radar_media_save_bytes($png . '', 'reference', ['character' => 'clara', 'label' => 'Folha nova']);
-    $ok = count(radar_character_images('beto')) === $betoImages && radar_character_reference('beto') === $betoSheet && radar_character_reference('clara')['id'] === $secondSheet['id'] && radar_media_path($sheet['id']) === null
+    $secondSheet = radar_media_save_bytes($png . '', 'reference', ['character' => 'clara', 'label' => 'Foto nova', 'role' => 'photo']);
+    $ok = count(radar_character_images('beto')) === $betoImages && radar_character_reference('beto') === $betoSheet && radar_character_reference('clara')['id'] === $sheet['id'] && count(radar_character_references('clara')) === 2 && radar_media_path($sheet['id']) !== null
         && count(radar_character_images('clara')) === 2 && radar_character_primary('clara')['id'] === $still['id'] && (int)radar_media_get($second['id'])['is_primary'] === 0
         && radar_media_get($still['id'])['character_slug'] === 'clara' && radar_media_get($secondSheet['id'])['character_slug'] === 'clara';
     radar_character_set_primary($second['id']);
@@ -1168,6 +1204,7 @@ check('images and the reference sheet belong to one character: the other one is 
     $next = radar_character_primary('clara')['id'] === $still['id'];
     radar_media_delete($still['id']);
     radar_media_delete($secondSheet['id']);
+    radar_media_delete($sheet['id']);
     return $ok && $switched && $next && radar_character_reference('clara') === null && radar_character_images('clara') === [];
 });
 check('a finance react is made by Clara unless another character is chosen, and the script keeps who speaks', static function (): bool {

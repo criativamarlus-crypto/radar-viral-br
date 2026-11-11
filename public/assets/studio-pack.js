@@ -97,15 +97,22 @@
   async function collectFiles() {
     const files = [];
     const push = (blob, name, label, note) => { if (blob) files.push({ blob, name, label, note }); };
-    const reference = data.references[state.character];
-    const sheet = reference ? await mediaBlob(reference.id) : null;
-    if (sheet) push(sheet, '01-folha-de-referencia-do-personagem.' + extension(sheet.type), 'Folha de referência de ' + characterName(), 'anexe em TODAS as cenas (só serve para manter o rosto)');
-    push(await composition(false), '02-composicao-referencia-1080x1920.png', 'Composição 9:16 de referência', 'como o vídeo final deve ficar');
-    push(await composition(true), '03-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', 'Camada transparente', 'vai por cima do vídeo gerado');
+    let count = 0;
+    const next = () => String(++count).padStart(2, '0');
+    // Every reference image of the character goes with the prompts (the video tool needs all of them in every scene).
+    for (const reference of data.references[state.character] || []) {
+      const blob = await mediaBlob(reference.id);
+      if (blob) {
+        const photo = reference.role === 'photo';
+        push(blob, next() + '-referencia-' + (photo ? 'foto' : 'folha-de-vistas') + '.' + extension(blob.type), (photo ? 'Foto de referência' : 'Folha de referência') + ' de ' + characterName() + (reference.label ? ' (' + reference.label + ')' : ''), 'anexe em TODAS as cenas (só serve para manter o rosto)');
+      }
+    }
+    push(await composition(false), next() + '-composicao-referencia-1080x1920.png', 'Composição 9:16 de referência', 'como o vídeo final deve ficar');
+    push(await composition(true), next() + '-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', 'Camada transparente', 'vai por cima do vídeo gerado');
     const coverBlob = await mediaBlob(state.coverId);
-    if (coverBlob) push(coverBlob, '04-imagem-da-noticia.' + extension(coverBlob.type), 'Imagem da notícia', 'com o crédito da fonte');
+    if (coverBlob) push(coverBlob, next() + '-imagem-da-noticia.' + extension(coverBlob.type), 'Imagem da notícia', 'com o crédito da fonte');
     const characterBlob = await mediaBlob(state.characterId);
-    if (characterBlob) push(characterBlob, '05-personagem-no-estudio.' + extension(characterBlob.type), 'Imagem do personagem usada no Estúdio', '');
+    if (characterBlob) push(characterBlob, next() + '-personagem-no-estudio.' + extension(characterBlob.type), 'Imagem do personagem usada no Estúdio', '');
     return files;
   }
 

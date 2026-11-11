@@ -62,6 +62,11 @@ function radar_media_save_bytes(string $bytes, string $kind, array $meta = []): 
     if (!in_array($kind, ['cover', 'character', 'screenshot', 'upload', 'reference'], true)) {
         throw new InvalidArgumentException('Tipo de mídia inválido.');
     }
+    $slug = radar_character_slug($meta['character'] ?? null);
+    if ($kind === 'reference' && (int)radar_db_value("SELECT COUNT(*) FROM media WHERE kind = 'reference' AND character_slug = ?", [$slug]) >= RADAR_REFERENCES_MAX) {
+        throw new InvalidArgumentException('Cada personagem aceita até ' . RADAR_REFERENCES_MAX . ' imagens de referência. Exclua uma antes de enviar outra.');
+    }
+    $role = $kind === 'reference' ? (in_array($meta['role'] ?? '', ['sheet', 'photo'], true) ? (string)$meta['role'] : 'sheet') : '';
     $directory = radar_media_directory();
     $temp = $directory . '/.incoming-' . bin2hex(random_bytes(8));
     if (strlen($bytes) > RADAR_MEDIA_MAX_BYTES || @file_put_contents($temp, $bytes, LOCK_EX) === false) {
@@ -83,26 +88,19 @@ function radar_media_save_bytes(string $bytes, string $kind, array $meta = []): 
         @unlink($temp);
         throw $error;
     }
-    $slug = radar_character_slug($meta['character'] ?? null);
     $isPrimary = $kind === 'character' && (!empty($meta['is_primary']) || radar_db_value("SELECT 1 FROM media WHERE kind = 'character' AND character_slug = ? LIMIT 1", [$slug]) === null);
     if ($isPrimary) {
         radar_db_exec("UPDATE media SET is_primary = 0 WHERE kind = 'character' AND character_slug = ?", [$slug]);
     }
     radar_db_exec(
-        'INSERT INTO media (id, kind, news_id, mime, width, height, bytes, label, is_primary, source_url, credit, note, created_at, character_slug) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO media (id, kind, news_id, mime, width, height, bytes, label, is_primary, source_url, credit, note, created_at, character_slug, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             $id, $kind, $meta['news_id'] ?? null, $info['mime'], $info['width'], $info['height'], strlen($bytes),
             mb_substr((string)($meta['label'] ?? ''), 0, 120), $isPrimary ? 1 : 0, $meta['source_url'] ?? null,
             isset($meta['credit']) ? mb_substr((string)$meta['credit'], 0, 200) : null,
-            isset($meta['note']) ? mb_substr((string)$meta['note'], 0, 400) : null, time(), $slug,
+            isset($meta['note']) ? mb_substr((string)$meta['note'], 0, 400) : null, time(), $slug, $role,
         ]
     );
-    if ($kind === 'reference') {
-        // There is a single reference sheet: the new one replaces the old one.
-        foreach (radar_db_all("SELECT id FROM media WHERE kind = 'reference' AND character_slug = ? AND id != ?", [$slug, $id]) as $old) {
-            radar_media_delete((string)$old['id']);
-        }
-    }
     return radar_media_get($id) ?? [];
 }
 

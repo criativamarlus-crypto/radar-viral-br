@@ -262,6 +262,10 @@ ALTER TABLE scripts ADD COLUMN character_slug TEXT NOT NULL DEFAULT 'beto';
 ALTER TABLE projects ADD COLUMN character_slug TEXT NOT NULL DEFAULT 'beto';
 CREATE INDEX media_character ON media(kind, character_slug);
 SQL,
+        8 => <<<'SQL'
+ALTER TABLE media ADD COLUMN role TEXT NOT NULL DEFAULT '';
+UPDATE media SET role = 'sheet' WHERE kind = 'reference';
+SQL,
     ];
 }
 

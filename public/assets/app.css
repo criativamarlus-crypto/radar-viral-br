@@ -173,6 +173,10 @@ tr:last-child td { border-bottom: 0; }
 .reference-box { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: .75rem; }
 .reference-box img { width: min(100%, 320px); border-radius: .5rem; border: 1px solid var(--border); }
 .reference-box > div { display: grid; gap: .4rem; justify-items: start; }
+.reference-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .75rem; margin-bottom: .75rem; }
+.reference-list figure { margin: 0; display: grid; gap: .35rem; align-content: start; }
+.reference-list img { width: 100%; height: auto; border-radius: .5rem; border: 1px solid var(--border); }
+.reference-list figcaption { font-size: .8rem; color: var(--muted); }
 .script-block .head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
 .script-block .head span { font-weight: 700; font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--yellow); }
 .headline-option { display: flex; gap: .5rem; align-items: center; justify-content: space-between; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: .55rem .7rem; margin-bottom: .4rem; }
