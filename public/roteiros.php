@@ -14,13 +14,14 @@ radar_page_start('Roteiros criados', 'roteiros.php');
 <?php else: ?>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Criado</th><th>Notícia</th><th>Gancho</th><th>Origem</th><th>Duração</th><th></th></tr></thead>
+            <thead><tr><th>Criado</th><th>Notícia</th><th>Gancho</th><th>Personagem</th><th>Origem</th><th>Duração</th><th></th></tr></thead>
             <tbody>
             <?php foreach ($scripts as $script): ?>
                 <tr>
                     <td><?= radar_h(date('d/m H:i', (int)strtotime($script['created_at']))) ?></td>
                     <td><?= radar_h(mb_substr($script['news_title'], 0, 90)) ?><br><span class="meta"><?= radar_h($script['news_source']) ?></span></td>
                     <td><?= radar_h(mb_substr($script['hook'], 0, 80)) ?></td>
+                    <td><?= radar_h($script['character_name']) ?><br><span class="meta">versão <?= (int)$script['character_version'] ?><?= $script['format'] === 'tv3' ? ' · 3 cenas' : '' ?><?= $script['update_of'] !== null ? ' · atualização do #' . (int)$script['update_of'] : '' ?></span></td>
                     <td><span class="pill <?= $script['mode'] === 'ia' ? 'ok' : 'warn' ?>"><?= $script['mode'] === 'ia' ? 'IA' : 'rascunho' ?></span></td>
                     <td>~<?= (int)$script['estimated_seconds'] ?>s</td>
                     <td><div class="row-actions"><a class="btn ghost small" href="roteiro.php?id=<?= (int)$script['id'] ?>">Abrir</a>

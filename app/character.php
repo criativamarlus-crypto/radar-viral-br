@@ -120,6 +120,22 @@ function radar_reference_slots(): array
     ];
 }
 
+/** The image that shows a character in the panel: the master image, else the Studio's main image, else the first reference; null when none. */
+function radar_character_photo_id(?string $slug = null): ?string
+{
+    $slug = radar_character_slug($slug);
+    $master = radar_db_value("SELECT id FROM media WHERE kind = 'reference' AND character_slug = ? AND role = 'master' LIMIT 1", [$slug]);
+    if (is_string($master)) {
+        return $master;
+    }
+    $primary = radar_character_primary($slug);
+    if ($primary !== null) {
+        return (string)$primary['id'];
+    }
+    $first = radar_character_references($slug)[0] ?? null;
+    return $first !== null ? (string)$first['id'] : null;
+}
+
 /** The first reference image (the sheet when there is one), or null. @return array<string,mixed>|null */
 function radar_character_reference(?string $slug = null): ?array
 {

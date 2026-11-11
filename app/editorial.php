@@ -343,6 +343,15 @@ function radar_editorial_check(array $narrations, string $slug, ?int $exceptScri
                 $issues[] = ['scene' => $lastIndex + 1, 'kind' => 'fechamento', 'with' => $sid, 'score' => round($closing === $oldClosing ? 1.0 : $score, 2), 'text' => (string)$history['closing']];
             }
         }
+        // The reaction of the last scene (what comes before the closing question) is compared apart from the question.
+        if (count($narrations) > 1 && isset($history['paragraphs'][$lastIndex])) {
+            $reaction = static fn(string $text): string => radar_editorial_plain(implode(' ', array_slice(radar_editorial_sentences($text), 0, max(0, count(radar_editorial_sentences($text)) - 2))), $phrases);
+            $mine = $reaction($narrations[$lastIndex]);
+            $theirs = $reaction((string)$history['paragraphs'][$lastIndex]);
+            if ($mine !== '' && $theirs !== '' && ($mine === $theirs || radar_editorial_jaccard(radar_editorial_shingles($mine), radar_editorial_shingles($theirs)) >= 0.6)) {
+                $issues[] = ['scene' => $lastIndex + 1, 'kind' => 'reação', 'with' => $sid, 'score' => 1.0, 'text' => mb_substr((string)$history['paragraphs'][$lastIndex], 0, 120)];
+            }
+        }
         foreach ($narrations as $index => $narration) {
             $old = $history['paragraphs'][$index] ?? null;
             if ($old === null || $index === 0 || $index === $lastIndex) {

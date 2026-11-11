@@ -91,6 +91,7 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js',
                 </div>
                 <button type="button" class="btn small" id="st-generate">Gerar outro roteiro</button>
                 <p class="hint" id="st-gen-status" role="status" aria-live="polite"></p>
+                <a class="btn ghost small" id="st-script-link" href="roteiros.php" hidden>Abrir o roteiro completo (cenas, títulos, legendas .srt)</a>
                 <button type="button" class="btn ghost small" data-react="<?= (int)$news['id'] ?>" data-title="<?= radar_h($news['title']) ?>">Gerar react com contexto conferido (IA)</button>
             <?php else: ?>
                 <p class="hint">Ao escolher a notícia, o roteiro já é gerado aqui.</p>

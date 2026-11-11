@@ -633,6 +633,8 @@
     $('st-title').value = state.title; $('st-headline').value = state.headline; $('st-script').value = state.spoken; $('st-caption').value = state.caption;
     $('st-expression').value = state.expression; $('st-scene').value = state.scene; $('st-template').value = state.template; renderPrompts();
     applyTemplateUi(); fillCaptionOptions(); words(); fillLook(); redraw();
+    const scriptLink = $('st-script-link');
+    if (scriptLink) { scriptLink.hidden = !script.id; scriptLink.href = 'roteiro.php?id=' + script.id; }
     if (keepTemplate && script.layout !== state.template) refreshPrompt();
   }
 

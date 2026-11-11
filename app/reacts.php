@@ -178,6 +178,8 @@ function radar_script_decode(array $row): array
     $facts = json_decode((string)($row['facts'] ?? ''), true);
     return [
         'format' => $format,
+        'article_id' => $row['news_id'] !== null ? (int)$row['news_id'] : null,
+        'article_source' => (string)$row['news_url'],
         'video_title' => (string)($row['video_title'] ?? ''),
         'publication_caption' => (string)($row['publication_caption'] ?? ''),
         'character_id' => $slug,

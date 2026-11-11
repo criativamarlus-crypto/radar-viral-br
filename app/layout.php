@@ -187,7 +187,7 @@ function radar_react_dialog(): string
     $default = radar_character_default_slug();
     $characters = '<option value="">Automático (pela categoria da notícia)</option>';
     foreach (array_keys(radar_characters()) as $slug) {
-        $characters .= '<option value="' . radar_h($slug) . '" data-format="' . radar_h(radar_character_format($slug)) . '"' . ($slug === $default ? ' selected' : '') . '>' . radar_h(radar_character_get($slug)['name']) . '</option>';
+        $characters .= '<option value="' . radar_h($slug) . '" data-format="' . radar_h(radar_character_format($slug)) . '" data-seconds="' . (int)radar_character_get($slug)['narration']['scene_seconds'] . '" data-photo="' . radar_h((string)radar_character_photo_id($slug)) . '"' . ($slug === $default ? ' selected' : '') . '>' . radar_h(radar_character_get($slug)['name']) . '</option>';
     }
     $config = radar_ai_config();
     $mode = $config['provider'] !== 'none' && $config['has_key']
@@ -198,8 +198,10 @@ function radar_react_dialog(): string
         . '<p class="muted" id="react-news-title"></p><p class="hint">' . radar_h($mode) . '</p>'
         . '<div class="field-row"><label>Cenas<select id="react-scenes"><option value="1">1 cena (até 25 s)</option><option value="2">2 cenas (até 50 s)</option><option value="3" selected>3 cenas (até 75 s)</option><option value="4">4 cenas (até 100 s)</option><option value="5">5 cenas (até 125 s)</option></select></label>'
         . '<label>Tom<select id="react-tone">' . $tones . '</select></label></div>'
-        . '<label>Quem fala<select id="react-character">' . $characters . '</select></label>'
-        . '<p class="hint" id="react-tv-hint" hidden>Ela sempre faz 3 cenas conectadas: gancho, desenvolvimento e reação com fechamento (8 segundos cada, ajustável em Meus Personagens).</p>'
+        . '<div class="field-row"><label>Quem fala<select id="react-character">' . $characters . '</select></label>'
+        . '<img id="react-character-photo" class="avatar-preview" alt="" width="72" height="96" hidden></div>'
+        . '<p class="hint" id="react-tv-hint" hidden>Ela sempre faz 3 cenas conectadas: gancho, desenvolvimento e reação com fechamento. A duração de cada cena vem do cadastro e pode ser ajustada só para este react.</p>'
+        . '<label id="react-seconds-row" hidden>Segundos por cena<input type="number" id="react-seconds" min="4" max="15" value="8"></label>'
         . '<label>Modelo do vídeo<select id="react-layout">' . $layouts . '</select></label>'
         . '<label>O que você já conferiu? <span class="optional">opcional</span><textarea id="react-context" rows="3" maxlength="2000" placeholder="Fatos confirmados na matéria. Sem isso, o roteiro usa só a manchete e o resumo do veículo."></textarea></label>'
         . '<div class="notice warn" id="react-duplicates" role="alert" hidden></div>'

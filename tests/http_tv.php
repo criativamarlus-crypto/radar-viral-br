@@ -70,7 +70,7 @@ check('the generate dialog preselects the default character and tells that the T
     radar_character_default_set($maricotaId);
     $html = radar_react_dialog();
     radar_setting_set('character_default', '');
-    return str_contains($html, 'value="dona-maricota" data-format="tv3" selected') && str_contains($html, 'id="react-tv-hint"') && str_contains($html, 'id="react-duplicates"') && $dialog['status'] === 200;
+    return preg_match('/value="dona-maricota" data-format="tv3" data-seconds="8" data-photo="[^"]*" selected/', $html) === 1 && str_contains($html, 'id="react-seconds"') && str_contains($html, 'id="react-character-photo"') && str_contains($html, 'id="react-tv-hint"') && str_contains($html, 'id="react-duplicates"') && $dialog['status'] === 200;
 });
 $wav = 'RIFF' . pack('V', 44) . 'WAVEfmt ' . pack('VvvVVvv', 16, 1, 1, 8000, 8000, 1, 8) . 'data' . pack('V', 8) . str_repeat("\x80", 8);
 [$voiceBody, $voiceHeaders] = $multipart(['action' => 'upload', 'kind' => 'voice', 'character' => $maricotaId, 'label' => 'Voz'], 'voz.wav', 'audio/wav', $wav);
@@ -87,6 +87,13 @@ $promptApi = $post(['action' => 'video_prompt', 'character' => $maricotaId, 'scr
 $promptData = json_decode($promptApi['body'], true);
 check('the Studio prompt API keeps the saved plan (emotion, camera, gestures) while the text is edited', static fn(): bool => $promptApi['status'] === 200 && ($promptData['scenes'] ?? 0) === 3 && str_contains($promptData['prompts'][1] ?? '', '"Segunda fala nova."') && str_contains($promptData['prompts'][1] ?? '', 'CAMERA FOR THIS SCENE: medium shot')
     && str_contains($promptData['prompts'][0] ?? '', 'SCENE 1 OF 3 (GANCHO)'));
+$listPage = localRequest('roteiros.php');
+check('the list of scripts identifies the character, the version of its configuration, the three scenes and the update', static fn(): bool => $listPage['status'] === 200 && str_contains($listPage['body'], 'Dona Maricota do Babado') && str_contains($listPage['body'], 'versão ' . (int)($tvItem['character_version'] ?? 0) . ' · 3 cenas') && str_contains($listPage['body'], 'atualização do #' . (int)($tvItem['id'] ?? 0)));
+check('the script carries the article id and the source of the contract and the photo of a character is its master image', static function () use ($tvItem, $maricotaId): bool {
+    $script = radar_script_get($tvItem['id']);
+    $master = radar_db_value("SELECT id FROM media WHERE kind = 'reference' AND character_slug = ? AND role = 'master'", [$maricotaId]);
+    return $script['article_id'] === 9001 && $script['article_source'] === 'https://quem.example.com/volta-aos-palcos' && $master === radar_character_photo_id($maricotaId) && radar_character_photo_id('clara') === (radar_character_primary('clara')['id'] ?? (radar_character_references('clara')[0]['id'] ?? null));
+});
 // Leave the private storage as the other tests expect it: only their own images.
 foreach (radar_db_all("SELECT id FROM media WHERE character_slug = ? AND kind IN ('reference', 'voice')", [$maricotaId]) as $leftover) {
     radar_media_delete((string)$leftover['id']);

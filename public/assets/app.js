@@ -109,6 +109,16 @@
     const tv = select ? select.selectedOptions[0]?.dataset.format === 'tv3' : false;
     if ($('#react-scenes')) $('#react-scenes').disabled = tv;
     if ($('#react-tv-hint')) $('#react-tv-hint').hidden = !tv;
+    if ($('#react-seconds-row')) {
+      $('#react-seconds-row').hidden = !tv;
+      if (tv) $('#react-seconds').value = select.selectedOptions[0].dataset.seconds || '8';
+    }
+    const photo = $('#react-character-photo');
+    const photoId = select ? select.selectedOptions[0]?.dataset.photo : '';
+    if (photo) {
+      photo.hidden = !photoId;
+      if (photoId) { photo.src = 'media.php?id=' + encodeURIComponent(photoId); photo.alt = 'Foto de ' + select.selectedOptions[0].textContent; }
+    }
   }
   $('#react-character')?.addEventListener('change', syncReactCharacter);
   window.RadarOpenReact = openReact;
@@ -163,6 +173,7 @@
         layout: $('#react-layout')?.value || '',
         character: $('#react-character')?.value || '',
         context: $('#react-context').value,
+        ...($('#react-seconds-row') && !$('#react-seconds-row').hidden ? { scene_seconds: Number($('#react-seconds').value) || 8 } : {}),
         ...extra,
       });
       location.href = 'estudio.php?news=' + reactNewsId + '&roteiro=' + result.item.id;

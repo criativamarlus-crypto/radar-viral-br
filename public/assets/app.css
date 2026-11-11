@@ -264,3 +264,5 @@ label.check { display: block; font-weight: 400; margin: .3rem 0; }
 .check-grid legend { padding: 0 .4rem; color: var(--muted); font-size: .85rem; }
 
 body.login-page main { width: min(420px, 100%); }
+
+.avatar-preview{width:72px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--border);align-self:end}
