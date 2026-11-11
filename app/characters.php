@@ -94,12 +94,76 @@ function radar_characters(): array
                 'casual' => ['small gold hoops and a thin necklace', 'a woven bracelet and a silver watch', 'tiny stud earrings and a hair clip', 'a thin gold necklace and a slim watch'],
             ],
         ],
+        'dona-maricota' => [
+            'name' => 'Dona Maricota do Babado',
+            'gender' => 'f',
+            // "tv": a presenter in the official TV studio (not a phone selfie); "tv3": every react is three connected scenes.
+            'style' => 'tv',
+            'format' => 'tv3',
+            'gallery' => true,
+            'tagline' => 'A apresentadora que transforma notícia em babado',
+            'bio' => 'Apresentadora de TV popular, 64 anos de pura curiosidade e carisma. Ela conta a notícia como quem conta um babado, sem inventar um fato sequer: a graça está no jeito, nunca na invenção.',
+            'identity_en' => 'Same recurring fictional Brazilian TV host in every shot: DONA MARICOTA DO BABADO, a Brazilian woman who looks about 64 years old, with a robust build and natural body proportions, voluminous platinum-blonde hair worn teased up and curly, oversized cat-eye glasses exactly like the ones in the master reference image, bold makeup with red lipstick and expressive eyes, and red nails. She always wears a leopard-print blouse, large gold hoop earrings, a gold necklace and gold bangles. Her facial expressions are exaggerated, theatrical and memorable. The MASTER reference image is the official reference and has priority over any text description: keep her FACE, age, hair, glasses, leopard-print blouse and gold jewelry identical in every generation and use the attached reference images only to preserve them. Lighting, framing and camera may change from scene to scene, her physical identity never does. Never replace her with another woman and never imitate the face or identity of a real TV presenter.',
+            'identity_pt' => 'Personagem fictícia brasileira, sempre a mesma em todos os vídeos: Dona Maricota do Babado, mulher brasileira com aparência de aproximadamente 64 anos, corpo robusto com proporções naturais, cabelos loiros platinados volumosos, armados e encaracolados, óculos grandes estilo gatinho exatamente como na imagem-mestre, maquiagem marcante com batom vermelho e olhos expressivos, unhas vermelhas. Usa sempre blusa de estampa de oncinha, brincos grandes dourados, colar e pulseiras douradas. As expressões faciais são exageradas, teatrais e memoráveis. A imagem-mestre é a referência oficial e vale mais do que qualquer descrição em texto: rosto, idade, cabelo, óculos, blusa e joias são idênticos em todas as gerações. Cores, iluminação, enquadramentos e câmera podem variar de cena para cena; a identidade física nunca. Nunca trocar por outra mulher nem imitar o rosto ou a identidade de apresentadores reais.',
+            'personality' => [
+                'Curiosa: tem a energia de uma vizinha fofoqueira com o carisma de apresentadora de programa popular',
+                'Engraçada e teatral: exagera nas reações, nunca nos fatos',
+                'Debochada sem agressividade gratuita',
+                'Espontânea e surpreendente: improvisa comentários criativos sem inventar acontecimentos',
+                'Comunicativa e expressiva, com linguagem popular brasileira',
+                'Respeitosa e empática quando a notícia é grave: sem piada, sem deboche',
+            ],
+            'voice' => 'Voz feminina madura, levemente grave e encorpada, timbre levemente rouco porém claro, entonação de apresentadora popular brasileira. Fala espontânea, natural e expressiva: acelera discretamente na surpresa, faz pequenas pausas dramáticas e ri de vez em quando. Nunca soa robótica nem como locução publicitária.',
+            'voice_en' => 'Mature Brazilian Portuguese female voice, slightly deep and full-bodied, slightly raspy but clear timbre, the intonation of a popular Brazilian TV host. Spontaneous, natural and expressive delivery: she speeds up a little when surprised, makes small dramatic pauses and laughs now and then. Never robotic, never a commercial voice-over. The exact same voice in every scene and in every video.',
+            'catchphrases' => ['Minha filha...', 'Segura esse babado!', 'Eu não disse?', 'Isso aqui vai dar pano pra manga!', 'Meu povo, vocês viram isso?', 'Eu não sou de falar da vida de ninguém...', 'Rapaz, olha essa história!', 'Me conta uma coisa!'],
+            'pillars' => ['Famosos e entretenimento', 'Política, com fatos e atribuições', 'Finanças e economia em linguagem popular', 'Notícias internacionais explicadas', 'Tecnologia sem complicação'],
+            'categories' => [],
+            'expression' => 'surpreso',
+            'scene' => 'estudio',
+            'scenery' => 'Estúdio de televisão popular brasileira: iluminação rosa, roxa e dourada, painéis luminosos, mesa de apresentadora, microfone, caneca personalizada, telão para manchetes e imagens da notícia e o letreiro "Dona Maricota do Babado". Visual alegre, chamativo e profissional, reconhecível em todos os episódios.',
+            'scenery_en' => 'THE OFFICIAL STUDIO (the same in every episode): a popular Brazilian TV talk-show studio with pink, purple and gold lighting, glowing light panels with marquee bulbs, a glamorous presenter desk with a retro microphone and a white mug with a red-lips print, a big screen behind her for headlines and news images, and the lit sign "DONA MARICOTA DO BABADO". Cheerful, flashy and professional.',
+            'negative_rules' => [
+                'a different face, a different woman or a younger look-alike',
+                'any change to her age, hair, glasses, leopard-print blouse or gold jewelry',
+                'extra people, a co-host or an audience in the foreground',
+                'invented lines, ad-libbed words or any speech that is not in the narration',
+                'a robotic or advertising-style voice-over',
+                'imitating the face, voice or identity of a real TV presenter',
+                'subtitles or captions burned into the video',
+                'logos, watermarks and brand names',
+                'distorted hands or fingers',
+            ],
+            'narration' => ['scene_seconds' => 8, 'scenes' => 3],
+            'hooks' => ['Minha filha, olha essa notícia!', 'Meu povo, vocês viram isso?', 'Rapaz, olha essa história!'],
+            'direct_hook' => 'Vamos à notícia, meu povo.',
+            'commentary' => 'Na minha opinião, esse assunto merece a gente conversar com calma. Opinião minha, tá?',
+            'cta' => 'E você, o que achou? Me conta nos comentários.',
+            'default_outfit' => 'a leopard-print blouse (the same one as in the master reference image)',
+            'default_accessories' => 'large gold hoop earrings, a gold necklace, gold bangles and red nails',
+            'fixed_look' => true,
+            'outfits_extra' => [],
+            'accessories' => [],
+        ],
     ];
 }
 
+/**
+ * The character shown first and used when none is chosen. The panel can change it ("Meus Personagens");
+ * without a choice it is the first preset.
+ */
 function radar_character_default_slug(): string
 {
-    return (string)array_key_first(radar_characters());
+    $chosen = (string)radar_setting('character_default', '');
+    return $chosen !== '' && isset(radar_characters()[$chosen]) ? $chosen : (string)array_key_first(radar_characters());
+}
+
+/** Make a character the default one (selected first in the Studio and used for categories nobody covers). */
+function radar_character_default_set(string $slug): void
+{
+    if (!radar_character_valid($slug)) {
+        throw new InvalidArgumentException('Personagem não encontrado.');
+    }
+    radar_setting_set('character_default', $slug);
 }
 
 function radar_character_valid(string $slug): bool
@@ -114,7 +178,8 @@ function radar_character_slug(?string $slug): string
 }
 
 /**
- * A character: the code preset plus what the panel may change (display name and categories).
+ * A character: the code preset plus what the panel may change (display name, categories and the registered
+ * profile: description, personality, voice, catchphrases, scenery, negative rules and narration settings).
  *
  * @return array<string,mixed>
  */
@@ -126,7 +191,162 @@ function radar_character_get(?string $slug = null): array
     $preset['slug'] = $slug;
     $preset['name'] = $name !== '' ? $name : $preset['name'];
     $preset['categories'] = radar_character_categories($slug);
+    $profile = radar_character_profile($slug);
+    foreach (radar_character_profile_text_fields() as $field => $limit) {
+        if (isset($profile[$field]) && is_string($profile[$field]) && $profile[$field] !== '') {
+            $preset[$field] = $profile[$field];
+        }
+    }
+    foreach (radar_character_profile_list_fields() as $field => $limits) {
+        if (isset($profile[$field]) && is_array($profile[$field]) && $profile[$field] !== []) {
+            $preset[$field] = $profile[$field];
+        }
+    }
+    $narration = radar_character_narration($slug, $profile);
+    $preset['narration'] = $narration;
+    $preset['version'] = radar_character_version($slug);
     return $preset;
+}
+
+/** Permanent identifier of a character, used in exports and the API (the slug never changes). */
+function radar_character_id(?string $slug = null): string
+{
+    return radar_character_slug($slug);
+}
+
+/** Text fields of the registered profile, with their size limits. @return array<string,int> */
+function radar_character_profile_text_fields(): array
+{
+    return ['identity_pt' => 2500, 'identity_en' => 2500, 'voice' => 900, 'voice_en' => 900, 'scenery' => 900, 'scenery_en' => 900, 'bio' => 600, 'tagline' => 120];
+}
+
+/** List fields of the registered profile: [max items, max length of each]. @return array<string,array{0:int,1:int}> */
+function radar_character_profile_list_fields(): array
+{
+    return ['personality' => [10, 200], 'catchphrases' => [16, 80], 'negative_rules' => [20, 200]];
+}
+
+/** What the panel registered for a character (raw), or []. @return array<string,mixed> */
+function radar_character_profile(string $slug): array
+{
+    $stored = radar_db_value('SELECT data FROM character_profiles WHERE slug = ?', [$slug]);
+    $decoded = is_string($stored) ? json_decode($stored, true) : null;
+    return is_array($decoded) ? $decoded : [];
+}
+
+/** Version of the configuration of a character: 1 until something is changed, then +1 on every real change. */
+function radar_character_version(string $slug): int
+{
+    return max(1, (int)radar_db_value('SELECT version FROM character_profiles WHERE slug = ?', [$slug]));
+}
+
+/** Count a change of the configuration (name, categories, profile, voice, images). */
+function radar_character_bump_version(string $slug): int
+{
+    $now = time();
+    if (radar_db_value('SELECT 1 FROM character_profiles WHERE slug = ?', [$slug]) === null) {
+        radar_db_exec("INSERT INTO character_profiles (slug, version, data, updated_at) VALUES (?, 2, '{}', ?)", [$slug, $now]);
+        return 2;
+    }
+    radar_db_exec('UPDATE character_profiles SET version = version + 1, updated_at = ? WHERE slug = ?', [$now, $slug]);
+    return radar_character_version($slug);
+}
+
+/**
+ * Narration settings: seconds per scene (4 to 15) and scenes per react (tv characters always make 3).
+ *
+ * @return array{scene_seconds:int,scenes:int,words_per_second:float}
+ */
+function radar_character_narration(string $slug, ?array $profile = null): array
+{
+    $profile ??= radar_character_profile($slug);
+    $base = radar_characters()[$slug]['narration'] ?? ['scene_seconds' => 8, 'scenes' => 3];
+    $stored = is_array($profile['narration'] ?? null) ? $profile['narration'] : [];
+    return [
+        'scene_seconds' => max(4, min(15, (int)($stored['scene_seconds'] ?? $base['scene_seconds']))),
+        'scenes' => 3,
+        'words_per_second' => 2.5,
+    ];
+}
+
+/** "tv3": every react is three connected scenes in the TV studio; "classic": the phone-selfie react. */
+function radar_character_format(?string $slug = null): string
+{
+    return (string)(radar_characters()[radar_character_slug($slug)]['format'] ?? 'classic');
+}
+
+/**
+ * Save the registered profile. Only the fields that arrive are changed; an empty text goes back to the code default.
+ * The version goes up by one when something really changed. Returns the (new) version.
+ *
+ * @param array<string,mixed> $input text fields as strings; list fields as arrays or one item per line; scene_seconds as int
+ */
+function radar_character_profile_save(string $slug, array $input): int
+{
+    if (!radar_character_valid($slug)) {
+        throw new InvalidArgumentException('Personagem não encontrado.');
+    }
+    $profile = radar_character_profile($slug);
+    $before = $profile;
+    $clean = static fn(string $text): string => trim(preg_replace('/[ \t]+/u', ' ', preg_replace('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/u', '', strip_tags($text)) ?? '') ?? '');
+    foreach (radar_character_profile_text_fields() as $field => $limit) {
+        if (!array_key_exists($field, $input)) {
+            continue;
+        }
+        $value = $clean((string)$input[$field]);
+        if (mb_strlen($value) > $limit) {
+            throw new InvalidArgumentException('O campo "' . $field . '" aceita até ' . $limit . ' caracteres.');
+        }
+        if ($value === '' || $value === (string)(radar_characters()[$slug][$field] ?? '')) {
+            unset($profile[$field]);
+        } else {
+            $profile[$field] = $value;
+        }
+    }
+    foreach (radar_character_profile_list_fields() as $field => [$maxItems, $maxLength]) {
+        if (!array_key_exists($field, $input)) {
+            continue;
+        }
+        $items = is_array($input[$field]) ? $input[$field] : (preg_split('/\R/u', (string)$input[$field]) ?: []);
+        $list = [];
+        foreach ($items as $item) {
+            $text = $clean((string)$item);
+            if ($text !== '') {
+                if (mb_strlen($text) > $maxLength) {
+                    throw new InvalidArgumentException('Cada item de "' . $field . '" aceita até ' . $maxLength . ' caracteres.');
+                }
+                $list[] = $text;
+            }
+        }
+        $list = array_slice(array_values(array_unique($list)), 0, $maxItems);
+        if ($list === [] || $list === array_values((array)(radar_characters()[$slug][$field] ?? []))) {
+            unset($profile[$field]);
+        } else {
+            $profile[$field] = $list;
+        }
+    }
+    if (isset($input['scene_seconds'])) {
+        $seconds = (int)$input['scene_seconds'];
+        if ($seconds < 4 || $seconds > 15) {
+            throw new InvalidArgumentException('A duração de cada cena fica entre 4 e 15 segundos.');
+        }
+        if ($seconds === (int)(radar_characters()[$slug]['narration']['scene_seconds'] ?? 8)) {
+            unset($profile['narration']);
+        } else {
+            $profile['narration'] = ['scene_seconds' => $seconds];
+        }
+    }
+    if ($profile === $before) {
+        return radar_character_version($slug);
+    }
+    $now = time();
+    $json = json_encode($profile, JSON_UNESCAPED_UNICODE) ?: '{}';
+    if (radar_db_value('SELECT 1 FROM character_profiles WHERE slug = ?', [$slug]) === null) {
+        radar_db_exec('INSERT INTO character_profiles (slug, version, data, updated_at) VALUES (?, 2, ?, ?)', [$slug, $json, $now]);
+    } else {
+        radar_db_exec('UPDATE character_profiles SET data = ?, version = version + 1, updated_at = ? WHERE slug = ?', [$json, $now, $slug]);
+    }
+    return radar_character_version($slug);
 }
 
 /** Categories a character covers (empty = the generalist: everything no one else covers). @return array<int,string> */
@@ -153,15 +373,21 @@ function radar_character_save(string $slug, string $name, array $categories): vo
         throw new InvalidArgumentException('Informe um nome de até 40 caracteres.');
     }
     $valid = array_values(array_filter(radar_category_list(), static fn(string $c): bool => in_array($c, $categories, true)));
+    $changed = radar_character_get($slug)['name'] !== $name || radar_character_categories($slug) !== $valid;
     radar_setting_set('character_name_' . $slug, $name);
     radar_setting_set('character_categories_' . $slug, json_encode($valid, JSON_UNESCAPED_UNICODE));
+    if ($changed) {
+        radar_character_bump_version($slug);
+    }
 }
 
 /** The character that covers a category: the one listing it, else the generalist, else the default. */
 function radar_character_for_category(string $category): string
 {
+    // The default character is looked at first, so when it is a generalist it takes what nobody covers.
+    $order = array_values(array_unique(array_merge([radar_character_default_slug()], array_keys(radar_characters()))));
     $generalist = null;
-    foreach (array_keys(radar_characters()) as $slug) {
+    foreach ($order as $slug) {
         $categories = radar_character_categories($slug);
         if (in_array($category, $categories, true)) {
             return $slug;

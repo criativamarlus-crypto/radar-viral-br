@@ -29,7 +29,7 @@ function radar_media_validate(string $path, int $size): array
 
 function radar_media_id_valid(string $id): bool
 {
-    return preg_match('/\A[a-f0-9]{32}\.(?:jpg|png|webp)\z/D', $id) === 1;
+    return preg_match('/\A[a-f0-9]{32}\.(?:jpg|png|webp|mp3|wav|ogg|m4a)\z/D', $id) === 1;
 }
 
 function radar_media_directory(): string
@@ -63,10 +63,13 @@ function radar_media_save_bytes(string $bytes, string $kind, array $meta = []): 
         throw new InvalidArgumentException('Tipo de mídia inválido.');
     }
     $slug = radar_character_slug($meta['character'] ?? null);
-    if ($kind === 'reference' && (int)radar_db_value("SELECT COUNT(*) FROM media WHERE kind = 'reference' AND character_slug = ?", [$slug]) >= RADAR_REFERENCES_MAX) {
+    $role = $kind === 'reference' ? (isset(radar_reference_slots()[(string)($meta['role'] ?? '')]) ? (string)$meta['role'] : 'sheet') : '';
+    // A gallery slot holds one image: a new one replaces the old one (after it is safely stored).
+    $replaced = $kind === 'reference' && (radar_reference_slots()[$role]['unique'] ?? false)
+        ? radar_db_value("SELECT id FROM media WHERE kind = 'reference' AND character_slug = ? AND role = ?", [$slug, $role]) : null;
+    if ($kind === 'reference' && (int)radar_db_value("SELECT COUNT(*) FROM media WHERE kind = 'reference' AND character_slug = ?", [$slug]) - ($replaced !== null ? 1 : 0) >= RADAR_REFERENCES_MAX) {
         throw new InvalidArgumentException('Cada personagem aceita até ' . RADAR_REFERENCES_MAX . ' imagens de referência. Exclua uma antes de enviar outra.');
     }
-    $role = $kind === 'reference' ? (in_array($meta['role'] ?? '', ['sheet', 'photo'], true) ? (string)$meta['role'] : 'sheet') : '';
     $directory = radar_media_directory();
     $temp = $directory . '/.incoming-' . bin2hex(random_bytes(8));
     if (strlen($bytes) > RADAR_MEDIA_MAX_BYTES || @file_put_contents($temp, $bytes, LOCK_EX) === false) {
@@ -101,6 +104,12 @@ function radar_media_save_bytes(string $bytes, string $kind, array $meta = []): 
             isset($meta['note']) ? mb_substr((string)$meta['note'], 0, 400) : null, time(), $slug, $role,
         ]
     );
+    if (is_string($replaced) && $replaced !== '') {
+        radar_media_delete($replaced);
+    }
+    if ($kind === 'reference' && $role === 'master') {
+        radar_character_bump_version($slug);
+    }
     return radar_media_get($id) ?? [];
 }
 
@@ -292,4 +301,70 @@ function radar_screenshot_capture(int $newsId): array
         'credit' => $news['source_name'],
         'note' => 'Captura automática da página original em ' . date('d/m/Y H:i') . ' por serviço de terceiros. Confira direitos de uso.',
     ]);
+}
+
+/* ---------- reference audio of a character (optional, private) ---------- */
+
+const RADAR_VOICE_MAX_BYTES = 8 * 1024 * 1024;
+
+/** @return array<string,string> detected MIME type => file extension */
+function radar_voice_formats(): array
+{
+    return [
+        'audio/mpeg' => 'mp3', 'audio/mp3' => 'mp3', 'audio/wav' => 'wav', 'audio/x-wav' => 'wav', 'audio/vnd.wave' => 'wav', 'audio/wave' => 'wav',
+        'audio/ogg' => 'ogg', 'application/ogg' => 'ogg', 'audio/mp4' => 'm4a', 'audio/x-m4a' => 'm4a', 'video/mp4' => 'm4a',
+    ];
+}
+
+/** The reference audio of a character (a voice sample the user is allowed to use), or null. @return array<string,mixed>|null */
+function radar_character_voice_asset(?string $slug = null): ?array
+{
+    return radar_db_one("SELECT id, mime, bytes, label, created_at FROM media WHERE kind = 'voice' AND character_slug = ? ORDER BY created_at DESC LIMIT 1", [radar_character_slug($slug)]);
+}
+
+/**
+ * Save the optional reference audio of a character (mp3, wav, ogg or m4a, up to 8 MB). There is one per character: a new
+ * one replaces the old one. It is used when the audio or video service supports a voice reference; otherwise the operator
+ * attaches it by hand.
+ *
+ * @return array<string,mixed>
+ */
+function radar_voice_save_bytes(string $bytes, string $slug, string $label = ''): array
+{
+    $slug = radar_character_slug($slug);
+    if ($bytes === '' || strlen($bytes) > RADAR_VOICE_MAX_BYTES) {
+        throw new InvalidArgumentException('Envie um áudio de até 8 MB (MP3, WAV, OGG ou M4A).');
+    }
+    $directory = radar_media_directory();
+    $temp = $directory . '/.incoming-' . bin2hex(random_bytes(8));
+    if (@file_put_contents($temp, $bytes, LOCK_EX) === false) {
+        throw new RuntimeException('Falha ao salvar o áudio.');
+    }
+    @chmod($temp, 0600);
+    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($temp);
+    $formats = radar_voice_formats();
+    if (!is_string($mime) || !isset($formats[$mime])) {
+        @unlink($temp);
+        throw new InvalidArgumentException('Use um áudio MP3, WAV, OGG ou M4A válido.');
+    }
+    $used = (int)radar_db_value('SELECT COALESCE(SUM(bytes), 0) FROM media');
+    if ($used + strlen($bytes) > RADAR_MEDIA_QUOTA_BYTES) {
+        @unlink($temp);
+        throw new InvalidArgumentException('Limite de armazenamento atingido. Exclua arquivos que não usa mais.');
+    }
+    $id = bin2hex(random_bytes(16)) . '.' . $formats[$mime];
+    if (!@rename($temp, $directory . '/' . $id)) {
+        @unlink($temp);
+        throw new RuntimeException('Falha ao salvar o áudio.');
+    }
+    $old = radar_db_all("SELECT id FROM media WHERE kind = 'voice' AND character_slug = ?", [$slug]);
+    radar_db_exec(
+        "INSERT INTO media (id, kind, news_id, mime, width, height, bytes, label, is_primary, source_url, credit, note, created_at, character_slug, role) VALUES (?, 'voice', NULL, ?, 0, 0, ?, ?, 0, NULL, NULL, ?, ?, ?, '')",
+        [$id, $mime, strlen($bytes), mb_substr($label !== '' ? $label : 'Áudio de referência', 0, 120), 'Áudio de referência autorizado pelo administrador.', time(), $slug]
+    );
+    foreach ($old as $row) {
+        radar_media_delete((string)$row['id']);
+    }
+    radar_character_bump_version($slug);
+    return radar_media_get($id) ?? [];
 }

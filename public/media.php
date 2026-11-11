@@ -16,6 +16,21 @@ try {
     if ($path === null) {
         radar_json(['error' => 'Imagem não encontrada.'], 404);
     }
+    $voice = radar_db_one("SELECT mime FROM media WHERE id = ? AND kind = 'voice'", [$id]);
+    if ($voice !== null) {
+        // The optional reference audio of a character: served only with the type that was detected when it was saved.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        header('Content-Type: ' . $voice['mime']);
+        header('X-Content-Type-Options: nosniff');
+        header('Content-Disposition: ' . (($_GET['download'] ?? '') === '1' ? 'attachment' : 'inline') . '; filename="voz-referencia-' . substr($id, 0, 8) . '.' . pathinfo($id, PATHINFO_EXTENSION) . '"');
+        header('Content-Length: ' . filesize($path));
+        if ($_SERVER['REQUEST_METHOD'] !== 'HEAD') {
+            readfile($path);
+        }
+        exit;
+    }
     // Re-validate on every read: never serve a stored file whose content is not a real image.
     $info = radar_media_validate($path, (int)filesize($path));
     if (session_status() === PHP_SESSION_ACTIVE) {

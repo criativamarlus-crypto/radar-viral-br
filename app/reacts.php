@@ -14,6 +14,10 @@ function radar_speech_seconds(string $text): int
 
 function radar_script_spoken(array $script): string
 {
+    if (($script['react_format'] ?? '') === 'tv3') {
+        // One paragraph per scene: the author's own scene cuts.
+        return implode("\n\n", array_values(array_filter([trim((string)($script['hook'] ?? '')), trim((string)($script['script'] ?? '')), trim((string)($script['commentary'] ?? '') . ' ' . (string)($script['cta'] ?? ''))], static fn(string $p): bool => $p !== '')));
+    }
     return trim(implode(' ', array_filter([$script['hook'] ?? '', $script['script'] ?? '', $script['commentary'] ?? '', $script['cta'] ?? ''], static fn($p): bool => trim((string)$p) !== '')));
 }
 
@@ -28,6 +32,20 @@ function radar_react_generate(int $newsId, array $options = []): array
     $news = radar_news_get($newsId);
     if ($news === null) {
         throw new InvalidArgumentException('Notícia não encontrada. Atualize a lista.');
+    }
+    // The character that covers the category, unless one was chosen.
+    $requestedCharacter = (string)($options['character'] ?? '');
+    $slug = radar_character_valid($requestedCharacter) ? $requestedCharacter : radar_character_for_category((string)$news['category']);
+    if (radar_character_format($slug) === 'tv3') {
+        return radar_tv_generate($newsId, $news, $options, $slug);
+    }
+    if ((($options['on_duplicate'] ?? 'allow') === 'block') && empty($options['update_of'])) {
+        $matches = radar_editorial_duplicates($news, $slug);
+        if ($matches !== []) {
+            $duplicate = new RadarDuplicateException(radar_editorial_duplicate_message($matches));
+            $duplicate->matches = $matches;
+            throw $duplicate;
+        }
     }
     $tone = (string)($options['tone'] ?? 'bem-humorado');
     if (isset($options['scenes'])) {
@@ -51,9 +69,6 @@ function radar_react_generate(int $newsId, array $options = []): array
     if (mb_strlen($context) > 2000) {
         throw new InvalidArgumentException('O contexto deve ter até 2.000 caracteres.');
     }
-    // The character that covers the category, unless one was chosen.
-    $requestedCharacter = (string)($options['character'] ?? '');
-    $slug = radar_character_valid($requestedCharacter) ? $requestedCharacter : radar_character_for_category((string)$news['category']);
     $config = radar_ai_config();
     $mode = 'rascunho';
     $warnings = [];
@@ -94,15 +109,16 @@ function radar_react_generate(int $newsId, array $options = []): array
         + radar_template_texts($generated['headlines'], (string)$generated['hook'], (string)$news['title'], (string)$news['source'], $newsId));
     $now = time();
     $id = radar_db_insert(
-        'INSERT INTO scripts (news_id, news_title, news_url, news_source, mode, provider, model, duration, scenes, tone, context, headlines, hook, script, commentary, cta, expression, scene, layout, direction, character_slug, video_prompt, warnings, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO scripts (news_id, news_title, news_url, news_source, mode, provider, model, duration, scenes, tone, context, headlines, hook, script, commentary, cta, expression, scene, layout, direction, character_slug, video_prompt, warnings, created_at, updated_at, character_version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             $newsId, $news['title'], $news['url'], $news['source'], $mode, $mode === 'ia' ? $config['provider'] : null, $mode === 'ia' ? $config['model'] : null,
             $duration, $scenes, $tone, $context, json_encode($generated['headlines'], JSON_UNESCAPED_UNICODE), $generated['hook'], $generated['script'],
             $generated['commentary'], $generated['cta'], $expression, $scene, $layout, json_encode($direction, JSON_UNESCAPED_UNICODE), $slug, $prompt,
-            json_encode(['warnings' => $generated['warnings'], 'fact_check' => $generated['fact_check_notes']], JSON_UNESCAPED_UNICODE), $now, $now,
+            json_encode(['warnings' => $generated['warnings'], 'fact_check' => $generated['fact_check_notes']], JSON_UNESCAPED_UNICODE), $now, $now, radar_character_version($slug),
         ]
     );
+    radar_editorial_record($id);
     return radar_script_get($id) ?? [];
 }
 
@@ -152,12 +168,26 @@ function radar_script_decode(array $row): array
     $direction = radar_script_direction($row);
     $slug = radar_character_slug($row['character_slug'] ?? null);
     $templateTexts = radar_template_texts(json_decode((string)$row['headlines'], true) ?: [], (string)$row['hook'], (string)$row['news_title'], (string)$row['news_source'], $row['news_id'] !== null ? (int)$row['news_id'] : null);
-    $prompts = radar_video_prompts($templateTexts + [
+    $format = (string)($row['react_format'] ?? 'classic') === 'tv3' ? 'tv3' : 'classic';
+    $tv = $format === 'tv3' ? radar_tv_scenes_view($row, $direction, $templateTexts) : ['scenes' => [], 'prompts' => [], 'srt' => ''];
+    $prompts = $format === 'tv3' && $tv['prompts'] !== [] ? $tv['prompts'] : radar_video_prompts($templateTexts + [
         'character' => $slug, 'spoken' => $spoken, 'expression' => (string)$row['expression'], 'scene' => (string)$row['scene'], 'direction' => $direction,
         'headline' => (string)$row['news_title'], 'source' => (string)$row['news_source'], 'scenes' => max(1, (int)($row['scenes'] ?? 1)),
         'layout' => radar_video_template_valid((string)$row['layout']) ? (string)$row['layout'] : 'split',
     ]);
+    $facts = json_decode((string)($row['facts'] ?? ''), true);
     return [
+        'format' => $format,
+        'video_title' => (string)($row['video_title'] ?? ''),
+        'publication_caption' => (string)($row['publication_caption'] ?? ''),
+        'character_id' => $slug,
+        'character_version' => (int)($row['character_version'] ?? 1),
+        'strategy' => (string)($row['strategy'] ?? ''),
+        'facts' => is_array($facts) ? $facts : [],
+        'update_of' => !empty($row['update_of']) ? (int)$row['update_of'] : null,
+        'scenes_data' => $tv['scenes'],
+        'subtitles_srt' => $tv['srt'],
+        'duplicate_warning' => false,
         'id' => (int)$row['id'],
         'news_id' => $row['news_id'] !== null ? (int)$row['news_id'] : null,
         'news_title' => (string)$row['news_title'],
@@ -217,6 +247,15 @@ function radar_script_update(int $id, array $input): array
     if ($current === null) {
         throw new InvalidArgumentException('Roteiro não encontrado.');
     }
+    if ($current['format'] === 'tv3') {
+        if (isset($input['character']) && radar_str($input['character']) !== '' && radar_str($input['character']) !== $current['character']) {
+            throw new InvalidArgumentException('Este roteiro tem três cenas de ' . $current['character_name'] . '. Para outro personagem, gere um novo react.');
+        }
+        return radar_tv_script_update($id, $input);
+    }
+    if (isset($input['character']) && radar_character_valid(radar_str($input['character'])) && radar_character_format(radar_str($input['character'])) === 'tv3') {
+        throw new InvalidArgumentException('Para usar ' . radar_character_get(radar_str($input['character']))['name'] . ', gere um novo react com ela: o roteiro dela tem três cenas próprias.');
+    }
     $text = static fn(string $key, int $max): string => mb_substr(trim(strip_tags((string)($input[$key] ?? $current[$key]))), 0, $max);
     $headlines = $current['headlines'];
     if (isset($input['headline']) && is_string($input['headline']) && trim($input['headline']) !== '') {
@@ -252,6 +291,7 @@ function radar_script_update(int $id, array $input): array
         'UPDATE scripts SET headlines = ?, hook = ?, script = ?, commentary = ?, cta = ?, expression = ?, scene = ?, layout = ?, scenes = ?, direction = ?, character_slug = ?, video_prompt = ?, updated_at = ? WHERE id = ?',
         [json_encode(array_values($headlines), JSON_UNESCAPED_UNICODE), $row['hook'], $row['script'], $row['commentary'], $row['cta'], $expression, $scene, $layout, $scenes, json_encode($direction, JSON_UNESCAPED_UNICODE), $slug, $prompt, time(), $id]
     );
+    radar_editorial_record($id);
     return radar_script_get($id) ?? [];
 }
 
@@ -260,9 +300,52 @@ function radar_script_delete(int $id): bool
     return radar_db_exec('DELETE FROM scripts WHERE id = ?', [$id]) > 0;
 }
 
+/** Subtitles (SRT) of a script made of scenes; an empty string for the other scripts. */
+function radar_script_srt(array $script): string
+{
+    return (string)($script['subtitles_srt'] ?? '');
+}
+
+/** Plain-text export of a TV react: titles, facts, every scene with its prompt, the subtitles. */
+function radar_script_export_tv_text(array $script): string
+{
+    $lines = [
+        'RADAR VIRAL BR · REACT EM TRÊS CENAS', str_repeat('=', 40),
+        'Personagem: ' . $script['character_name'] . ' (id ' . $script['character_id'] . ', versão ' . $script['character_version'] . ')',
+        'Notícia: ' . $script['news_title'], 'Fonte: ' . $script['news_source'] . ' — ' . $script['news_url'],
+        'Gerado: ' . $script['mode_label'] . ' · estratégia ' . ($script['strategy'] !== '' ? $script['strategy'] : '—') . ($script['update_of'] !== null ? ' · ATUALIZAÇÃO do roteiro #' . $script['update_of'] : ''),
+        '', 'TÍTULO DO VÍDEO', $script['video_title'], '', 'LEGENDA DE PUBLICAÇÃO', $script['publication_caption'], '', 'HEADLINES',
+    ];
+    foreach ($script['headlines'] as $index => $headline) {
+        $lines[] = ($index + 1) . '. ' . $headline;
+    }
+    foreach ($script['scenes_data'] as $scene) {
+        array_push($lines, '', str_repeat('-', 40), 'CENA ' . $scene['number'] . ' — ' . mb_strtoupper($scene['role_label']) . ' · ' . $scene['duration_seconds'] . ' s', 'Objetivo: ' . $scene['objective'],
+            'Tom emocional: ' . $scene['emotion'] . ' · Expressão: ' . $scene['expression_label'] . ' · Câmera: ' . $scene['camera_label'] . ' (' . $scene['camera_movement'] . ')', 'Gestos: ' . $scene['gestures'],
+            'Referências visuais: ' . implode('; ', $scene['visual_reference']), 'Título na tela: ' . $scene['screen_title'], 'Legenda: ' . $scene['caption'], '', 'FALA EXATA:', $scene['narration'], '', 'PROMPT PARA O MUSE:', $scene['muse_prompt']);
+    }
+    $facts = $script['facts'];
+    foreach (['verified' => 'FATOS QUE A FONTE REPORTA', 'attributed' => 'ALEGAÇÕES ATRIBUÍDAS', 'uncertain' => 'INCERTEZAS', 'new' => 'FATOS NOVOS (atualização)'] as $key => $label) {
+        if (!empty($facts[$key])) {
+            array_push($lines, '', $label, ...array_map(static fn(string $f): string => '- ' . $f, (array)$facts[$key]));
+        }
+    }
+    array_push($lines, '', 'LEGENDAS (SRT, tempos estimados pelas palavras)', $script['subtitles_srt']);
+    if ($script['warnings'] !== []) {
+        array_push($lines, 'ALERTAS', ...array_map(static fn(string $w): string => '- ' . $w, $script['warnings']));
+    }
+    if ($script['fact_check'] !== []) {
+        array_push($lines, '', 'CONFERIR ANTES DE GRAVAR', ...array_map(static fn(string $w): string => '- ' . $w, $script['fact_check']));
+    }
+    return implode("\n", $lines) . "\n";
+}
+
 /** Plain-text export of a script, ready to paste elsewhere. */
 function radar_script_export_text(array $script): string
 {
+    if (($script['format'] ?? 'classic') === 'tv3') {
+        return radar_script_export_tv_text($script);
+    }
     $lines = [
         'RADAR VIRAL BR · ROTEIRO DE REACT',
         str_repeat('=', 40),

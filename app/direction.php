@@ -170,6 +170,9 @@ function radar_direction_gesture_pool(): array
 function radar_direction_default(?string $slug = null): array
 {
     $preset = radar_characters()[radar_character_slug($slug)];
+    if (!empty($preset['fixed_look'])) {
+        return radar_tv_direction(['character' => $slug], RADAR_TV_SCENES, [], 1);
+    }
     return [
         'outfit' => $preset['default_outfit'],
         'accessories' => $preset['default_accessories'],
@@ -191,6 +194,10 @@ function radar_direction_default(?string $slug = null): array
  */
 function radar_direction_generate(array $context, int $scenes, array $avoid = [], ?int $seed = null): array
 {
+    if (!empty(radar_characters()[radar_character_slug($context['character'] ?? null)]['fixed_look'])) {
+        // The outfit and the jewelry of this character never change: only the light, the camera and the gestures are drawn.
+        return radar_tv_direction($context, $scenes, $avoid, $seed);
+    }
     $mood = radar_direction_mood((string)($context['category'] ?? ''), (string)($context['expression'] ?? ''));
     $pools = radar_direction_pools($context['character'] ?? null);
     $counter = 0;

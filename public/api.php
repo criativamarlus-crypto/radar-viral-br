@@ -170,6 +170,10 @@ try {
             api_limit('upload', 30, 3600);
             $kind = (string)($input['kind'] ?? '');
             $file = $_FILES['file'] ?? null;
+            if ($kind === 'voice' && is_array($file) && ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK && is_string($file['tmp_name'] ?? null) && is_uploaded_file($file['tmp_name'])) {
+                $voiceBytes = (string)file_get_contents($file['tmp_name'], false, null, 0, RADAR_VOICE_MAX_BYTES + 1);
+                radar_json(['media' => radar_voice_save_bytes($voiceBytes, radar_str($input['character'] ?? ''), (string)($input['label'] ?? ''))], 201);
+            }
             if (!in_array($kind, ['cover', 'character', 'upload', 'reference'], true) || !is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
                 || !is_string($file['tmp_name'] ?? null) || !is_uploaded_file($file['tmp_name'])) {
                 radar_json(['error' => 'Selecione uma imagem JPEG, PNG ou WebP de até 5 MB.'], 400);

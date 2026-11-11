@@ -266,6 +266,66 @@ SQL,
 ALTER TABLE media ADD COLUMN role TEXT NOT NULL DEFAULT '';
 UPDATE media SET role = 'sheet' WHERE kind = 'reference';
 SQL,
+        9 => <<<'SQL'
+CREATE TABLE character_profiles (
+    slug TEXT PRIMARY KEY,
+    version INTEGER NOT NULL DEFAULT 1,
+    data TEXT NOT NULL DEFAULT '{}',
+    updated_at INTEGER NOT NULL
+);
+ALTER TABLE scripts ADD COLUMN react_format TEXT NOT NULL DEFAULT 'classic';
+ALTER TABLE scripts ADD COLUMN video_title TEXT NOT NULL DEFAULT '';
+ALTER TABLE scripts ADD COLUMN publication_caption TEXT NOT NULL DEFAULT '';
+ALTER TABLE scripts ADD COLUMN character_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE scripts ADD COLUMN strategy TEXT NOT NULL DEFAULT '';
+ALTER TABLE scripts ADD COLUMN facts TEXT NOT NULL DEFAULT '';
+ALTER TABLE scripts ADD COLUMN update_of INTEGER;
+CREATE TABLE react_scenes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    script_id INTEGER NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+    scene_number INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT '',
+    objective TEXT NOT NULL DEFAULT '',
+    duration_seconds INTEGER NOT NULL DEFAULT 8,
+    narration TEXT NOT NULL DEFAULT '',
+    emotion TEXT NOT NULL DEFAULT '',
+    expression TEXT NOT NULL DEFAULT '',
+    gestures TEXT NOT NULL DEFAULT '',
+    camera TEXT NOT NULL DEFAULT '',
+    camera_movement TEXT NOT NULL DEFAULT '',
+    continuity TEXT NOT NULL DEFAULT '',
+    caption TEXT NOT NULL DEFAULT '',
+    screen_title TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (script_id, scene_number)
+);
+CREATE TABLE editorial_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    script_id INTEGER REFERENCES scripts(id) ON DELETE CASCADE,
+    news_id INTEGER,
+    cluster_id INTEGER,
+    character_slug TEXT NOT NULL,
+    character_version INTEGER NOT NULL DEFAULT 1,
+    canonical_url TEXT NOT NULL DEFAULT '',
+    title_key TEXT NOT NULL DEFAULT '',
+    subject TEXT NOT NULL DEFAULT '',
+    entities TEXT NOT NULL DEFAULT '[]',
+    event TEXT NOT NULL DEFAULT '',
+    event_date INTEGER,
+    strategy TEXT NOT NULL DEFAULT '',
+    reaction_type TEXT NOT NULL DEFAULT '',
+    openings TEXT NOT NULL DEFAULT '[]',
+    closing TEXT NOT NULL DEFAULT '',
+    catchphrases TEXT NOT NULL DEFAULT '[]',
+    narration TEXT NOT NULL DEFAULT '',
+    is_update INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX editorial_character ON editorial_history(character_slug, created_at);
+CREATE INDEX editorial_news ON editorial_history(news_id);
+CREATE INDEX editorial_script ON editorial_history(script_id);
+SQL,
     ];
 }
 

@@ -1170,10 +1170,10 @@ check('Studio projects keep the look', static function (): bool {
     $without = radar_project_save(null, ['title' => 'Sem visual', 'headline' => 'H']);
     return ($project['direction']['outfit'] ?? '') === 'a charcoal merino turtleneck' && radar_project_get($project['id'])['direction']['accessories'] === 'a plain black watch' && $without['direction'] === null;
 });
-check('there are two characters, Beto (the default generalist) and Clara (finance), each with an identity of its own', static function (): bool {
+check('there are three characters, Beto (the default generalist), Clara (finance) and Dona Maricota (TV host), each with an identity of its own', static function (): bool {
     $all = radar_characters();
     $clara = radar_characters()['clara'];
-    return array_keys($all) === ['beto', 'clara'] && radar_character_default_slug() === 'beto' && radar_character_valid('clara') && !radar_character_valid('x') && radar_character_slug('nope') === 'beto' && radar_character_slug(null) === 'beto'
+    return array_keys($all) === ['beto', 'clara', 'dona-maricota'] && radar_character_default_slug() === 'beto' && radar_character_valid('clara') && !radar_character_valid('x') && radar_character_slug('nope') === 'beto' && radar_character_slug(null) === 'beto'
         && $clara['gender'] === 'f' && $clara['name'] === 'Clara Contas' && str_contains($clara['identity_en'], 'Brazilian woman') && str_contains($clara['identity_pt'], 'mulher brasileira') && str_contains($clara['identity_en'], 'WARDROBE')
         && count($clara['personality']) >= 4 && count($clara['pillars']) >= 4 && count($clara['hooks']) >= 3 && str_contains(implode(' ', $clara['personality']), 'não aconselha')
         && radar_character_master_prompt('en', 'clara') !== radar_character_master_prompt('en', 'beto') && radar_character_master_prompt('en') === radar_character_master_prompt('en', 'beto')
@@ -1332,9 +1332,9 @@ check('the draft closes the summary with a full stop, so the scenes can be cut a
     $with = radar_ai_fallback(['summary' => 'Resumo já pontuado!'] + $news, 66, 'direto', '')['script'];
     return str_contains($without, 'dividido em 15 cotas. Antes de tirar conclusão') && str_contains($with, 'Resumo já pontuado! Antes de tirar conclusão') && !str_contains($with, '!.');
 });
-check('two video templates exist: the full-screen caption + news card (default, first) and the original split', static function (): bool {
+check('three video templates exist: the full-screen caption + news card (default, first), the TV studio and the original split', static function (): bool {
     $templates = radar_video_templates();
-    foreach (['split', 'caption_card'] as $key) {
+    foreach (['split', 'caption_card', 'tv_studio'] as $key) {
         if (!isset($templates[$key]) || !radar_video_template_valid($key)) {
             return false;
         }
@@ -1344,7 +1344,7 @@ check('two video templates exist: the full-screen caption + news card (default, 
             }
         }
     }
-    return array_keys($templates) === ['caption_card', 'split'] && radar_video_default_template() === 'caption_card' && array_key_first($templates) === radar_video_default_template() && !radar_video_template_valid('inventado') && !radar_video_template_valid('');
+    return array_keys($templates) === ['caption_card', 'tv_studio', 'split'] && radar_video_default_template() === 'caption_card' && array_key_first($templates) === radar_video_default_template() && !radar_video_template_valid('inventado') && !radar_video_template_valid('');
 });
 check('the caption-card prompt frames the face between the caption band and the news card, and keeps every standard', static function (): bool {
     $parts = ['spoken' => 'Fala de teste.', 'expression' => 'rindo', 'scene' => 'carro', 'duration' => 25, 'headline' => 'H', 'source' => 'S'];
@@ -1720,6 +1720,7 @@ check('front-end code has no inline scripts or styles (strict CSP)', static func
     return true;
 });
 
+require __DIR__ . '/tv.php';
 require __DIR__ . '/http.php';
 
 echo "\n$passed passed; $failed failed.\n";

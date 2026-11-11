@@ -13,20 +13,20 @@ const RADAR_SCENE_MAX_SECONDS = 25;
 const RADAR_SCENE_MAX_COUNT = 5;
 const RADAR_SCENES_DEFAULT = 3;
 /** Reference images (sheets and photos) a character can keep: all of them travel with every video prompt. */
-const RADAR_REFERENCES_MAX = 6;
+const RADAR_REFERENCES_MAX = 10;
 /** What the writer aims for in each scene, leaving room under the 25 s limit. */
 const RADAR_SCENE_TARGET_SECONDS = 22;
 
 function radar_character_master_prompt(string $language = 'pt', ?string $slug = null): string
 {
-    $preset = radar_characters()[radar_character_slug($slug)];
+    $preset = radar_character_get($slug);
     return $language === 'en' ? $preset['identity_en'] : $preset['identity_pt'];
 }
 
 /** @return array<int,string> */
 function radar_character_personality(?string $slug = null): array
 {
-    return radar_characters()[radar_character_slug($slug)]['personality'];
+    return radar_character_get($slug)['personality'];
 }
 
 /** @return array<string,array{label:string,visual:string}> */
@@ -51,6 +51,7 @@ function radar_character_scenes(): array
         'carro' => 'No carro',
         'casa' => 'Em casa',
         'escritorio' => 'No escritório',
+        'estudio' => 'No estúdio de TV',
     ];
 }
 
@@ -59,6 +60,7 @@ function radar_character_scene_visual(string $scene): string
     return match ($scene) {
         'casa' => 'sitting on a sofa in a lived-in living room, soft warm daylight from a window',
         'escritorio' => 'at a small home office desk with a monitor and shelves behind {him}, soft natural light',
+        'estudio' => 'seated at the presenter desk of a popular Brazilian TV talk-show studio with pink, purple and gold lighting, glowing light panels with marquee bulbs, a retro microphone, a white mug with a red-lips print and a big screen behind {him}',
         default => 'sitting in the driver seat of a parked car, seatbelt on, daylight through the windshield',
     };
 }
@@ -87,7 +89,35 @@ function radar_character_images_all(): array
  */
 function radar_character_references(?string $slug = null): array
 {
-    return radar_db_all("SELECT id, mime, width, height, label, role, character_slug FROM media WHERE kind = 'reference' AND character_slug = ? ORDER BY CASE role WHEN 'sheet' THEN 0 ELSE 1 END, created_at, rowid", [radar_character_slug($slug)]);
+    $order = 'CASE role';
+    foreach (array_keys(radar_reference_slots()) as $position => $role) {
+        $order .= " WHEN '" . $role . "' THEN " . $position;
+    }
+    $order .= ' ELSE 99 END';
+    return radar_db_all("SELECT id, mime, width, height, label, role, character_slug FROM media WHERE kind = 'reference' AND character_slug = ? ORDER BY " . $order . ', created_at, rowid', [radar_character_slug($slug)]);
+}
+
+/**
+ * The kinds of reference image. "master" is the official image of a character (it wins over any text); the
+ * gallery slots hold one image each and a new upload replaces the old one; "extra", "sheet" (a sheet with
+ * several views) and "photo" are free. The order here is the order the images go in the prompt.
+ *
+ * @return array<string,array{label:string,en:string,unique:bool}>
+ */
+function radar_reference_slots(): array
+{
+    return [
+        'master' => ['label' => 'Imagem-mestre (obrigatória)', 'en' => 'the OFFICIAL MASTER image of the character (it has priority over every text description)', 'unique' => true],
+        'sheet' => ['label' => 'Folha com várias vistas', 'en' => 'a character sheet with several views of the SAME {man} (front, profiles and 3/4 views)', 'unique' => false],
+        'frontal' => ['label' => 'Frontal', 'en' => 'a FRONT view of {his} face', 'unique' => true],
+        'profile_right' => ['label' => 'Perfil direito', 'en' => '{his} RIGHT profile', 'unique' => true],
+        'profile_left' => ['label' => 'Perfil esquerdo', 'en' => '{his} LEFT profile', 'unique' => true],
+        'fullbody' => ['label' => 'Corpo inteiro', 'en' => 'a FULL-BODY view (build and proportions)', 'unique' => true],
+        'seated' => ['label' => 'Sentada no estúdio', 'en' => '{him} SEATED at the presenter desk of the official studio', 'unique' => true],
+        'surprise' => ['label' => 'Expressão de surpresa', 'en' => '{his} SURPRISED expression', 'unique' => true],
+        'extra' => ['label' => 'Outra pose ou expressão', 'en' => 'another pose or expression of the SAME {man}', 'unique' => false],
+        'photo' => ['label' => 'Foto do personagem', 'en' => 'a photo of the SAME {man}', 'unique' => false],
+    ];
 }
 
 /** The first reference image (the sheet when there is one), or null. @return array<string,mixed>|null */
@@ -99,7 +129,7 @@ function radar_character_reference(?string $slug = null): ?array
 /** What the prompt needs to know about the references: the kind and the label of each. @return array<int,array{role:string,label:string}> */
 function radar_character_reference_roles(?string $slug = null): array
 {
-    return array_map(static fn(array $r): array => ['role' => (string)$r['role'] === 'photo' ? 'photo' : 'sheet', 'label' => (string)$r['label']], radar_character_references($slug));
+    return array_map(static fn(array $r): array => ['role' => isset(radar_reference_slots()[(string)$r['role']]) ? (string)$r['role'] : 'sheet', 'label' => (string)$r['label']], radar_character_references($slug));
 }
 
 /**
@@ -111,6 +141,9 @@ function radar_character_reference_roles(?string $slug = null): array
 function radar_reference_paragraph(array $references): string
 {
     $count = count($references);
+    if (array_filter($references, static fn(array $r): bool => ($r['role'] ?? '') === 'master') !== []) {
+        return radar_master_reference_paragraph($references);
+    }
     if ($count === 0 || ($count === 1 && ($references[0]['role'] ?? 'sheet') === 'sheet')) {
         return 'REFERENCE IMAGE (attach the character reference sheet to the video tool together with this prompt, in every scene): one image with five views of the SAME {man}: front, left profile, right profile, 3/4 left and 3/4 right. Use it ONLY to keep {his} face and identity: face shape and features, skin tone, hair, facial hair (if any), glasses and body build. Copy those exactly and never redesign {him}. Do not copy the clothes, accessories, pose or grey background of the sheet.';
     }
@@ -123,6 +156,26 @@ function radar_reference_paragraph(array $references): string
     }
     return 'REFERENCE IMAGE' . ($count > 1 ? 'S (attach ALL ' . $count . ' images' : ' (attach this image') . ' to the video tool together with this prompt, in every scene): ' . implode('; ', $items)
         . '. Use ' . ($count > 1 ? 'them' : 'it') . ' ONLY to keep {his} face and identity: face shape and features, skin tone, hair, facial hair (if any), glasses and body build. Copy those exactly and never redesign {him}. Do not copy the clothes, accessories, pose or background of the ' . ($count > 1 ? 'images' : 'image') . '.';
+}
+
+/**
+ * The reference paragraph of a character that has an official master image: every image is listed with what it
+ * shows, the master first. All of them keep the face and identity; none of them is copied for the background,
+ * the signs or the words in them.
+ *
+ * @param array<int,array{role:string,label:string}> $references
+ */
+function radar_master_reference_paragraph(array $references): string
+{
+    $slots = radar_reference_slots();
+    $items = [];
+    foreach (array_values($references) as $index => $reference) {
+        $label = radar_direction_text($reference['label'] ?? '', 80);
+        $items[] = ($index + 1) . ') ' . ($slots[$reference['role'] ?? 'extra']['en'] ?? $slots['extra']['en']) . ($label !== '' && ($reference['role'] ?? '') === 'extra' ? ' (' . $label . ')' : '');
+    }
+    $count = count($references);
+    return 'REFERENCE IMAGES (attach ALL ' . $count . ' image' . ($count > 1 ? 's' : '') . ' to the video tool together with this prompt, in every scene; if the tool takes fewer, attach the master image first and then as many as it accepts, in this order): ' . implode('; ', $items)
+        . '. The MASTER image is the official reference and wins over every text description: copy {his} face, age, hair, glasses, clothes and jewelry from it and never reinvent them. Use the other images only to confirm the same identity from other angles. Do NOT copy from them the background, the signs, the words written on the signs, the poses or the lighting: the only sign allowed is the one described in the SETTING.';
 }
 
 /** @return array<string,mixed>|null */
@@ -157,6 +210,12 @@ function radar_video_templates(): array
             'framing' => 'character filling the whole frame, framed from the chest up with {his} face centered at about 40% of the frame height (between the caption band and the news card), centered',
             'layout' => 'LAYOUT NOTE: full-frame vertical shot. A black caption band is composed over the top 22% of the frame and a news card over the bottom 38% (from about 62% of the height down), so keep {his} face and gestures inside the middle area, between 22% and 62% of the height. Nothing important in the top and bottom areas. Gestures never cover the face.',
         ],
+        'tv_studio' => [
+            'label' => 'Estúdio de TV, sem texto no vídeo (títulos e legendas na edição)',
+            'description' => 'A apresentadora no estúdio oficial, em tela cheia. Nada de texto dentro do vídeo: título, legendas e a imagem da notícia entram na edição (ou no telão do estúdio).',
+            'framing' => 'the presenter seated at her desk in the official studio, centered',
+            'layout' => 'LAYOUT NOTE: full-frame vertical studio shot with no text overlays rendered in the video; titles and subtitles are added in post-production.',
+        ],
         'split' => [
             'label' => 'Notícia em cima, personagem embaixo',
             'description' => 'Metade de cima com a imagem da notícia e a headline; metade de baixo com o personagem.',
@@ -189,6 +248,9 @@ function radar_template_brief(string $layout, array $texts): string
     $source = radar_direction_text($texts['source'] ?? '', 80);
     $single = 'SINGLE-IMAGE OPTION (if the video tool accepts only ONE image): attach the REFERENCE BOARD instead of the separate images. It is one image with the TEMPLATE on the left (the frame to keep, exactly as described above) and the CHARACTER REFERENCES on the right (used only for {his} face).';
     $intro = 'TEMPLATE IMAGE (attach the template image to the video tool together with this prompt, in every scene; if the tool accepts a start image or first frame, use it as the FIRST FRAME): a vertical 9:16 image of the exact final frame. Recreate this frame EXACTLY and keep it for the whole clip. KEEP UNCHANGED and completely static, with no movement, no redrawing and no changed letter: the black top band with its text, and the news card with its photo, yellow line, headline, white border and shadow. ONLY the person in the background changes: {he} is the character of the REFERENCE IMAGES ({his} face; {his} clothes come from WARDROBE and the camera from CAMERA ANGLE) and {he} is the only thing that moves (speaking with lip-sync, gestures, natural motion). The person in the template image is just a placeholder photo.';
+    if ($layout === 'tv_studio') {
+        return 'SCREEN TEXT: none inside the video. Titles and subtitles are added later in editing. If a news image is attached, show it unchanged on the big studio screen behind the presenter, with no text on it.';
+    }
     if ($layout === 'caption_card') {
         $caption = mb_strtoupper(radar_direction_text($texts['caption'] ?? '', 200) ?: $headline);
         $sourceLine = mb_strtoupper(radar_direction_text($texts['source_line'] ?? '', 120) ?: $source);
@@ -269,9 +331,21 @@ function radar_scene_seconds(string $text): int
  *
  * @return array<int,string>
  */
-function radar_scene_split(string $spoken, int $scenes = 1): array
+function radar_scene_split(string $spoken, int $scenes = 1, bool $byParagraph = false): array
 {
     $max = (int)floor(RADAR_SCENE_MAX_SECONDS * 2.5);
+    // With $byParagraph, paragraphs separated by a blank line are scenes chosen by the author (the TV characters write one per scene);
+    // a paragraph that is too long for one scene is cut again by the rules below.
+    $paragraphs = array_values(array_filter(array_map('trim', preg_split('/\R\s*\R/u', trim($spoken)) ?: []), static fn(string $p): bool => $p !== ''));
+    if ($byParagraph && count($paragraphs) >= 2) {
+        $scenesOut = [];
+        foreach ($paragraphs as $paragraph) {
+            foreach (radar_scene_split(preg_replace('/\s+/u', ' ', $paragraph) ?? $paragraph, 1) as $part) {
+                $scenesOut[] = $part;
+            }
+        }
+        return $scenesOut;
+    }
     $text = trim(preg_replace('/\s+/u', ' ', $spoken) ?? '');
     if ($text === '') {
         return [''];
@@ -334,6 +408,9 @@ function radar_scene_split(string $spoken, int $scenes = 1): array
  */
 function radar_video_prompts(array $parts): array
 {
+    if (radar_character_format($parts['character'] ?? null) === 'tv3') {
+        return radar_tv_prompts($parts);
+    }
     $expressions = radar_character_expressions();
     $expression = $expressions[$parts['expression']] ?? $expressions['sorriso-largo'];
     $setting = radar_character_scene_visual($parts['scene']);
