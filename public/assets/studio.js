@@ -750,9 +750,16 @@
 
   /** The article thumbnail has to be in the card: the source's cover is stored (with its credit) as soon as the Studio opens. */
   async function ensureCover() {
-    if (!data.news || !data.news.image || data.media.some((m) => m.kind === 'cover')) return;
-    $('st-cover-hint').textContent = 'Baixando a capa da notícia…';
+    if (!data.news || data.media.some((m) => m.kind === 'cover')) return;
     try {
+      if (!data.news.image) {
+        // The feed gave no picture: read the one the article itself declares (Open Graph).
+        $('st-cover-hint').textContent = 'Procurando a imagem da matéria…';
+        const found = await api({ action: 'fetch_og', news_id: data.news.id });
+        if (!found.news || !found.news.image) { renderPickers(); return; }
+        data.news.image = found.news.image; data.news.image_credit = found.news.image_credit;
+      }
+      $('st-cover-hint').textContent = 'Baixando a capa da notícia…';
       const result = await api({ action: 'import_cover', news_id: data.news.id });
       const media = result.media;
       data.media.unshift({ id: media.id, label: media.label, kind: media.kind, credit: media.credit });
@@ -760,6 +767,7 @@
       renderPickers(); redraw();
     } catch (error) {
       renderPickers();
+      if (!data.news.image) return; // no picture to be found: the usual hint (attach a print) is already there
       $('st-cover-hint').textContent = 'Não consegui baixar a capa automaticamente (' + error.message + '). Use “Anexar print/imagem” abaixo.';
     }
   }

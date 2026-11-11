@@ -132,16 +132,68 @@ function radar_media_delete(string $id): bool
     return true;
 }
 
-/** Download an image from a public HTTPS URL into private storage. @return array<string,mixed> */
+/** Photos from news sites are often bigger than what the panel stores: they are downloaded up to this size and shrunk. */
+const RADAR_MEDIA_FETCH_MAX_BYTES = 15 * 1024 * 1024;
+
+/** True when a picture is within what the panel stores (size, sides and megapixels). */
+function radar_media_fits(string $bytes): bool
+{
+    $info = @getimagesizefromstring($bytes);
+    return $info !== false && strlen($bytes) <= RADAR_MEDIA_MAX_BYTES && $info[0] >= 1 && $info[1] >= 1 && $info[0] <= 4096 && $info[1] <= 4096 && $info[0] * $info[1] <= 16000000;
+}
+
+/**
+ * Shrink a picture that is too big (a 4267-pixel-wide news photo, say) to 2400 px on its longest side, as JPEG or PNG.
+ * Returns null when it cannot be done safely: no GD, a format GD does not read, too many pixels for the memory.
+ */
+function radar_media_shrink(string $bytes): ?string
+{
+    if (!function_exists('imagecreatefromstring') || !function_exists('imagescale')) {
+        return null;
+    }
+    $info = @getimagesizefromstring($bytes);
+    if ($info === false || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true) || $info[0] * $info[1] > 40000000) {
+        return null;
+    }
+    $limit = (string)ini_get('memory_limit');
+    $limitBytes = $limit === '-1' ? PHP_INT_MAX : (int)$limit * match (strtoupper(substr($limit, -1))) { 'G' => 1073741824, 'M' => 1048576, 'K' => 1024, default => 1 };
+    if ($info[0] * $info[1] * 6 > $limitBytes - memory_get_usage()) {
+        return null;
+    }
+    $image = @imagecreatefromstring($bytes);
+    if ($image === false) {
+        return null;
+    }
+    $scale = min(1.0, 2400 / max($info[0], $info[1]));
+    $small = $scale < 1.0 ? imagescale($image, max(1, (int)round($info[0] * $scale)), max(1, (int)round($info[1] * $scale)), IMG_BICUBIC) : $image;
+    if ($small === false) {
+        return null;
+    }
+    ob_start();
+    $ok = $info[2] === IMAGETYPE_PNG ? imagepng($small, null, 6) : imagejpeg($small, null, 86);
+    $out = (string)ob_get_clean();
+    return $ok && $out !== '' && radar_media_fits($out) ? $out : null;
+}
+
+/** Download an image from a public HTTPS URL into private storage (shrinking it when it is too big). @return array<string,mixed> */
 function radar_media_import_remote(string $url, string $kind, array $meta = []): array
 {
-    $response = radar_net_get($url, ['headers' => ['Accept: image/jpeg,image/png,image/webp'], 'max_bytes' => RADAR_MEDIA_MAX_BYTES, 'timeout' => 20]);
+    $response = radar_net_get($url, ['headers' => ['Accept: image/jpeg,image/png,image/webp'], 'max_bytes' => RADAR_MEDIA_FETCH_MAX_BYTES, 'timeout' => 20]);
     if ($response['error'] !== null || $response['status'] !== 200 || $response['body'] === '') {
         throw new RuntimeException('Não foi possível baixar a imagem' . ($response['error'] !== null ? ': ' . $response['error'] : ' (HTTP ' . $response['status'] . ').'));
     }
     $meta['source_url'] = $url;
+    $bytes = $response['body'];
+    if (@getimagesizefromstring($bytes) !== false && !radar_media_fits($bytes)) {
+        $shrunk = radar_media_shrink($bytes);
+        if ($shrunk === null) {
+            throw new RuntimeException('A imagem da fonte é grande demais para o painel (até 4096 pixels por lado, 16 megapixels e 5 MB) e não pôde ser reduzida. Anexe um print ou outra imagem.');
+        }
+        $bytes = $shrunk;
+        $meta['note'] = trim((string)($meta['note'] ?? '') . ' Imagem reduzida para caber no painel.');
+    }
     try {
-        return radar_media_save_bytes($response['body'], $kind, $meta);
+        return radar_media_save_bytes($bytes, $kind, $meta);
     } catch (InvalidArgumentException $error) {
         throw new RuntimeException('A imagem da fonte não pôde ser usada: ' . $error->getMessage());
     }
@@ -163,12 +215,30 @@ function radar_media_import_news_cover(int $newsId): array
     }
     // Keep the truth about where the picture came from: it may belong to a related story.
     $borrowed = str_starts_with((string)$news['image_note'], 'Imagem de matéria relacionada');
-    return radar_media_import_remote((string)$news['image_url'], 'cover', [
-        'news_id' => $newsId,
-        'label' => $borrowed ? 'Imagem de matéria relacionada' : 'Capa original',
-        'credit' => $news['image_credit'] ?: $news['source_name'],
-        'note' => ($news['image_note'] ?: 'Capa declarada pela fonte.') . ' Confira direitos de uso e mantenha a atribuição.',
-    ]);
+    try {
+        return radar_media_import_remote((string)$news['image_url'], 'cover', [
+            'news_id' => $newsId,
+            'label' => $borrowed ? 'Imagem de matéria relacionada' : 'Capa original',
+            'credit' => $news['image_credit'] ?: $news['source_name'],
+            'note' => ($news['image_note'] ?: 'Capa declarada pela fonte.') . ' Confira direitos de uso e mantenha a atribuição.',
+        ]);
+    } catch (RuntimeException $first) {
+        // The source's own picture failed (blocked, too big, not an image): the same story in other outlets may have a usable one.
+        $mates = radar_db_all('SELECT n.id, n.image_url, n.image_credit, n.source_name FROM news n WHERE n.cluster_id = (SELECT cluster_id FROM news WHERE id = ?) AND n.id != ? AND n.image_url IS NOT NULL AND n.image_url != ? ORDER BY n.score DESC, n.id DESC LIMIT 3', [$newsId, $newsId, $news['image_url']]);
+        foreach ($mates as $mate) {
+            try {
+                return radar_media_import_remote((string)$mate['image_url'], 'cover', [
+                    'news_id' => $newsId,
+                    'label' => 'Imagem de matéria relacionada',
+                    'credit' => $mate['image_credit'] ?: $mate['source_name'],
+                    'note' => 'Imagem de outra matéria sobre o mesmo assunto (' . $mate['source_name'] . '), usada porque a da fonte não pôde ser baixada. Confira direitos de uso e mantenha a atribuição.',
+                ]);
+            } catch (RuntimeException) {
+                continue;
+            }
+        }
+        throw $first;
+    }
 }
 
 /* ---------- optional screenshot service ---------- */

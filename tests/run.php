@@ -655,6 +655,35 @@ check('the first character image becomes primary; primary can be changed and sur
     radar_media_delete($b['id']);
     return $firstPrimary && $switched && radar_character_primary()['id'] === $a['id'] && radar_media_path($b['id']) === null;
 });
+check('a news photo bigger than the panel accepts is shrunk instead of refused (4267 px wide, like the one from Veja)', static function () use ($png): bool {
+    if (!function_exists('imagecreatetruecolor')) {
+        return true; // GD is not installed here; the server has it
+    }
+    $image = imagecreatetruecolor(4300, 300);
+    imagefilledrectangle($image, 0, 0, 4300, 300, imagecolorallocate($image, 200, 40, 40));
+    ob_start();
+    imagejpeg($image, null, 80);
+    $big = (string)ob_get_clean();
+    $GLOBALS['radar_test_transport'] = static fn(array $r): array => ['one' => fakeResponse(200, $big)];
+    $media = radar_media_import_remote('https://img.example.com/big.jpg', 'cover', ['note' => 'Capa.', 'credit' => 'Veja']);
+    $GLOBALS['radar_test_transport'] = static fn(array $r): array => ['one' => fakeResponse(200, $png)];
+    $small = radar_media_import_remote('https://img.example.com/small.png', 'cover', ['note' => 'Capa.']);
+    unset($GLOBALS['radar_test_transport']);
+    return $media['mime'] === 'image/jpeg' && $media['width'] === 2400 && $media['height'] === 167 && str_contains((string)$media['note'], 'Imagem reduzida para caber no painel') && $media['credit'] === 'Veja'
+        && radar_media_fits($big) === false && radar_media_fits($png) === true && !str_contains((string)$small['note'], 'reduzida') && $small['width'] === 1 && radar_media_shrink('não é imagem') === null && radar_media_shrink($png) !== null;
+});
+check('when the cover of a news cannot be used, the same story in another outlet lends its picture, labelled as such', static function () use ($png): bool {
+    $now = time();
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count, cluster_id, image_url) VALUES (6401, 'cv1', 'Fonte A', 'Mesmo assunto A', 'https://a.example.com/1', '', ?, ?, ?, 'Geral', 60, 2, 7001, 'https://a.example.com/bad.jpg'), (6402, 'cv2', 'Fonte B', 'Mesmo assunto B', 'https://b.example.com/1', '', ?, ?, ?, 'Geral', 50, 2, 7001, 'https://b.example.com/ok.png'), (6403, 'cv3', 'Fonte C', 'Sozinha', 'https://c.example.com/1', '', ?, ?, ?, 'Geral', 40, 1, NULL, 'https://c.example.com/bad.jpg')", [$now, $now, $now, $now, $now, $now, $now, $now, $now]);
+    $GLOBALS['radar_test_transport'] = static fn(array $r): array => ['one' => str_contains($r['one']['url'], 'bad') ? fakeResponse(404, 'nada') : fakeResponse(200, $png)];
+    $lent = radar_media_import_news_cover(6401);
+    $alone = rejects(static fn() => radar_media_import_news_cover(6403), RuntimeException::class);
+    unset($GLOBALS['radar_test_transport']);
+    $ok = (int)$lent['news_id'] === 6401 && $lent['label'] === 'Imagem de matéria relacionada' && $lent['credit'] === 'Fonte B' && str_contains((string)$lent['note'], 'Fonte B') && $lent['source_url'] === 'https://b.example.com/ok.png' && $alone;
+    radar_db_exec('DELETE FROM media WHERE news_id IN (6401, 6402, 6403)');
+    radar_db_exec('DELETE FROM news WHERE id IN (6401, 6402, 6403)');
+    return $ok;
+});
 check('remote images are downloaded through the safe client, validated and attributed', static function () use ($png): bool {
     $GLOBALS['radar_test_transport'] = static fn(array $r): array => ['one' => fakeResponse(200, $png)];
     $media = radar_media_import_remote('https://img.example.com/a.png', 'cover', ['credit' => 'Fonte X']);
