@@ -438,7 +438,7 @@
       box.append(block);
     });
     $('st-scenes-hint').textContent = list.length
-      ? list.length + (list.length === 1 ? ' cena' : ' cenas') + ' de até 25 s. Cada cena é um bloco completo: imagens a anexar, roupa e cenário, coordenadas, roteiro e prompt juntos. “Copiar cena” funciona em 2 passos com o mesmo botão: 1/2 a prancha (template + referências) e 2/2 o texto.'
+      ? list.length + (list.length === 1 ? ' cena' : ' cenas') + ' de até 25 s. Cada cena é um bloco completo: imagens a anexar, roupa e cenário, coordenadas, roteiro e prompt juntos. “Copiar cena” copia só o texto desse bloco.'
         + (list.length > state.scenes ? ' O roteiro é longo: precisa de ' + list.length + ' cenas para ficar em até 25 s cada. Encurte o texto para ter menos.' : '')
       : '';
   }

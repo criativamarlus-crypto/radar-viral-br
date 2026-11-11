@@ -454,7 +454,7 @@ check('whichever of the three templates is chosen, every Dona Maricota prompt ca
             return false;
         }
         foreach ($prompts as $prompt) {
-            foreach (['TEMPLATE IMAGE (attach the template image to the video tool', 'use it as the FIRST FRAME', 'SINGLE-IMAGE OPTION', 'REFERENCE BOARD', 'REFERENCE IMAGE', 'THIS IS THE SAME OFFICIAL CHARACTER REGISTERED IN THE PANEL'] as $needle) {
+            foreach (['TEMPLATE IMAGE (attach the template image to the video tool', 'use it as the FIRST FRAME', 'REFERENCE IMAGE', 'THIS IS THE SAME OFFICIAL CHARACTER REGISTERED IN THE PANEL'] as $needle) {
                 if (!str_contains($prompt, $needle)) {
                     fwrite(STDERR, "  template $layout lacks: $needle\n");
                     return false;

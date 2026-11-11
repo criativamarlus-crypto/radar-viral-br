@@ -262,13 +262,11 @@ function radar_template_brief(string $layout, array $texts): string
 {
     $headline = radar_direction_text($texts['headline'] ?? '', 200);
     $source = radar_direction_text($texts['source'] ?? '', 80);
-    $single = 'SINGLE-IMAGE OPTION (if the video tool accepts only ONE image): attach the REFERENCE BOARD instead of the separate images. It is one image with the TEMPLATE on the left (the frame to keep, exactly as described above) and the CHARACTER REFERENCES on the right (used only for {his} face).';
     $intro = 'TEMPLATE IMAGE (attach the template image to the video tool together with this prompt, in every scene; if the tool accepts a start image or first frame, use it as the FIRST FRAME): a vertical 9:16 image of the exact final frame. Recreate this frame EXACTLY and keep it for the whole clip. KEEP UNCHANGED and completely static, with no movement, no redrawing and no changed letter: the black top band with its text, and the news card with its photo, yellow line, headline, white border and shadow. ONLY the person in the background changes: {he} is the character of the REFERENCE IMAGES ({his} face; {his} clothes come from WARDROBE and the camera from CAMERA ANGLE) and {he} is the only thing that moves (speaking with lip-sync, gestures, natural motion). The person in the template image is just a placeholder photo.';
     if ($layout === 'tv_studio') {
         return implode("\n", [
             'TEMPLATE IMAGE (attach the template image to the video tool together with this prompt, in every scene; if the tool accepts a start image or first frame, use it as the FIRST FRAME): a vertical 9:16 image of the exact starting frame of the clip. Keep its composition for the whole clip: the studio, the desk, the lit sign, the screens, the lighting and the framing. {He} is the character of the REFERENCE IMAGES ({his} face, clothes and jewelry come from the MASTER image) and {he} is the only thing that moves (speaking with lip-sync, gestures, natural motion). The pose of the person in the template image is only the starting point: the expression follows the EMOTIONAL TONE and the FACIAL EXPRESSION of this scene.',
             'SCREEN TEXT: none inside the video. Titles and subtitles are added later in editing; the signs and screens stay exactly as they are in the template image and no other word is added. If a news image is also attached, it may appear unchanged on the big studio screen, with no text on it.',
-            'SINGLE-IMAGE OPTION (if the video tool accepts only ONE image): attach the REFERENCE BOARD instead of the separate images. It is one image with the TEMPLATE on the left (the frame to keep) and the CHARACTER REFERENCES on the right (used only for {his} face, clothes and jewelry).',
         ]);
     }
     if ($layout === 'caption_card') {
@@ -281,7 +279,6 @@ function radar_template_brief(string $layout, array $texts): string
             '2) TOP BAND, from 0% to about 17% of the height: a solid black band across the full width. Centered inside it, up to 3 lines of the IMPACT PHRASE in bold white uppercase heavy sans-serif, with comfortable side margins: "' . $caption . '".',
             '3) NEWS CARD, bottom center, from about 62% to 94% of the height and 71% of the frame width, centered horizontally, with a thin white border and a soft drop shadow. Its upper part (about 55% of the card) is the NEWS IMAGE (the article thumbnail, attached to this prompt). Its lower part (about 45%) is a solid black info bar: a first line in bold yellow uppercase, "' . $sourceLine . '", and below it the real headline in bold white uppercase, up to 3 lines, "' . mb_strtoupper($headline) . '".',
             '4) NOTHING ELSE on screen: no other text, subtitles, logos or watermarks. Spell every word exactly as written above. If the video tool cannot render text reliably, keep the band and the card as clean flat areas (the text and the photo are added in editing) and never write different words.',
-            $single,
         ]);
     }
     return implode("\n", [
@@ -290,7 +287,6 @@ function radar_template_brief(string $layout, array $texts): string
         '1) TOP HALF, 0% to 50%: the NEWS IMAGE (the article thumbnail, attached to this prompt) filling the whole half, with a dark gradient over its lower part. On the gradient, near the bottom of the half, the headline in bold white sans-serif, up to 4 lines: "' . $headline . '". In the top-left corner, a small rounded dark pill with white text: "Fonte: ' . $source . '".',
         '2) BOTTOM HALF, 50% to 100%: the character, framed from the chest up, centered and anchored to the top of the half. A thin yellow line separates the two halves.',
         '3) NOTHING ELSE on screen: no other text, subtitles, logos or watermarks. Spell every word exactly as written above. If the video tool cannot render text reliably, keep the top half as a clean area (the photo and the text are added in editing) and never write different words.',
-        $single,
     ]);
 }
 

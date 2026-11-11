@@ -1284,12 +1284,12 @@ check('the caption-card prompt carries the template as a detailed brief: image, 
         && str_contains($prompt, 'NEWS CARD, bottom center, from about 62% to 94% of the height and 71% of the frame width') && str_contains($prompt, 'NEWS IMAGE (the article thumbnail, attached to this prompt)') && str_contains($prompt, 'thin white border and a soft drop shadow')
         && str_contains($prompt, 'her face between 22% and 62% of the height') && str_contains($prompt, 'Spell every word exactly as written above') && str_contains($prompt, 'The only text allowed on screen is the text listed in TEMPLATE LAYOUT') && !str_contains($prompt, 'do not show or invent any text')
         && str_contains($plain, '"ROTATIVO DO CARTÃO CHEGA A 451% AO ANO"') && preg_match('/\{[a-zA-Z]+\}/', $prompt) === 0
-        && str_contains($prompt, 'SINGLE-IMAGE OPTION (if the video tool accepts only ONE image): attach the REFERENCE BOARD instead of the separate images.') && str_contains($prompt, 'the TEMPLATE on the left') && str_contains($prompt, 'used only for her face');
+        && !str_contains($prompt, 'SINGLE-IMAGE OPTION') && !str_contains($prompt, 'REFERENCE BOARD');
 });
 check('the split template has its own brief (photo on top, character below) and never mentions the caption band', static function (): bool {
     $prompt = radar_video_prompts(['spoken' => 'Fala curta.', 'expression' => 'serio', 'scene' => 'casa', 'source' => 'G1', 'headline' => 'Senado vota projeto', 'layout' => 'split', 'character' => 'beto'])[0];
     return str_contains($prompt, 'TEMPLATE IMAGE (attach the template image') && str_contains($prompt, 'TOP HALF, 0% to 50%') && str_contains($prompt, '"Fonte: G1"') && str_contains($prompt, '"Senado vota projeto"') && str_contains($prompt, 'BOTTOM HALF, 50% to 100%')
-        && !str_contains($prompt, 'caption band') && !str_contains($prompt, 'IMPACT PHRASE') && str_contains($prompt, 'SINGLE-IMAGE OPTION') && str_contains($prompt, 'used only for his face');
+        && !str_contains($prompt, 'caption band') && !str_contains($prompt, 'IMPACT PHRASE') && !str_contains($prompt, 'SINGLE-IMAGE OPTION');
 });
 check('a stored script gets the impact phrase and the source line of its news in the template brief', static function (): bool {
     $published = time() - 3600;

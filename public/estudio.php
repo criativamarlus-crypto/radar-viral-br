@@ -152,17 +152,16 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js',
             <label>Roteiro falado<textarea id="st-script" rows="7" maxlength="4000" placeholder="O texto que o personagem fala"></textarea><span class="hint" id="st-words"></span></label>
         </div>
         <div class="panel script-block">
-            <div class="head"><span>Prompts de vídeo</span><button type="button" class="btn primary small" id="st-copy-scenes">Copiar todas as cenas (prancha + texto)</button></div>
+            <div class="head"><span>Prompts de vídeo</span></div>
             <div class="reference-box" id="st-reference"></div>
             <p class="hint" id="st-scenes-hint"></p>
             <div class="stack" id="st-prompts"></div>
             <textarea id="st-prompt" rows="3" readonly class="mono" hidden></textarea>
         </div>
         <div class="panel stack">
-            <button type="button" class="btn primary" id="st-copy-all">Copiar todas as cenas (prancha + texto)</button>
+            <button type="button" class="btn primary" id="st-copy-all">Copiar todos os textos</button>
             <button type="button" class="btn ghost" id="st-download-pack">Baixar pacote completo (.zip)</button>
-            <button type="button" class="btn ghost small" id="st-copy-once">Copiar texto + imagens de uma vez (para documento ou editor)</button>
-            <p class="hint" id="st-pack-status" role="status" aria-live="polite">A ferramenta de vídeo pega só a imagem ou só o texto em cada colar, então o botão trabalha em 2 passos: 1/2 copia a prancha (template + referências) e 2/2 copia o texto completo das cenas. Cole um de cada vez.</p>
+            <p class="hint" id="st-pack-status" role="status" aria-live="polite">Copia só o texto de todas as cenas (imagens a anexar, roupa e estúdio, roteiro e prompt). Cole junto com o print do template que você escolheu.</p>
         </div>
         <div class="panel stack">
             <button type="button" class="btn primary" id="st-save">Salvar projeto</button>
