@@ -99,9 +99,8 @@ radar_page_start($news['title'], 'noticias.php');
         <div class="panel">
             <h2>Preparar vídeo</h2>
             <div class="stack">
-                <button type="button" class="btn primary" data-react="<?= (int)$news['id'] ?>" data-title="<?= radar_h($news['title']) ?>">Gerar react com IA</button>
+                <a class="btn primary" href="estudio.php?news=<?= (int)$news['id'] ?>">Gerar react</a>
                 <button type="button" class="btn ghost" data-save="<?= (int)$news['id'] ?>" aria-pressed="<?= $news['saved'] ? 'true' : 'false' ?>"><?= $news['saved'] ? 'Salva' : 'Salvar' ?></button>
-                <a class="btn ghost" href="estudio.php?news=<?= (int)$news['id'] ?>">Abrir no Estúdio</a>
             </div>
         </div>
 

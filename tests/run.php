@@ -793,7 +793,7 @@ check('Studio projects save, update and delete with validated media', static fun
     return $project['cover_x'] === 100.0 && $project['cover_zoom'] === 3.0 && $project['expression'] === 'sorriso-largo' && $project['headline'] === 'Headline x'
         && $updated['title'] === 'Renomeado' && $updated['cover_media_id'] === null && $badMedia && $empty && $deleted && radar_project_get($project['id']) === null;
 });
-check('two video templates exist: the original split and the full-screen caption + news card', static function (): bool {
+check('two video templates exist: the full-screen caption + news card (default, first) and the original split', static function (): bool {
     $templates = radar_video_templates();
     foreach (['split', 'caption_card'] as $key) {
         if (!isset($templates[$key]) || !radar_video_template_valid($key)) {
@@ -805,7 +805,7 @@ check('two video templates exist: the original split and the full-screen caption
             }
         }
     }
-    return array_keys($templates) === ['split', 'caption_card'] && !radar_video_template_valid('inventado') && !radar_video_template_valid('');
+    return array_keys($templates) === ['caption_card', 'split'] && radar_video_default_template() === 'caption_card' && array_key_first($templates) === radar_video_default_template() && !radar_video_template_valid('inventado') && !radar_video_template_valid('');
 });
 check('the caption-card prompt frames the face between the caption band and the news card, and keeps every standard', static function (): bool {
     $parts = ['spoken' => 'Fala de teste.', 'expression' => 'rindo', 'scene' => 'carro', 'duration' => 25, 'headline' => 'H', 'source' => 'S'];
@@ -819,16 +819,18 @@ check('an unknown or missing layout falls back to the original split layout', st
     $parts = ['spoken' => 'x', 'expression' => 'serio', 'scene' => 'casa', 'duration' => 20, 'headline' => 'h', 'source' => 's'];
     return radar_video_prompt($parts) === radar_video_prompt($parts + ['layout' => 'split']) && radar_video_prompt($parts + ['layout' => 'nope']) === radar_video_prompt($parts);
 });
-check('a react is generated for the chosen template, stored with the script and reflected in its prompt', static function (): bool {
+check('a react is generated for the chosen template (default: caption card), stored with the script and reflected in its prompt', static function (): bool {
     radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (601, 'tpl1', 'Fonte T', 'Senado fornecerá 95 iPhones para parlamentares', 'https://t.example.com/1', 'Resumo do veículo para o teste do modelo de vídeo.', ?, ?, ?, 'Política', 60, 1)", [time() - 900, time() - 900, time()]);
     $card = radar_react_generate(601, ['duration' => 25, 'layout' => 'caption_card']);
+    $split = radar_react_generate(601, ['duration' => 25, 'layout' => 'split']);
     $default = radar_react_generate(601, ['duration' => 25]);
     $invalid = radar_react_generate(601, ['duration' => 25, 'layout' => 'xyz']);
-    return $card['layout'] === 'caption_card' && str_contains($card['video_prompt'], 'caption band') && $default['layout'] === 'split' && $invalid['layout'] === 'split' && !str_contains($default['video_prompt'], 'caption band')
+    return $card['layout'] === 'caption_card' && str_contains($card['video_prompt'], 'caption band') && $split['layout'] === 'split' && !str_contains($split['video_prompt'], 'caption band')
+        && $default['layout'] === 'caption_card' && $invalid['layout'] === 'caption_card' && str_contains($default['video_prompt'], 'caption band')
         && radar_script_get($card['id'])['layout'] === 'caption_card';
 });
 check('changing a script template rebuilds its prompt; an invalid template is ignored', static function (): bool {
-    $script = radar_react_generate(601, ['duration' => 20]);
+    $script = radar_react_generate(601, ['duration' => 20, 'layout' => 'split']);
     $changed = radar_script_update($script['id'], ['layout' => 'caption_card']);
     $ignored = radar_script_update($script['id'], ['layout' => 'bogus']);
     $back = radar_script_update($script['id'], ['layout' => 'split']);

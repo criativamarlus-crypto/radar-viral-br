@@ -66,7 +66,7 @@ function radar_react_generate(int $newsId, array $options = []): array
     if ($estimated > $duration + 6) {
         $generated['warnings'][] = "O texto falado dura cerca de {$estimated}s, acima dos {$duration}s pedidos. Edite para encurtar.";
     }
-    $layout = radar_video_template_valid((string)($options['layout'] ?? '')) ? (string)$options['layout'] : 'split';
+    $layout = radar_video_template_valid((string)($options['layout'] ?? '')) ? (string)$options['layout'] : radar_video_default_template();
     $prompt = radar_video_prompt(['spoken' => $spoken, 'expression' => $expression, 'scene' => $scene, 'duration' => $duration, 'headline' => $news['title'], 'source' => $news['source'], 'layout' => $layout]);
     $now = time();
     $id = radar_db_insert(

@@ -211,7 +211,7 @@ function radar_news_card(array $n, bool $showSave = true): string
     if ($n['score_summary'] !== '') {
         $html .= '<p class="why">' . radar_h($n['score_summary']) . '</p>';
     }
-    $html .= '<div class="card-actions"><button type="button" class="btn primary" data-react="' . (int)$n['id'] . '" data-title="' . radar_h($n['title']) . '">Gerar react com IA</button>';
+    $html .= '<div class="card-actions"><a class="btn primary" href="estudio.php?news=' . (int)$n['id'] . '">Gerar react</a>';
     if ($showSave) {
         $html .= '<button type="button" class="btn ghost" data-save="' . (int)$n['id'] . '" aria-pressed="' . ($n['saved'] ? 'true' : 'false') . '">' . ($n['saved'] ? 'Salva' : 'Salvar') . '</button>';
     }

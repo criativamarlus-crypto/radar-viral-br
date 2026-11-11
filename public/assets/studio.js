@@ -10,11 +10,14 @@
 
   const project = data.project;
   const initialScript = !project && data.scriptId ? data.scripts.find((s) => s.id === data.scriptId) : null;
+  // The chosen video template survives the reload that happens when another news is picked.
+  const requestedTemplate = new URLSearchParams(location.search).get('modelo') || '';
+  const chosenTemplate = Object.prototype.hasOwnProperty.call(data.templates, requestedTemplate) ? requestedTemplate : data.defaultTemplate;
   const state = {
     newsId: data.news ? data.news.id : null,
     scriptId: data.scriptId,
     projectId: project ? project.id : null,
-    template: project ? project.template : (initialScript ? initialScript.layout : 'split'),
+    template: project ? project.template : (initialScript ? initialScript.layout : chosenTemplate),
     title: project ? project.title : '',
     headline: project ? project.headline : (data.news ? data.news.title : ''),
     caption: project ? project.caption : '',
@@ -29,7 +32,7 @@
     zoom: project ? project.cover_zoom : 1,
     prompt: project ? project.video_prompt : '',
   };
-  if (!data.templates[state.template]) state.template = 'split';
+  if (!data.templates[state.template]) state.template = data.defaultTemplate;
   if (!state.characterId) {
     const primary = data.characters.find((c) => c.primary) || data.characters[0];
     state.characterId = primary ? primary.id : null;
@@ -274,7 +277,9 @@
     if (state.newsId === n.id) option.selected = true;
     newsSelect.append(option);
   }
-  newsSelect.addEventListener('change', () => { if (newsSelect.value) location.href = 'estudio.php?news=' + encodeURIComponent(newsSelect.value); });
+  newsSelect.addEventListener('change', () => {
+    if (newsSelect.value) location.href = 'estudio.php?news=' + encodeURIComponent(newsSelect.value) + '&modelo=' + encodeURIComponent(state.template);
+  });
 
   const scriptSelect = $('st-script-select');
   for (const s of data.scripts.filter((x) => !state.newsId || x.news_id === state.newsId)) {
@@ -435,16 +440,19 @@
     el.addEventListener('input', () => { state[key] = Number(el.value); redraw(); });
   }
 
-  function applyScript(script) {
+  /** keepTemplate: keep the template chosen in the Studio instead of the one stored with the script. */
+  function applyScript(script, keepTemplate) {
     state.scriptId = script.id;
     state.spoken = script.spoken; state.expression = script.expression; state.scene = script.scene;
-    state.duration = script.duration; state.prompt = script.video_prompt; state.template = data.templates[script.layout] ? script.layout : state.template;
+    state.duration = script.duration; state.prompt = script.video_prompt;
+    if (!keepTemplate && data.templates[script.layout]) state.template = script.layout;
     state.headline = state.template === 'caption_card' && data.news ? data.news.title : script.headline;
     state.caption = state.template === 'caption_card' ? pickCaption(script) : state.caption;
     if (!state.title) state.title = script.headline.slice(0, 80);
     $('st-title').value = state.title; $('st-headline').value = state.headline; $('st-script').value = state.spoken; $('st-caption').value = state.caption;
     $('st-expression').value = state.expression; $('st-scene').value = state.scene; $('st-template').value = state.template; $('st-prompt').value = state.prompt;
     applyTemplateUi(); fillCaptionOptions(); words(); redraw();
+    if (keepTemplate && script.layout !== state.template) refreshPrompt();
   }
 
   scriptSelect.addEventListener('change', () => {
@@ -453,7 +461,81 @@
     applyScript(script);
   });
 
+  /* ---------- the script is generated here as soon as a news is chosen ---------- */
+  const genButton = $('st-generate');
+  const genStatus = $('st-gen-status');
+  const toneSelect = $('st-tone');
+  let generating = false;
+  if (toneSelect) fillSelect(toneSelect, data.tones, 'bem-humorado');
+
+  function setGenStatus(text, isError) {
+    if (!genStatus) return;
+    genStatus.textContent = text;
+    genStatus.classList.toggle('error-text', Boolean(isError));
+  }
+
+  function scriptOption(script) {
+    return new Option('#' + script.id + ' · ' + script.headline.slice(0, 70), String(script.id));
+  }
+
+  async function generateScript() {
+    if (!data.news || generating) return;
+    generating = true;
+    const box = $('st-script');
+    const placeholder = box.placeholder;
+    box.placeholder = 'Gerando o roteiro a partir da notícia… pode levar até um minuto.';
+    if (genButton) genButton.disabled = true;
+    scriptSelect.disabled = true;
+    setGenStatus('Gerando o roteiro…');
+    try {
+      const result = await api({
+        action: 'generate', news_id: data.news.id, duration: Number($('st-duration').value) || 25,
+        tone: toneSelect ? toneSelect.value : 'bem-humorado', layout: state.template,
+      });
+      const item = result.item;
+      const script = {
+        id: item.id, news_id: item.news_id, news_title: item.news_title, news_source: item.news_source,
+        headline: (item.headlines && item.headlines[0]) || item.news_title, headlines: item.headlines || [], hook: item.hook,
+        spoken: item.spoken, expression: item.expression, scene: item.scene, layout: item.layout, duration: item.duration, video_prompt: item.video_prompt,
+      };
+      data.scripts.unshift(script);
+      scriptSelect.append(scriptOption(script));
+      scriptSelect.value = String(script.id);
+      applyScript(script, true);
+      history.replaceState(null, '', 'estudio.php?news=' + data.news.id + '&roteiro=' + script.id);
+      setGenStatus(item.mode === 'ia'
+        ? 'Roteiro gerado por IA. Confira os fatos na matéria antes de gravar.'
+        : 'Rascunho conservador (sem IA). Cadastre a chave em Config IA para roteiros melhores.');
+    } catch (error) {
+      setGenStatus('Não foi possível gerar o roteiro: ' + error.message, true);
+    }
+    box.placeholder = placeholder;
+    scriptSelect.disabled = false;
+    if (genButton) genButton.disabled = false;
+    generating = false;
+  }
+
+  if (genButton) {
+    genButton.addEventListener('click', () => {
+      const current = data.scripts.find((s) => s.id === state.scriptId);
+      const edited = state.spoken.trim() !== '' && (!current || current.spoken !== state.spoken);
+      if (edited && !window.confirm('Substituir o texto que você editou por um roteiro novo?')) return;
+      generateScript();
+    });
+  }
+
   if (initialScript) applyScript(initialScript);
+  if (data.news && !project && !initialScript) {
+    // Reuse the newest script already made for this news; otherwise write one now.
+    const existing = data.scripts.filter((s) => s.news_id === data.news.id).sort((a, b) => b.id - a.id)[0];
+    if (existing) {
+      scriptSelect.value = String(existing.id);
+      applyScript(existing, true);
+      setGenStatus('Usei o roteiro mais recente desta notícia (#' + existing.id + '). Use “Gerar outro roteiro” para criar um novo.');
+    } else {
+      generateScript();
+    }
+  }
   $('st-prompt').value = state.prompt;
   if (!state.prompt && state.spoken) refreshPrompt();
   applyTemplateUi();

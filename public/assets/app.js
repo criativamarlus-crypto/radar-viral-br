@@ -111,10 +111,10 @@
         news_id: reactNewsId,
         duration: Number($('#react-duration').value),
         tone: $('#react-tone').value,
-        layout: $('#react-layout')?.value || 'split',
+        layout: $('#react-layout')?.value || '',
         context: $('#react-context').value,
       });
-      location.href = 'roteiro.php?id=' + result.item.id;
+      location.href = 'estudio.php?news=' + reactNewsId + '&roteiro=' + result.item.id;
     } catch (error) {
       const box = $('#react-error');
       box.textContent = error.message;

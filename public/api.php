@@ -197,7 +197,7 @@ try {
                 'duration' => max(15, min(35, api_int($input['duration'] ?? 25) ?: 25)),
                 'headline' => mb_substr((string)($input['headline'] ?? ''), 0, 200),
                 'source' => mb_substr((string)($input['source'] ?? ''), 0, 100),
-                'layout' => radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : 'split',
+                'layout' => radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : radar_video_default_template(),
             ])]);
 
         case 'source_test':

@@ -84,25 +84,26 @@ function radar_character_set_primary(string $mediaId): bool
 }
 
 /**
- * Video layouts. "split" is news on top / character below; "caption_card" is the character filling the
- * frame with a big caption on top and the news cover as a card at the bottom (the reference template).
+ * Video layouts. "caption_card" (the DEFAULT, listed first) is the character filling the frame with a big
+ * caption on top and the news cover as a card at the bottom (the reference template); "split" is news on
+ * top / character below.
  *
  * @return array<string,array{label:string,description:string,framing:string,layout:string}>
  */
 function radar_video_templates(): array
 {
     return [
-        'split' => [
-            'label' => 'Notícia em cima, personagem embaixo',
-            'description' => 'Metade de cima com a imagem da notícia e a headline; metade de baixo com o personagem.',
-            'framing' => 'character framed from the chest up, centered',
-            'layout' => 'LAYOUT NOTE: the character occupies the lower half of the frame; keep the upper half visually calm because a real news screenshot will be composed there afterwards.',
-        ],
         'caption_card' => [
             'label' => 'Vídeo em tela cheia, frase de impacto no topo e card da notícia',
             'description' => 'O vídeo do personagem ocupa o quadro inteiro. Uma faixa preta no topo traz a frase de impacto em maiúsculas; embaixo, no centro, um card com a imagem da notícia e, colada nela, a barra com FONTE • DATA e a manchete real.',
             'framing' => 'character filling the whole frame, framed from the chest up with his face centered at about 40% of the frame height (between the caption band and the news card), centered',
             'layout' => 'LAYOUT NOTE: full-frame vertical shot. A black caption band is composed over the top 22% of the frame and a news card over the bottom 38% (from about 62% of the height down), so keep his face and gestures inside the middle area, between 22% and 62% of the height. Nothing important in the top and bottom areas. Gestures never cover the face.',
+        ],
+        'split' => [
+            'label' => 'Notícia em cima, personagem embaixo',
+            'description' => 'Metade de cima com a imagem da notícia e a headline; metade de baixo com o personagem.',
+            'framing' => 'character framed from the chest up, centered',
+            'layout' => 'LAYOUT NOTE: the character occupies the lower half of the frame; keep the upper half visually calm because a real news screenshot will be composed there afterwards.',
         ],
     ];
 }
@@ -110,6 +111,12 @@ function radar_video_templates(): array
 function radar_video_template_valid(string $key): bool
 {
     return isset(radar_video_templates()[$key]);
+}
+
+/** Template used when none is chosen (new reacts, the Studio, the API and the MCP). Older scripts keep "split". */
+function radar_video_default_template(): string
+{
+    return 'caption_card';
 }
 
 /**

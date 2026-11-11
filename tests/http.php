@@ -275,7 +275,7 @@ try {
     check('the script form without CSRF changes nothing', static fn(): bool => $editNoCsrf['status'] === 303 && !str_contains(radar_script_get($scriptId)['hook'], 'Invasor'));
     $generatedCard = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'duration' => 25, 'tone' => 'direto', 'layout' => 'caption_card']);
     $generatedCardData = json_decode($generatedCard['body'], true);
-    check('GERAR REACT accepts the video template and returns the matching prompt', static fn(): bool => $generatedCard['status'] === 201 && ($generatedCardData['item']['layout'] ?? '') === 'caption_card' && str_contains($generatedCardData['item']['video_prompt'] ?? '', 'caption band') && ($generatedData['item']['layout'] ?? '') === 'split');
+    check('GERAR REACT accepts the video template and returns the matching prompt', static fn(): bool => $generatedCard['status'] === 201 && ($generatedCardData['item']['layout'] ?? '') === 'caption_card' && str_contains($generatedCardData['item']['video_prompt'] ?? '', 'caption band') && ($generatedData['item']['layout'] ?? '') === 'caption_card');
     $promptCard = $post(['action' => 'video_prompt', 'spoken' => 'Fala', 'expression' => 'serio', 'scene' => 'carro', 'duration' => 20, 'headline' => 'H', 'source' => 'S', 'layout' => 'caption_card']);
     check('the Studio rebuilds the prompt for the chosen template', static fn(): bool => $promptCard['status'] === 200 && str_contains(json_decode($promptCard['body'], true)['prompt'], 'chest up') && str_contains(json_decode($promptCard['body'], true)['prompt'], 'caption band'));
     $projectCard = $post(['action' => 'project_save', 'title' => 'Projeto card', 'headline' => 'MANCHETE', 'template' => 'caption_card', 'caption' => 'FRASE DE IMPACTO', 'news_id' => $firstNewsId]);
@@ -283,6 +283,10 @@ try {
     $studioPage = localRequest('estudio.php?projeto=' . $projectCardId);
     check('the Studio page offers both templates, the impact phrase field and the transparent overlay export', static fn(): bool => $projectCard['status'] === 201 && $studioPage['status'] === 200 && str_contains($studioPage['body'], 'id="st-template"') && str_contains($studioPage['body'], 'id="st-caption"') && str_contains($studioPage['body'], 'id="st-export-overlay"')
         && str_contains($studioPage['body'], 'caption_card') && str_contains($studioPage['body'], 'FRASE DE IMPACTO') && str_contains($studioPage['body'], 'Notícia em cima, personagem embaixo'));
+    $studioNews = localRequest('estudio.php?news=' . $firstNewsId);
+    $studioEmpty = localRequest('estudio.php');
+    check('the Studio can write the script itself: generator controls and tones are offered once a news is chosen', static fn(): bool => $studioNews['status'] === 200 && str_contains($studioNews['body'], 'id="st-generate"') && str_contains($studioNews['body'], 'id="st-gen-status"') && str_contains($studioNews['body'], 'id="st-duration"') && str_contains($studioNews['body'], 'id="st-tone"')
+        && str_contains($studioNews['body'], '"tones":{"bem-humorado":"Bem-humorado"') && !str_contains($studioEmpty['body'], 'id="st-generate"') && str_contains($studioEmpty['body'], 'o roteiro já é gerado aqui'));
     $newsWithDialog = localRequest('noticias.php?janela=24');
     check('the "Gerar react" dialog lists the video templates', static fn(): bool => str_contains($newsWithDialog['body'], 'id="react-layout"') && str_contains($newsWithDialog['body'], 'Vídeo em tela cheia, frase de impacto no topo e card da notícia'));
     $scriptCardPage = localRequest('roteiro.php?id=' . ($generatedCardData['item']['id'] ?? 0));

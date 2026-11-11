@@ -43,6 +43,8 @@ $state = [
     'characters' => $characters,
     'expressions' => array_map(static fn(array $e): string => $e['label'], radar_character_expressions()),
     'scenes' => radar_character_scenes(),
+    'tones' => RADAR_TONES,
+    'defaultTemplate' => radar_video_default_template(),
     'templates' => array_map(static fn(array $t): array => ['label' => $t['label'], 'description' => $t['description']], radar_video_templates()),
     'project' => $project,
     'scriptId' => $script['id'] ?? null,
@@ -69,7 +71,17 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js']
             <h2>1 · Notícia e roteiro</h2>
             <label>Notícia<select id="st-news"><option value="">Escolha uma notícia…</option></select></label>
             <label>Roteiro<select id="st-script-select"><option value="">Sem roteiro (escrever aqui)</option></select></label>
-            <?php if ($news !== null): ?><button type="button" class="btn ghost small" data-react="<?= (int)$news['id'] ?>" data-title="<?= radar_h($news['title']) ?>">Gerar novo react com IA</button><?php endif; ?>
+            <?php if ($news !== null): ?>
+                <div class="field-row">
+                    <label>Duração<select id="st-duration"><option>15</option><option>20</option><option selected>25</option><option>30</option><option>35</option></select></label>
+                    <label>Tom<select id="st-tone"></select></label>
+                </div>
+                <button type="button" class="btn small" id="st-generate">Gerar outro roteiro</button>
+                <p class="hint" id="st-gen-status" role="status" aria-live="polite"></p>
+                <button type="button" class="btn ghost small" data-react="<?= (int)$news['id'] ?>" data-title="<?= radar_h($news['title']) ?>">Gerar react com contexto conferido (IA)</button>
+            <?php else: ?>
+                <p class="hint">Ao escolher a notícia, o roteiro já é gerado aqui.</p>
+            <?php endif; ?>
         </div>
         <div class="panel form-grid">
             <h2>2 · Imagem da notícia</h2>
