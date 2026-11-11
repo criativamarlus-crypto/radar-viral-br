@@ -228,11 +228,18 @@ function radar_direction_generate(array $context, int $scenes, array $avoid = []
         $counter++;
         return $seed === null ? random_int(0, $max - 1) : (int)(crc32($seed . ':' . $counter) % $max);
     };
-    $avoidFolded = array_map('mb_strtolower', $avoid);
+    // Newest first. When the recent looks use up a whole pool, only the newest ones are avoided: the new look
+    // always differs from the latest ones, and from as many older ones as the pool allows.
+    $avoidFolded = array_map('mb_strtolower', array_values($avoid));
     $pick = static function (array $pool) use ($rand, $avoidFolded): string {
-        $options = array_values(array_filter($pool, static fn(string $option): bool => !in_array(mb_strtolower($option), $avoidFolded, true)));
-        $options = $options === [] ? $pool : $options;
-        return $options[$rand(count($options))];
+        for ($keep = count($avoidFolded); $keep >= 0; $keep--) {
+            $skip = array_slice($avoidFolded, 0, $keep);
+            $options = array_values(array_filter($pool, static fn(string $option): bool => !in_array(mb_strtolower($option), $skip, true)));
+            if ($options !== []) {
+                return $options[$rand(count($options))];
+            }
+        }
+        return $pool[$rand(count($pool))];
     };
     $distinct = static function (array $pool, int $count) use ($rand): array {
         $chosen = [];
