@@ -62,7 +62,9 @@ function radar_tv_reaction_bank(string $group): array
         'financas' => ['Isso é informação, não é recomendação financeira. Cada caso é um caso.', 'Na minha opinião, informação ajuda. Mas isso não é recomendação financeira.', 'Eu não disse? Dinheiro pede atenção. Não é recomendação financeira.', 'Informação é uma coisa, decisão é outra. Não é recomendação financeira.', 'Isso aqui vai dar pano pra manga! Mas não é recomendação financeira.', 'Na minha opinião, vale entender antes de decidir. Não é recomendação financeira.'],
         'internacional' => ['Na minha opinião, é bom entender o que acontece lá fora, que sempre chega aqui.', 'Rapaz, na minha opinião, o mundo dá voltas e a gente precisa acompanhar.', 'Opinião minha, tá? Vale conferir a matéria para entender o contexto.', 'Isso aqui vai dar pano pra manga lá fora e aqui também!', 'Na minha opinião, notícia de fora a gente precisa ler com calma.', 'Eu não disse? O mundo sempre tem história pra contar.'],
         'sensivel' => ['É uma notícia triste, e a minha opinião é que ela merece respeito.', 'Na minha opinião, o momento é de respeito e de cuidado com quem está envolvido.', 'Opinião minha: antes de comentar, vale lembrar que há pessoas por trás da notícia.', 'Na minha opinião, cabe a gente acompanhar com cuidado e sem especular.', 'Meus sentimentos a quem está passando por isso.', 'Opinião minha: respeito acima de tudo.'],
-        default => ['Eu não disse? Esse assunto vai render o dia inteiro.', 'Isso aqui vai dar pano pra manga, pode anotar!', 'Eu não sou de falar da vida de ninguém... mas que rende assunto, rende!', 'Na minha opinião, essa história ainda vai ser muito comentada.', 'Minha filha, na minha opinião, essa vai render conversa.', 'Opinião minha, tá? Achei essa história de arrancar o fôlego.', 'Rapaz, na minha opinião, o povo vai falar disso por muito tempo.', 'Confesso que levantei a sobrancelha. Opinião minha, hein?', 'Segura esse babado! Na minha opinião, é assunto para o dia todo.', 'Na minha opinião, tem história que cai no gosto do povo, e essa caiu.', 'Opinião minha: notícia assim anima qualquer conversa.', 'Eu juro que li duas vezes. Opinião minha, é curiosa!'],
+        default => ['Eu não disse? Esse assunto vai render o dia inteiro.', 'Isso aqui vai dar pano pra manga, pode anotar!', 'Eu não sou de falar da vida de ninguém... mas que rende assunto, rende!', 'Na minha opinião, essa história ainda vai ser muito comentada.', 'Minha filha, na minha opinião, essa vai render conversa.', 'Opinião minha, tá? Achei essa história de arrancar o fôlego.', 'Rapaz, na minha opinião, o povo vai falar disso por muito tempo.', 'Confesso que levantei a sobrancelha. Opinião minha, hein?', 'Segura esse babado! Na minha opinião, é assunto para o dia todo.', 'Na minha opinião, tem história que cai no gosto do povo, e essa caiu.', 'Opinião minha: notícia assim anima qualquer conversa.', 'Eu juro que li duas vezes. Opinião minha, é curiosa!',
+            'Opinião minha: história boa a gente conta duas vezes.', 'Na minha opinião, o povo vai querer saber mais.', 'Rapaz, na minha opinião, nem a vizinha ia acreditar!', 'Eu não disse que hoje tinha assunto? Opinião minha.',
+            'Meu povo, na minha opinião, essa história dá suspiro.', 'Na minha opinião, isso aqui é prato cheio pra conversa.', 'Opinião minha: tem notícia que a gente comenta de pé.', 'Segura esse babado! Opinião minha: ainda vai render.'],
     };
 }
 
@@ -74,7 +76,8 @@ function radar_tv_closing_bank(string $group): array
         'financas' => ['Isso mexe com o seu bolso?', 'Você já tinha visto essa notícia?', 'Qual é a sua dúvida sobre isso?', 'O que você achou?', 'Como isso aparece no seu dia a dia?', 'Você acompanha esse assunto?'],
         'internacional' => ['Você já tinha ouvido falar disso?', 'O que você acha que isso muda por aqui?', 'Qual é a sua opinião sobre essa notícia?', 'Você acompanha notícias de fora?', 'Que dúvida ficou sobre essa história?'],
         'sensivel' => ['Que mensagem de apoio você deixaria?', 'Como a gente pode apoiar quem passa por isso?', 'Quer deixar uma palavra de respeito?', 'Que palavra de apoio você deixaria?'],
-        default => ['E você, o que achou?', 'Qual é a sua opinião sobre {tema}?', 'Você já tinha ouvido falar disso?', 'Se fosse com você, o que faria?', 'Quem aí concorda comigo?', 'Qual parte dessa história mais te chamou a atenção?', 'Chocou ou não chocou?', 'Você acha que {tema} ainda vai render conversa?', 'O que você mudaria nessa história?', 'Isso te surpreendeu tanto quanto me surpreendeu?', 'Você contaria isso pra quem primeiro?', 'Você acompanharia essa história até o final?'],
+        default => ['E você, o que achou?', 'Qual é a sua opinião sobre {tema}?', 'Você já tinha ouvido falar disso?', 'Se fosse com você, o que faria?', 'Quem aí concorda comigo?', 'Qual parte dessa história mais te chamou a atenção?', 'Chocou ou não chocou?', 'Você acha que {tema} ainda vai render conversa?', 'O que você mudaria nessa história?', 'Isso te surpreendeu tanto quanto me surpreendeu?', 'Você contaria isso pra quem primeiro?', 'Você acompanharia essa história até o final?',
+            'Isso mudaria o seu dia?', 'Qual é o seu palpite sobre essa história?', 'Você ficou de queixo caído também?', 'Já viu algo parecido por aí?', 'Quem você marcaria para ver isso?', 'Em que ponto dessa história você parou?', 'Vale ou não vale prestar atenção nisso?', 'O que você diria se estivesse lá?'],
     };
 }
 
@@ -183,8 +186,10 @@ function radar_tv_fallback_text(int $number, array $ctx, int $attempt = 0): stri
     $invitationBase = (int)(crc32($ctx['seed'] . ':3i') % count($invitations));
     $shortest = null;
     for ($step = 0; $step < count($reactions) * count($questions); $step++) {
-        $reaction = $reactions[($reactionBase + $attempt + $step) % count($reactions)];
-        $question = $questions[($questionBase + $attempt * 3 + intdiv($step, count($reactions)) + $step) % count($questions)];
+        // Odometer order: the question changes first, the reaction after a whole turn of questions, so every pair is reachable.
+        $position = $attempt + $step;
+        $reaction = $reactions[($reactionBase + intdiv($position, count($questions))) % count($reactions)];
+        $question = $questions[($questionBase + $position) % count($questions)];
         $pair = $reaction . ' ' . $question;
         foreach (range(0, count($invitations) - 1) as $k) {
             $full = $pair . ' ' . $invitations[($invitationBase + $attempt + $k) % count($invitations)];
@@ -448,7 +453,19 @@ function radar_tv_refine(array &$scenes, array $ctx, ?array $config): array
                 }
             }
             if ($text === null) {
-                $text = ['narration' => radar_tv_fallback_text($number, $ctx, $attempts[$number]), 'caption' => '', 'screen_title' => ''];
+                // Draft: walk the variants of this scene until one repeats nothing (the rest of the text is left as it is).
+                $candidate = '';
+                for ($step = 1; $step <= 160; $step++) {
+                    $candidate = radar_tv_fallback_text($number, $ctx, $attempts[$number] + $step);
+                    $trial = array_column($scenes, 'narration');
+                    $trial[$number - 1] = $candidate;
+                    $repeats = array_filter(radar_editorial_check($trial, $slug, $ctx['except_script'] ?? null), static fn(array $i): bool => $i['scene'] === $number);
+                    if ($repeats === [] && ($ctx['tone']['catchphrases'] || radar_editorial_catchphrases_used($candidate, $slug) === [])) {
+                        break;
+                    }
+                }
+                $attempts[$number] += $step;
+                $text = ['narration' => $candidate, 'caption' => '', 'screen_title' => ''];
             }
             $scenes[$number - 1]['narration'] = $text['narration'];
             $scenes[$number - 1]['caption'] = $text['caption'] !== '' ? $text['caption'] : $text['narration'];
@@ -832,7 +849,7 @@ function radar_tv_scene_regenerate(int $scriptId, int $number, string $instructi
         }
     }
     $attempt = 0;
-    while ($new === null && $attempt < 40) {
+    while ($new === null && $attempt < 160) {
         $attempt++;
         $candidate = radar_tv_fallback_text($number, $ctx, $attempt);
         $trial = $narrations;
@@ -844,7 +861,7 @@ function radar_tv_scene_regenerate(int $scriptId, int $number, string $instructi
     }
     if ($new === null) {
         // Every variant repeats something in the memory: use the first one that differs from the current text.
-        foreach (range(1, 40) as $attempt) {
+        foreach (range(1, 160) as $attempt) {
             $candidate = radar_tv_fallback_text($number, $ctx, $attempt);
             if (radar_fold($candidate) !== $currentPlain) {
                 $new = ['narration' => $candidate, 'caption' => $candidate, 'screen_title' => ''];
