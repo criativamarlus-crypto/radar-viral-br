@@ -38,7 +38,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 
 `Content-Type: application/json` (ou `multipart/form-data` no `upload`), campo `action`:
 
-`collect` (`trigger`: `manual`\|`auto`) · `save_news` · `delete_news` · `generate` (`news_id`, `duration` 15–35, `tone`, `context`, `layout`: `caption_card` (padrão)\|`split`) · `script_update` · `script_delete` · `project_save` · `project_delete` · `video_prompt` · `import_cover` · `fetch_og` · `screenshot` · `upload` (`kind`: `cover`\|`character`\|`upload`, `file`) · `media_delete` · `character_primary` · `source_test` · `ai_test`
+`collect` (`trigger`: `manual`\|`auto`) · `save_news` · `delete_news` · `generate` (`news_id`, `scenes` 1–5 (padrão 3; cada cena tem até 25 s e vira um prompt de vídeo próprio), `tone`, `context`, `layout`: `caption_card` (padrão)\|`split`) · `script_update` · `script_delete` · `project_save` · `project_delete` · `video_prompt` (devolve `prompt` e `prompts`, um por cena) · `import_cover` · `fetch_og` · `screenshot` · `upload` (`kind`: `cover`\|`character`\|`upload`, `file`) · `media_delete` · `character_primary` · `source_test` · `ai_test`
 
 Imagens: apenas JPEG, PNG ou WebP, até 5 MB e 4096 px. São inspecionadas (tipo real, dimensões) e guardadas fora da raiz pública com nome aleatório; `GET /media.php?id=…` exige login.
 
@@ -58,7 +58,7 @@ JSON-RPC sobre HTTP `POST`, sem estado, `Content-Type: application/json`, `Autho
 | `obter_noticia` | `id` | leitura |
 | `obter_imagens` | `id` | leitura |
 | `listar_reacts` | `noticia_id`, `limite` | leitura |
-| `preparar_react` | `noticia_id`, `duracao_segundos` (15–35), `tom`, `contexto_confirmado`, `modelo_video` (`caption_card` padrão: tela cheia, frase de impacto no topo e card da notícia \| `split`: notícia em cima, personagem embaixo) | **“preparar react”** (usa a IA do servidor; sem IA gera rascunho) |
+| `preparar_react` | `noticia_id`, `cenas` (1–5, padrão 3; até 25 s cada), `tom`, `contexto_confirmado`, `modelo_video` (`caption_card` padrão: tela cheia, frase de impacto no topo e card da notícia \| `split`: notícia em cima, personagem embaixo) | **“preparar react”** (usa a IA do servidor; sem IA gera rascunho) |
 
 ```bash
 curl -s https://viral.netnewsltda.online/mcp.php \

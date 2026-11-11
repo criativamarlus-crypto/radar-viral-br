@@ -286,7 +286,7 @@ try {
     $studioNews = localRequest('estudio.php?news=' . $firstNewsId);
     $studioEmpty = localRequest('estudio.php');
     check('pages reference scripts and styles with a fingerprinted URL', static fn(): bool => preg_match('#src="assets/studio\.js\?v=[a-f0-9]{10}"#', $studioNews['body']) === 1 && preg_match('#href="assets/app\.css\?v=[a-f0-9]{10}"#', $studioNews['body']) === 1 && preg_match('#src="assets/app\.js\?v=[a-f0-9]{10}"#', $studioNews['body']) === 1);
-    check('the Studio can write the script itself: generator controls and tones are offered once a news is chosen', static fn(): bool => $studioNews['status'] === 200 && str_contains($studioNews['body'], 'id="st-generate"') && str_contains($studioNews['body'], 'id="st-gen-status"') && str_contains($studioNews['body'], 'id="st-duration"') && str_contains($studioNews['body'], 'id="st-tone"')
+    check('the Studio can write the script itself: generator controls and tones are offered once a news is chosen', static fn(): bool => $studioNews['status'] === 200 && str_contains($studioNews['body'], 'id="st-generate"') && str_contains($studioNews['body'], 'id="st-gen-status"') && str_contains($studioNews['body'], 'id="st-scenes"') && str_contains($studioNews['body'], 'id="st-tone"')
         && str_contains($studioNews['body'], '"tones":{"bem-humorado":"Bem-humorado"') && !str_contains($studioEmpty['body'], 'id="st-generate"') && str_contains($studioEmpty['body'], 'o roteiro já é gerado aqui'));
     $newsWithDialog = localRequest('noticias.php?janela=24');
     check('the "Gerar react" dialog lists the video templates', static fn(): bool => str_contains($newsWithDialog['body'], 'id="react-layout"') && str_contains($newsWithDialog['body'], 'Vídeo em tela cheia, frase de impacto no topo e card da notícia'));
@@ -296,6 +296,18 @@ try {
     $reactTemplateData = json_decode(json_decode($reactTemplate['body'], true)['result']['content'][0]['text'] ?? '{}', true);
     $reactBadTemplate = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'modelo_video' => 'inventado']);
     check('the MCP prepares a react for a chosen template and refuses an unknown one', static fn(): bool => str_contains($reactTemplateData['prompt_de_video'] ?? '', 'caption band') && (json_decode($reactBadTemplate['body'], true)['error']['code'] ?? 0) === -32602);
+    $scenesGenerated = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'scenes' => 3, 'tone' => 'direto']);
+    $scenesData = json_decode($scenesGenerated['body'], true)['item'] ?? [];
+    $badScenes = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'scenes' => 8]);
+    check('GERAR REACT takes the number of scenes and returns one prompt per scene', static fn(): bool => $scenesGenerated['status'] === 201 && ($scenesData['scenes'] ?? 0) === 3 && is_array($scenesData['video_prompts'] ?? null) && count($scenesData['video_prompts']) >= 1 && count($scenesData['video_prompts']) <= 3
+        && str_contains($scenesData['video_prompts'][0] ?? '', 'REFERENCE IMAGE') && $badScenes['status'] === 400);
+    $promptScenes = $post(['action' => 'video_prompt', 'spoken' => implode(' ', array_map(static fn(int $i): string => 'Parte ' . $i . ' ' . implode(' ', array_fill(0, 18, 'fala')) . ' fim.', range(1, 6))), 'expression' => 'serio', 'scene' => 'casa', 'scenes' => 3, 'headline' => 'H', 'source' => 'S']);
+    $promptScenesData = json_decode($promptScenes['body'], true);
+    check('the Studio asks for the prompts of every scene', static fn(): bool => $promptScenes['status'] === 200 && ($promptScenesData['scenes'] ?? 0) === 3 && count($promptScenesData['prompts'] ?? []) === 3 && str_contains($promptScenesData['prompt'] ?? '', 'SCENE 3 OF 3'));
+    $scenePage = localRequest('roteiro.php?id=' . ($scenesData['id'] ?? 0));
+    check('the script page shows one prompt per scene, with the reference-sheet notice', static fn(): bool => str_contains($scenePage['body'], 'Cena 1 de') && str_contains($scenePage['body'], 'id="scene-prompt-0"') && str_contains($scenePage['body'], 'name="scenes"') && str_contains($scenePage['body'], 'Falta a folha de referência'));
+    $characterPage = localRequest('personagem.php');
+    check('Meu Personagem has the reference-sheet upload and shows the fixed standards', static fn(): bool => str_contains($characterPage['body'], 'Folha de referência') && str_contains($characterPage['body'], 'name="kind" value="reference"') && str_contains($characterPage['body'], 'Mesmo personagem e mesma reação em todas as cenas'));
     $collectFresh = $post(['action' => 'collect', 'trigger' => 'auto']);
     check('automatic collection does nothing while data is fresh (no useless requests to the sources)', static fn(): bool => $collectFresh['status'] === 200 && (json_decode($collectFresh['body'], true)['status'] ?? '') === 'fresh');
     $project = $post(['action' => 'project_save', 'title' => 'Projeto HTTP', 'headline' => 'Headline', 'script' => 'Falado', 'news_id' => $firstNewsId, 'cover_x' => 30, 'cover_zoom' => 1.5]);
@@ -320,6 +332,18 @@ try {
     $uploadData = json_decode($upload['body'], true);
     check('image upload is inspected and renamed to an opaque image ID', static fn(): bool => $upload['status'] === 201 && preg_match('/^[a-f0-9]{32}\.png$/D', $uploadData['media']['id'] ?? '') === 1 && (int)$uploadData['media']['is_primary'] === 1);
     $mediaId = $uploadData['media']['id'] ?? '';
+    [$sheetBody, $sheetHeaders] = $multipart(['action' => 'upload', 'kind' => 'reference', 'label' => 'Folha'], 'folha.png', 'image/png', $png);
+    $sheetUpload = localRequest('api.php', 'POST', $sheetBody, array_merge($sheetHeaders, ['X-CSRF-Token: ' . $writeCsrf]));
+    $studioWithSheet = localRequest('estudio.php?news=' . $firstNewsId);
+    $scenePageWithSheet = localRequest('roteiro.php?id=' . ($scenesData['id'] ?? 0));
+    check('after uploading the reference sheet the Studio and the script page offer it for download with the prompts', static fn(): bool => $sheetUpload['status'] === 201 && str_contains($studioWithSheet['body'], '"reference":{"id":"') && str_contains($studioWithSheet['body'], 'id="st-scenes"') && str_contains($studioWithSheet['body'], 'id="st-prompts"')
+        && str_contains($scenePageWithSheet['body'], 'Anexe esta imagem em cada cena') && str_contains($scenePageWithSheet['body'], 'download=1'));
+    $mcpScenes = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 2]);
+    $mcpScenesData = json_decode(json_decode($mcpScenes['body'], true)['result']['content'][0]['text'] ?? '{}', true);
+    $mcpBadScenes = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 9]);
+    check('the MCP prepares a react by scenes, one prompt per scene, and refuses a wrong count', static fn(): bool => ($mcpScenesData['cenas'] ?? 0) >= 1 && ($mcpScenesData['cenas'] ?? 9) <= 2 && count($mcpScenesData['prompts_de_video_por_cena'] ?? []) === ($mcpScenesData['cenas'] ?? -1)
+        && str_contains($mcpScenesData['imagem_de_referencia'] ?? '', 'folha de referência') && (json_decode($mcpBadScenes['body'], true)['error']['code'] ?? 0) === -32602);
+    $post(['action' => 'media_delete', 'id' => json_decode($sheetUpload['body'], true)['media']['id'] ?? '']);
     $media = localRequest('media.php?id=' . $mediaId);
     check('private media serves an image MIME without executing the uploaded filename', static fn(): bool => $media['status'] === 200 && ($media['headers']['content-type'] ?? '') === 'image/png' && $media['body'] === $png && !str_contains($media['headers']['content-disposition'] ?? '', 'php'));
     check('uploaded images stay private without a login', static fn(): bool => localRequest('media.php?id=' . $mediaId, 'GET', '', [], false)['status'] === 401);

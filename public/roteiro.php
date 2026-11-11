@@ -24,6 +24,7 @@ if ($script === null) {
     exit;
 }
 $csrf = radar_csrf_token();
+$reference = radar_character_reference();
 $expressions = radar_character_expressions();
 $scenes = radar_character_scenes();
 
@@ -32,7 +33,7 @@ radar_page_start('Roteiro de react', 'roteiros.php');
 <p><a href="roteiros.php">← Roteiros criados</a></p>
 <div class="page-head">
     <div><h1>Roteiro de react</h1>
-        <p><?= radar_h($script['mode_label']) ?> · <?= (int)$script['duration'] ?> s pedidos · ~<?= (int)$script['estimated_seconds'] ?> s falados · tom <?= radar_h($script['tone']) ?></p></div>
+        <p><?= radar_h($script['mode_label']) ?> · <?= count($script['video_prompts']) ?> <?= count($script['video_prompts']) === 1 ? 'cena' : 'cenas' ?> · ~<?= (int)$script['estimated_seconds'] ?> s falados · tom <?= radar_h($script['tone']) ?></p></div>
     <div class="row-actions">
         <a class="btn primary" href="estudio.php?roteiro=<?= (int)$script['id'] ?>">Abrir no Estúdio</a>
         <a class="btn ghost" href="api.php?action=script&amp;id=<?= (int)$script['id'] ?>&amp;format=txt">Exportar .txt</a>
@@ -66,7 +67,7 @@ radar_page_start('Roteiro de react', 'roteiros.php');
         </div>
         <div class="panel script-block">
             <div class="head"><span>C. Roteiro principal</span><button type="button" class="btn ghost small" data-copy="f-script">Copiar</button></div>
-            <textarea id="f-script" name="script" rows="6" maxlength="1800"><?= radar_h($script['script']) ?></textarea>
+            <textarea id="f-script" name="script" rows="6" maxlength="2600"><?= radar_h($script['script']) ?></textarea>
         </div>
         <div class="panel script-block">
             <div class="head"><span>D. Comentário do personagem (opinião)</span><button type="button" class="btn ghost small" data-copy="f-commentary">Copiar</button></div>
@@ -81,6 +82,7 @@ radar_page_start('Roteiro de react', 'roteiros.php');
             <div class="field-row">
                 <label>Expressão do personagem<select name="expression"><?php foreach ($expressions as $key => $info): ?><option value="<?= radar_h($key) ?>"<?= $script['expression'] === $key ? ' selected' : '' ?>><?= radar_h($info['label']) ?></option><?php endforeach; ?></select></label>
                 <label>Cenário<select name="scene"><?php foreach ($scenes as $key => $label): ?><option value="<?= radar_h($key) ?>"<?= $script['scene'] === $key ? ' selected' : '' ?>><?= radar_h($label) ?></option><?php endforeach; ?></select></label>
+                <label>Cenas<select name="scenes"><?php for ($n = 1; $n <= RADAR_SCENE_MAX_COUNT; $n++): ?><option value="<?= $n ?>"<?= $script['scenes'] === $n ? ' selected' : '' ?>><?= $n ?> <?= $n === 1 ? 'cena' : 'cenas' ?> (até <?= $n * RADAR_SCENE_MAX_SECONDS ?> s)</option><?php endfor; ?></select></label>
                 <label>Modelo do vídeo<select name="layout"><?php foreach (radar_video_templates() as $key => $template): ?><option value="<?= radar_h($key) ?>"<?= $script['layout'] === $key ? ' selected' : '' ?>><?= radar_h($template['label']) ?></option><?php endforeach; ?></select></label>
             </div>
             <button class="btn primary" type="submit">Salvar alterações e refazer o prompt</button>
@@ -93,9 +95,20 @@ radar_page_start('Roteiro de react', 'roteiros.php');
             <textarea id="spoken" rows="8" readonly><?= radar_h($script['spoken']) ?></textarea>
         </div>
         <div class="panel script-block">
-            <div class="head"><span>F. Prompt de vídeo (personagem fixo)</span><button type="button" class="btn primary small" data-copy="video-prompt">Copiar prompt</button></div>
-            <textarea id="video-prompt" rows="14" readonly class="mono"><?= radar_h($script['video_prompt']) ?></textarea>
-            <p class="hint">Envie junto as imagens de referência de <a href="personagem.php">Meu Personagem</a> à ferramenta de vídeo. O bloco do personagem é fixo e não muda. Padrão: <strong>ele não sorri depois da última fala</strong>.</p>
+            <div class="head"><span>F. Prompts de vídeo · <?= count($script['video_prompts']) ?> <?= count($script['video_prompts']) === 1 ? 'cena' : 'cenas' ?></span><button type="button" class="btn primary small" data-copy="video-prompt">Copiar todas</button></div>
+            <?php if ($reference !== null): ?>
+                <div class="reference-box"><img src="media.php?id=<?= radar_h($reference['id']) ?>" alt="Folha de referência do personagem"><div><strong>Anexe esta imagem em cada cena</strong><br><span class="hint">A ferramenta de vídeo pega a imagem junto com a fala e mantém o mesmo personagem e a mesma reação.</span><br><a class="btn ghost small" href="media.php?id=<?= radar_h($reference['id']) ?>&amp;download=1">Baixar imagem de referência</a></div></div>
+            <?php else: ?>
+                <div class="notice warn">Falta a folha de referência do personagem. Cadastre em <a href="personagem.php">Meu Personagem</a> para baixar e anexar aqui.</div>
+            <?php endif; ?>
+            <?php foreach ($script['video_prompts'] as $index => $scenePrompt): ?>
+                <div class="script-block">
+                    <div class="head"><span>Cena <?= $index + 1 ?> de <?= count($script['video_prompts']) ?></span><button type="button" class="btn ghost small" data-copy="scene-prompt-<?= $index ?>">Copiar cena <?= $index + 1 ?></button></div>
+                    <textarea id="scene-prompt-<?= $index ?>" rows="10" readonly class="mono"><?= radar_h($scenePrompt) ?></textarea>
+                </div>
+            <?php endforeach; ?>
+            <textarea id="video-prompt" hidden readonly><?= radar_h($script['video_prompt']) ?></textarea>
+            <p class="hint">Cada cena é um prompt completo e tem até 25 s. O bloco do personagem é fixo. Padrões: <strong>mesmo personagem e mesma reação em todas as cenas</strong> e <strong>ele não sorri depois da última fala</strong>.</p>
         </div>
     </aside>
 </div>

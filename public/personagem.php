@@ -32,6 +32,24 @@ radar_page_start('Meu Personagem', 'personagem.php');
     <?php endforeach; ?>
 </section>
 
+<?php $reference = radar_character_reference(); ?>
+<section class="panel section" aria-labelledby="sheet-h">
+    <h2 id="sheet-h">Folha de referência (vai junto com o prompt de vídeo)</h2>
+    <p class="hint">Uma imagem com as vistas do personagem (frente, perfis e 3/4). Todo prompt de vídeo manda anexá-la em cada cena, para a ferramenta manter o mesmo personagem e a mesma reação.</p>
+    <?php if ($reference !== null): ?>
+        <div class="reference-box"><img src="media.php?id=<?= radar_h($reference['id']) ?>" alt="Folha de referência do personagem"><div><strong><?= radar_h($reference['label'] ?: 'Folha de referência') ?></strong><br><span class="hint"><?= (int)$reference['width'] ?>×<?= (int)$reference['height'] ?></span><br>
+            <a class="btn ghost small" href="media.php?id=<?= radar_h($reference['id']) ?>&amp;download=1">Baixar</a>
+            <button type="button" class="btn danger small" data-act="media_delete" data-id="<?= radar_h($reference['id']) ?>" data-confirm="Excluir a folha de referência?">Excluir</button></div></div>
+    <?php else: ?>
+        <div class="notice warn">Nenhuma folha de referência. Envie abaixo a imagem com as vistas do personagem.</div>
+    <?php endif; ?>
+    <form class="form-grid section" data-upload enctype="multipart/form-data">
+        <input type="hidden" name="kind" value="reference"><input type="hidden" name="label" value="Folha de referência do personagem">
+        <label><?= $reference !== null ? 'Substituir a folha' : 'Enviar a folha' ?> (JPEG, PNG ou WebP, até 5 MB)<input type="file" name="file" accept="image/jpeg,image/png,image/webp" required></label>
+        <button class="btn primary" type="submit"><?= $reference !== null ? 'Substituir' : 'Enviar' ?></button>
+    </form>
+</section>
+
 <div class="grid-2 section">
     <section class="panel">
         <h2>Personalidade</h2>

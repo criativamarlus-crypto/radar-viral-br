@@ -59,7 +59,7 @@ function radar_media_path(string $id): ?string
  */
 function radar_media_save_bytes(string $bytes, string $kind, array $meta = []): array
 {
-    if (!in_array($kind, ['cover', 'character', 'screenshot', 'upload'], true)) {
+    if (!in_array($kind, ['cover', 'character', 'screenshot', 'upload', 'reference'], true)) {
         throw new InvalidArgumentException('Tipo de mídia inválido.');
     }
     $directory = radar_media_directory();
@@ -96,6 +96,12 @@ function radar_media_save_bytes(string $bytes, string $kind, array $meta = []): 
             isset($meta['note']) ? mb_substr((string)$meta['note'], 0, 400) : null, time(),
         ]
     );
+    if ($kind === 'reference') {
+        // There is a single reference sheet: the new one replaces the old one.
+        foreach (radar_db_all("SELECT id FROM media WHERE kind = 'reference' AND id != ?", [$id]) as $old) {
+            radar_media_delete((string)$old['id']);
+        }
+    }
     return radar_media_get($id) ?? [];
 }
 

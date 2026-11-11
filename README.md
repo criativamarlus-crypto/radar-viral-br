@@ -23,7 +23,7 @@ php -r 'echo password_hash("SUA-SENHA-LONGA", PASSWORD_DEFAULT), PHP_EOL;'   # c
 php -S localhost:8080 -t public bin/dev-router.php   # o router roteia /.well-known/* (descoberta OAuth)
 ```
 
-Abra http://localhost:8080 e entre. No primeiro acesso o painel faz a primeira coleta sozinho. No servidor use `php bin/setup.php`, que cria o `config.php` pedindo a senha no terminal.
+Abra http://localhost:8080 e entre. No primeiro acesso o painel faz a primeira coleta sozinho. No servidor use `php bin/setup.php`, que cria o `config.php` pedindo a senha no terminal. Para cadastrar a folha de referência do personagem (a imagem que vai junto com cada prompt de vídeo) sem abrir o painel: `php bin/import-character.php --reference=folha.webp --primary=frente.png`.
 
 ## Testes
 

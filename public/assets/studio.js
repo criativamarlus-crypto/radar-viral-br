@@ -24,7 +24,8 @@
     spoken: project ? project.script : '',
     expression: project ? project.expression : 'sorriso-largo',
     scene: 'carro',
-    duration: 25,
+    scenes: initialScript ? initialScript.scenes : data.defaultScenes,
+    prompts: initialScript ? initialScript.video_prompts : [],
     coverId: project ? project.cover_media_id : (data.preselectCover || null),
     characterId: project ? project.character_media_id : null,
     x: project ? project.cover_x : 50,
@@ -351,9 +352,67 @@
     $('st-char-hint').textContent = data.characters.length ? '' : 'Nenhuma imagem do personagem. Cadastre em “Meu Personagem”.';
   }
 
+  function wordCount() { return (state.spoken.match(/[\p{L}\p{N}]+/gu) || []).length; }
   function words() {
-    const n = (state.spoken.match(/[\p{L}\p{N}]+/gu) || []).length;
+    const n = wordCount();
     $('st-words').textContent = n + ' palavras · ~' + Math.round(n / 2.5) + ' s falados';
+  }
+
+  /** One block per scene (each prompt is complete and made for one clip of at most 25 s). */
+  function renderPrompts() {
+    const box = $('st-prompts');
+    if (!box) return;
+    $('st-prompt').value = state.prompt;
+    box.replaceChildren();
+    const list = state.prompts.length ? state.prompts : (state.prompt ? [state.prompt] : []);
+    list.forEach((text, index) => {
+      const block = document.createElement('div');
+      block.className = 'script-block';
+      const head = document.createElement('div');
+      head.className = 'head';
+      const title = document.createElement('span');
+      title.textContent = 'Cena ' + (index + 1) + ' de ' + list.length;
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'btn ghost small';
+      button.dataset.copy = 'st-prompt-' + index; button.textContent = 'Copiar cena ' + (index + 1);
+      head.append(title, button);
+      const area = document.createElement('textarea');
+      area.id = 'st-prompt-' + index; area.readOnly = true; area.rows = 8; area.className = 'mono'; area.value = text;
+      block.append(head, area);
+      box.append(block);
+    });
+    $('st-scenes-hint').textContent = list.length
+      ? list.length + (list.length === 1 ? ' cena' : ' cenas') + ' de até 25 s. Cada prompt é completo: cole um por vez na ferramenta de vídeo, sempre com a imagem de referência anexada.'
+        + (list.length > state.scenes ? ' O roteiro é longo: precisa de ' + list.length + ' cenas para ficar em até 25 s cada. Encurte o texto para ter menos.' : '')
+      : '';
+  }
+
+  /** The character reference sheet travels with the prompts: the video tool must get it in every scene. */
+  function renderReference() {
+    const box = $('st-reference');
+    if (!box) return;
+    box.replaceChildren();
+    if (data.reference) {
+      const img = document.createElement('img');
+      img.src = 'media.php?id=' + encodeURIComponent(data.reference.id); img.alt = 'Folha de referência do personagem'; img.loading = 'lazy';
+      const info = document.createElement('div');
+      const strong = document.createElement('strong');
+      strong.textContent = 'Anexe esta imagem em cada cena';
+      const hint = document.createElement('span');
+      hint.className = 'hint';
+      hint.textContent = 'A ferramenta de vídeo pega a imagem junto com a fala e mantém o mesmo personagem e a mesma reação.';
+      const link = document.createElement('a');
+      link.className = 'btn ghost small'; link.href = 'media.php?id=' + encodeURIComponent(data.reference.id) + '&download=1'; link.textContent = 'Baixar imagem de referência';
+      info.append(strong, hint, link);
+      box.append(img, info);
+    } else {
+      const note = document.createElement('div');
+      note.className = 'notice warn';
+      const link = document.createElement('a');
+      link.href = 'personagem.php'; link.textContent = 'Meu Personagem';
+      note.append('Falta a folha de referência do personagem. Cadastre em ', link, ' para baixar e anexar aqui.');
+      box.append(note);
+    }
   }
 
   let promptTimer = 0;
@@ -363,10 +422,10 @@
       try {
         const result = await api({
           action: 'video_prompt', spoken: state.spoken, expression: state.expression, scene: state.scene,
-          duration: state.duration, headline: data.news ? data.news.title : state.headline, source: data.news ? data.news.source : '', layout: state.template,
+          scenes: state.scenes, headline: data.news ? data.news.title : state.headline, source: data.news ? data.news.source : '', layout: state.template,
         });
-        state.prompt = result.prompt;
-        $('st-prompt').value = state.prompt;
+        state.prompt = result.prompt; state.prompts = result.prompts;
+        renderPrompts();
       } catch (_) { /* keep the previous prompt */ }
     }, 450);
   }
@@ -433,6 +492,7 @@
     applyTemplateUi(); seedCaption(false); fillCaptionOptions(); refreshPrompt(); redraw();
   });
   $('st-expression').addEventListener('change', (e) => { state.expression = e.target.value; refreshPrompt(); });
+  if ($('st-scenes')) $('st-scenes').addEventListener('change', (e) => { state.scenes = Number(e.target.value); refreshPrompt(); });
   $('st-scene').addEventListener('change', (e) => { state.scene = e.target.value; refreshPrompt(); });
   for (const [id, key] of [['st-x', 'x'], ['st-y', 'y'], ['st-zoom', 'zoom']]) {
     const el = $(id);
@@ -444,13 +504,14 @@
   function applyScript(script, keepTemplate) {
     state.scriptId = script.id;
     state.spoken = script.spoken; state.expression = script.expression; state.scene = script.scene;
-    state.duration = script.duration; state.prompt = script.video_prompt;
+    state.scenes = script.scenes; state.prompt = script.video_prompt; state.prompts = script.video_prompts;
+    if ($('st-scenes')) $('st-scenes').value = String(state.scenes);
     if (!keepTemplate && data.templates[script.layout]) state.template = script.layout;
     state.headline = state.template === 'caption_card' && data.news ? data.news.title : script.headline;
     state.caption = state.template === 'caption_card' ? pickCaption(script) : state.caption;
     if (!state.title) state.title = script.headline.slice(0, 80);
     $('st-title').value = state.title; $('st-headline').value = state.headline; $('st-script').value = state.spoken; $('st-caption').value = state.caption;
-    $('st-expression').value = state.expression; $('st-scene').value = state.scene; $('st-template').value = state.template; $('st-prompt').value = state.prompt;
+    $('st-expression').value = state.expression; $('st-scene').value = state.scene; $('st-template').value = state.template; renderPrompts();
     applyTemplateUi(); fillCaptionOptions(); words(); redraw();
     if (keepTemplate && script.layout !== state.template) refreshPrompt();
   }
@@ -489,14 +550,14 @@
     setGenStatus('Gerando o roteiro…');
     try {
       const result = await api({
-        action: 'generate', news_id: data.news.id, duration: Number($('st-duration').value) || 25,
+        action: 'generate', news_id: data.news.id, scenes: Number($('st-scenes').value) || data.defaultScenes,
         tone: toneSelect ? toneSelect.value : 'bem-humorado', layout: state.template,
       });
       const item = result.item;
       const script = {
         id: item.id, news_id: item.news_id, news_title: item.news_title, news_source: item.news_source,
         headline: (item.headlines && item.headlines[0]) || item.news_title, headlines: item.headlines || [], hook: item.hook,
-        spoken: item.spoken, expression: item.expression, scene: item.scene, layout: item.layout, duration: item.duration, video_prompt: item.video_prompt,
+        spoken: item.spoken, expression: item.expression, scene: item.scene, layout: item.layout, scenes: item.scenes, video_prompt: item.video_prompt, video_prompts: item.video_prompts,
       };
       data.scripts.unshift(script);
       scriptSelect.append(scriptOption(script));
@@ -536,8 +597,14 @@
       generateScript();
     }
   }
-  $('st-prompt').value = state.prompt;
-  if (!state.prompt && state.spoken) refreshPrompt();
+  renderPrompts(); renderReference();
+  if (project) {
+    // Projects keep their text; the prompts are rebuilt so they follow today's standards and scene cuts.
+    const linked = data.scripts.find((s) => s.id === project.script_id);
+    state.scenes = linked ? linked.scenes : Math.max(1, Math.ceil(wordCount() / 62));
+    if ($('st-scenes')) $('st-scenes').value = String(state.scenes);
+  }
+  if ((!state.prompt || project) && state.spoken) refreshPrompt();
   applyTemplateUi();
   seedCaption(false);
   fillCaptionOptions();

@@ -249,6 +249,9 @@ ALTER TABLE projects ADD COLUMN template TEXT NOT NULL DEFAULT 'split';
 ALTER TABLE projects ADD COLUMN caption TEXT NOT NULL DEFAULT '';
 ALTER TABLE scripts ADD COLUMN layout TEXT NOT NULL DEFAULT 'split';
 SQL,
+        5 => <<<'SQL'
+ALTER TABLE scripts ADD COLUMN scenes INTEGER NOT NULL DEFAULT 1;
+SQL,
     ];
 }
 

@@ -20,7 +20,7 @@ function radar_script_spoken(array $script): string
 /**
  * Generate and store a react package for one news item.
  *
- * @param array{duration?:int,tone?:string,context?:string,expression?:string,scene?:string,layout?:string} $options
+ * @param array{scenes?:int,duration?:int,tone?:string,context?:string,expression?:string,scene?:string,layout?:string} $options
  * @return array<string,mixed> saved script (decoded)
  */
 function radar_react_generate(int $newsId, array $options = []): array
@@ -29,11 +29,24 @@ function radar_react_generate(int $newsId, array $options = []): array
     if ($news === null) {
         throw new InvalidArgumentException('Notícia não encontrada. Atualize a lista.');
     }
-    $duration = (int)($options['duration'] ?? 28);
     $tone = (string)($options['tone'] ?? 'bem-humorado');
+    if (isset($options['scenes'])) {
+        $scenes = (int)$options['scenes'];
+        $duration = $scenes * RADAR_SCENE_TARGET_SECONDS;
+    } elseif (isset($options['duration'])) {
+        // Older callers: a single duration between 15 and 35 s.
+        $duration = (int)$options['duration'];
+        $scenes = max(1, (int)ceil($duration / RADAR_SCENE_MAX_SECONDS));
+        if ($duration < 15 || $duration > 35) {
+            throw new InvalidArgumentException('Escolha de 1 a ' . RADAR_SCENE_MAX_COUNT . ' cenas (até ' . RADAR_SCENE_MAX_SECONDS . ' segundos cada) e um tom disponível.');
+        }
+    } else {
+        $scenes = RADAR_SCENES_DEFAULT;
+        $duration = $scenes * RADAR_SCENE_TARGET_SECONDS;
+    }
     $context = trim(preg_replace('/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/u', '', strip_tags((string)($options['context'] ?? ''))) ?? '');
-    if ($duration < 15 || $duration > 35 || !isset(RADAR_TONES[$tone])) {
-        throw new InvalidArgumentException('Escolha duração entre 15 e 35 segundos e um tom disponível.');
+    if ($scenes < 1 || $scenes > RADAR_SCENE_MAX_COUNT || !isset(RADAR_TONES[$tone])) {
+        throw new InvalidArgumentException('Escolha de 1 a ' . RADAR_SCENE_MAX_COUNT . ' cenas (até ' . RADAR_SCENE_MAX_SECONDS . ' segundos cada) e um tom disponível.');
     }
     if (mb_strlen($context) > 2000) {
         throw new InvalidArgumentException('O contexto deve ter até 2.000 caracteres.');
@@ -45,7 +58,7 @@ function radar_react_generate(int $newsId, array $options = []): array
     $generated = null;
     if ($config['provider'] !== 'none' && $config['has_key']) {
         try {
-            $reply = radar_ai_complete(radar_ai_system_prompt(), radar_ai_user_message($news, $duration, $tone, $context), $config);
+            $reply = radar_ai_complete(radar_ai_system_prompt(), radar_ai_user_message($news, $duration, $tone, $context, $scenes), $config);
             $decoded = radar_ai_extract_json($reply);
             if ($decoded === null) {
                 throw new RuntimeException('A IA não devolveu um JSON válido. Tente gerar novamente.');
@@ -66,15 +79,19 @@ function radar_react_generate(int $newsId, array $options = []): array
     if ($estimated > $duration + 6) {
         $generated['warnings'][] = "O texto falado dura cerca de {$estimated}s, acima dos {$duration}s pedidos. Edite para encurtar.";
     }
+    $needed = count(radar_scene_split($spoken, $scenes));
+    if ($needed > $scenes) {
+        $generated['warnings'][] = "O texto precisa de {$needed} cenas de até " . RADAR_SCENE_MAX_SECONDS . " s (você pediu {$scenes}). Encurte o texto ou aceite mais cenas.";
+    }
     $layout = radar_video_template_valid((string)($options['layout'] ?? '')) ? (string)$options['layout'] : radar_video_default_template();
-    $prompt = radar_video_prompt(['spoken' => $spoken, 'expression' => $expression, 'scene' => $scene, 'duration' => $duration, 'headline' => $news['title'], 'source' => $news['source'], 'layout' => $layout]);
+    $prompt = radar_video_prompt(['spoken' => $spoken, 'expression' => $expression, 'scene' => $scene, 'headline' => $news['title'], 'source' => $news['source'], 'layout' => $layout, 'scenes' => $scenes]);
     $now = time();
     $id = radar_db_insert(
-        'INSERT INTO scripts (news_id, news_title, news_url, news_source, mode, provider, model, duration, tone, context, headlines, hook, script, commentary, cta, expression, scene, layout, video_prompt, warnings, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO scripts (news_id, news_title, news_url, news_source, mode, provider, model, duration, scenes, tone, context, headlines, hook, script, commentary, cta, expression, scene, layout, video_prompt, warnings, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             $newsId, $news['title'], $news['url'], $news['source'], $mode, $mode === 'ia' ? $config['provider'] : null, $mode === 'ia' ? $config['model'] : null,
-            $duration, $tone, $context, json_encode($generated['headlines'], JSON_UNESCAPED_UNICODE), $generated['hook'], $generated['script'],
+            $duration, $scenes, $tone, $context, json_encode($generated['headlines'], JSON_UNESCAPED_UNICODE), $generated['hook'], $generated['script'],
             $generated['commentary'], $generated['cta'], $expression, $scene, $layout, $prompt,
             json_encode(['warnings' => $generated['warnings'], 'fact_check' => $generated['fact_check_notes']], JSON_UNESCAPED_UNICODE), $now, $now,
         ]
@@ -87,6 +104,11 @@ function radar_script_decode(array $row): array
 {
     $meta = json_decode((string)$row['warnings'], true);
     $spoken = radar_script_spoken($row);
+    $prompts = radar_video_prompts([
+        'spoken' => $spoken, 'expression' => (string)$row['expression'], 'scene' => (string)$row['scene'],
+        'headline' => (string)$row['news_title'], 'source' => (string)$row['news_source'], 'scenes' => max(1, (int)($row['scenes'] ?? 1)),
+        'layout' => radar_video_template_valid((string)$row['layout']) ? (string)$row['layout'] : 'split',
+    ]);
     return [
         'id' => (int)$row['id'],
         'news_id' => $row['news_id'] !== null ? (int)$row['news_id'] : null,
@@ -96,6 +118,7 @@ function radar_script_decode(array $row): array
         'mode' => (string)$row['mode'],
         'mode_label' => $row['mode'] === 'ia' ? 'Gerado por IA (' . $row['provider'] . ' · ' . $row['model'] . ')' : 'Rascunho conservador (sem IA)',
         'duration' => (int)$row['duration'],
+        'scenes' => max(1, (int)($row['scenes'] ?? 1)),
         'tone' => (string)$row['tone'],
         'context' => (string)$row['context'],
         'headlines' => json_decode((string)$row['headlines'], true) ?: [],
@@ -110,11 +133,8 @@ function radar_script_decode(array $row): array
         'layout' => radar_video_template_valid((string)$row['layout']) ? (string)$row['layout'] : 'split',
         // Rebuilt on every read from the stored fields, so scripts created before a prompt standard
         // existed (e.g. "no smile after speech") get it too. The stored column is legacy.
-        'video_prompt' => radar_video_prompt([
-            'spoken' => $spoken, 'expression' => (string)$row['expression'], 'scene' => (string)$row['scene'], 'duration' => (int)$row['duration'],
-            'headline' => (string)$row['news_title'], 'source' => (string)$row['news_source'],
-            'layout' => radar_video_template_valid((string)$row['layout']) ? (string)$row['layout'] : 'split',
-        ]),
+        'video_prompts' => $prompts,
+        'video_prompt' => implode("\n\n" . str_repeat('-', 40) . "\n\n", $prompts),
         'warnings' => is_array($meta) ? ($meta['warnings'] ?? []) : [],
         'fact_check' => is_array($meta) ? ($meta['fact_check'] ?? []) : [],
         'created_at' => gmdate(DATE_ATOM, (int)$row['created_at']),
@@ -154,14 +174,15 @@ function radar_script_update(int $id, array $input): array
     $expression = isset(radar_character_expressions()[(string)($input['expression'] ?? '')]) ? (string)$input['expression'] : $current['expression'];
     $scene = isset(radar_character_scenes()[(string)($input['scene'] ?? '')]) ? (string)$input['scene'] : $current['scene'];
     $layout = radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : $current['layout'];
-    $row = ['hook' => $text('hook', 200), 'script' => $text('script', 1800), 'commentary' => $text('commentary', 600), 'cta' => $text('cta', 250)];
+    $scenes = isset($input['scenes']) && (int)$input['scenes'] >= 1 && (int)$input['scenes'] <= RADAR_SCENE_MAX_COUNT ? (int)$input['scenes'] : $current['scenes'];
+    $row = ['hook' => $text('hook', 200), 'script' => $text('script', 2600), 'commentary' => $text('commentary', 600), 'cta' => $text('cta', 250)];
     $prompt = radar_video_prompt([
-        'spoken' => radar_script_spoken($row), 'expression' => $expression, 'scene' => $scene, 'duration' => $current['duration'],
-        'headline' => $current['news_title'], 'source' => $current['news_source'], 'layout' => $layout,
+        'spoken' => radar_script_spoken($row), 'expression' => $expression, 'scene' => $scene,
+        'headline' => $current['news_title'], 'source' => $current['news_source'], 'layout' => $layout, 'scenes' => $scenes,
     ]);
     radar_db_exec(
-        'UPDATE scripts SET headlines = ?, hook = ?, script = ?, commentary = ?, cta = ?, expression = ?, scene = ?, layout = ?, video_prompt = ?, updated_at = ? WHERE id = ?',
-        [json_encode(array_values($headlines), JSON_UNESCAPED_UNICODE), $row['hook'], $row['script'], $row['commentary'], $row['cta'], $expression, $scene, $layout, $prompt, time(), $id]
+        'UPDATE scripts SET headlines = ?, hook = ?, script = ?, commentary = ?, cta = ?, expression = ?, scene = ?, layout = ?, scenes = ?, video_prompt = ?, updated_at = ? WHERE id = ?',
+        [json_encode(array_values($headlines), JSON_UNESCAPED_UNICODE), $row['hook'], $row['script'], $row['commentary'], $row['cta'], $expression, $scene, $layout, $scenes, $prompt, time(), $id]
     );
     return radar_script_get($id) ?? [];
 }
@@ -248,7 +269,7 @@ function radar_project_save(?int $id, array $input): array
         isset($input['script_id']) && (int)$input['script_id'] > 0 ? (int)$input['script_id'] : null,
         isset($input['news_id']) && (int)$input['news_id'] > 0 ? (int)$input['news_id'] : null,
         $title, $headline, mb_substr(trim(strip_tags((string)($input['script'] ?? ''))), 0, 4000),
-        mb_substr(trim((string)($input['video_prompt'] ?? '')), 0, 8000), $coverId !== '' ? $coverId : null, $characterId !== '' ? $characterId : null,
+        mb_substr(trim((string)($input['video_prompt'] ?? '')), 0, 30000), $coverId !== '' ? $coverId : null, $characterId !== '' ? $characterId : null,
         max(0.0, min(100.0, (float)($input['cover_x'] ?? 50))), max(0.0, min(100.0, (float)($input['cover_y'] ?? 50))),
         max(1.0, min(3.0, (float)($input['cover_zoom'] ?? 1))), $expression,
         radar_video_template_valid(radar_str($input['template'] ?? '')) ? radar_str($input['template']) : 'split',

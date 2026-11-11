@@ -618,7 +618,7 @@ check('the master prompt keeps every permanent trait (Portuguese and English)', 
 check('video prompt embeds the fixed character, the approved dialogue, 9:16 framing and safety exclusions', static function (): bool {
     $prompt = radar_video_prompt(['spoken' => 'Rapaz, tu viu isso aqui? Segundo o G1, o jogo mudou.', 'expression' => 'provocador', 'scene' => 'casa', 'duration' => 28, 'headline' => 'Jogo muda', 'source' => 'G1']);
     return str_contains($prompt, radar_character_master_prompt('en')) && str_contains($prompt, '"Rapaz, tu viu isso aqui? Segundo o G1, o jogo mudou."')
-        && str_contains($prompt, '9:16') && str_contains($prompt, '28 seconds') && str_contains($prompt, 'sofa') && str_contains($prompt, 'eyebrow raised')
+        && str_contains($prompt, '9:16') && str_contains($prompt, 'never more than 25 seconds') && str_contains($prompt, 'sofa') && str_contains($prompt, 'eyebrow raised')
         && str_contains($prompt, 'AVOID') && str_contains($prompt, 'Brazilian Portuguese');
 });
 check('the "no smile after speech" standard is in every video prompt, whatever the expression, and comes after the dialogue', static function (): bool {
@@ -728,7 +728,7 @@ check('with a key, the AI call is a POST to the provider with the key only in a 
     $body = json_decode($seen['body'], true);
     return $seen['url'] === 'https://api.anthropic.com/v1/messages' && $seen['method'] === 'POST' && !str_contains($seen['body'], 'sk-ant-api-test') && in_array('x-api-key: sk-ant-api-test-key-0123456789', $seen['headers'], true)
         && $body['model'] === 'claude-sonnet-5-5' && str_contains($body['messages'][0]['content'], 'As linhas começam na segunda-feira.')
-        && $script['mode'] === 'ia' && str_contains($script['mode_label'], 'anthropic') && $script['hook'] === 'Rapaz, tu viu isso aqui?' && str_contains($script['video_prompt'], $script['spoken']);
+        && $script['mode'] === 'ia' && str_contains($script['mode_label'], 'anthropic') && $script['hook'] === 'Rapaz, tu viu isso aqui?' && str_contains($script['video_prompt'], 'Rapaz, tu viu isso aqui?') && implode(' ', radar_scene_split($script['spoken'], $script['scenes'])) === $script['spoken'];
 });
 check('AI-written numbers absent from the source are flagged in the saved script', static function () use ($aiJson, $anthropicReply): bool {
     $GLOBALS['radar_test_transport'] = static fn(array $r): array => $anthropicReply($aiJson(['script' => 'Segundo o G1, serão 87 linhas novas.']));
@@ -799,6 +799,95 @@ check('asset URLs carry a content fingerprint, so a deploy is never hidden behin
     $file = dirname(__DIR__) . '/public/assets/app.css';
     return preg_match('#\Aassets/app\.css\?v=[a-f0-9]{10}\z#', $css) === 1 && substr(md5_file($file), 0, 10) === substr($css, -10)
         && preg_match('#\A/assets/oauth\.js\?v=[a-f0-9]{10}\z#', $abs) === 1 && radar_asset('../../config.example.php') === 'assets/config.example.php?v=0';
+});
+check('the spoken text is cut into scenes of at most 25 s at sentence ends, without losing a word', static function (): bool {
+    $sentence = static fn(int $n): string => 'Palavra' . $n . ' ' . implode(' ', array_fill(0, 17, 'texto')) . ' fim.';
+    $text = implode(' ', array_map($sentence, range(1, 9)));
+    $three = radar_scene_split($text, 3);
+    $auto = radar_scene_split($text, 1);
+    $words = static fn(array $parts): int => array_sum(array_map('radar_scene_words', $parts));
+    $endsOk = true;
+    foreach ($auto as $part) {
+        $endsOk = $endsOk && str_ends_with($part, 'fim.');
+    }
+    return count($three) === 3 && max(array_map('radar_scene_words', $three)) <= 62 && $words($three) === radar_scene_words($text)
+        && count($auto) >= 3 && max(array_map('radar_scene_words', $auto)) <= 62 && $words($auto) === radar_scene_words($text) && $endsOk
+        && implode(' ', $three) === $text;
+});
+check('scene cuts handle short, empty and over-long text', static function (): bool {
+    $long = implode(', ', array_fill(0, 40, 'uma frase sem fim')) . '.';
+    $pieces = radar_scene_split($long, 1);
+    $two = radar_scene_split('Só uma frase curta.', 3);
+    return radar_scene_split('', 3) === [''] && $two === ['Só uma frase curta.'] && count($pieces) >= 3 && max(array_map('radar_scene_words', $pieces)) <= 62
+        && radar_scene_words(implode(' ', $pieces)) === radar_scene_words($long) && radar_scene_seconds('a b c') >= 3 && radar_scene_seconds(str_repeat('palavra ', 200)) === RADAR_SCENE_MAX_SECONDS;
+});
+check('every scene prompt is complete: reference sheet, same character and reaction, own dialogue, ending rule', static function (): bool {
+    $sentences = [];
+    for ($i = 1; $i <= 6; $i++) {
+        $sentences[] = 'Frase número ' . $i . ' ' . implode(' ', array_fill(0, 14, 'dita')) . ' agora.';
+    }
+    $spoken = implode(' ', $sentences);
+    $prompts = radar_video_prompts(['spoken' => $spoken, 'expression' => 'surpreso', 'scene' => 'carro', 'headline' => 'H', 'source' => 'S', 'layout' => 'caption_card', 'scenes' => 3]);
+    $standards = radar_video_standards();
+    if (count($prompts) !== 3) {
+        return false;
+    }
+    foreach ($prompts as $index => $prompt) {
+        $head = 'SCENE ' . ($index + 1) . ' OF 3';
+        if (!str_contains($prompt, $head) || !str_contains($prompt, 'REFERENCE IMAGE (attach the character reference sheet') || !str_contains($prompt, 'front, left profile, right profile, 3/4 left and 3/4 right')
+            || !str_contains($prompt, $standards['same_character_every_scene']['rule']) || !str_contains($prompt, 'Keep this same reaction and energy in every scene') || !str_contains($prompt, 'wide eyes')
+            || !str_contains($prompt, $standards['no_smile_after_speech']['rule']) || !str_contains($prompt, radar_character_master_prompt('en')) || !str_contains($prompt, 'caption band')
+            || !str_contains($prompt, 'AVOID: ' . $standards['no_smile_after_speech']['avoid'] . ', ' . $standards['same_character_every_scene']['avoid']) || !str_contains($prompt, 'never more than 25 seconds')) {
+            return false;
+        }
+    }
+    $firstHasGreeting = !str_contains($prompts[0], 'does not greet again');
+    $laterContinue = str_contains($prompts[1], 'does not greet again') && str_contains($prompts[2], 'does not greet again');
+    $all = radar_video_prompt(['spoken' => $spoken, 'expression' => 'surpreso', 'scene' => 'carro', 'headline' => 'H', 'source' => 'S', 'layout' => 'caption_card', 'scenes' => 3]);
+    $dialogues = implode(' ', array_map(static fn(string $p): string => preg_match('/DIALOGUE[^\n]*\n"([^\n]*)"/u', $p, $m) === 1 ? $m[1] : '', $prompts));
+    return $firstHasGreeting && $laterContinue && str_contains($all, $prompts[0]) && str_contains($all, $prompts[2]) && $dialogues === $spoken;
+});
+check('the same-character standard is a fixed, labelled rule shown in Meu Personagem', static function (): bool {
+    $standard = radar_video_standards()['same_character_every_scene'] ?? null;
+    return $standard !== null && $standard['label'] === 'Mesmo personagem e mesma reação em todas as cenas' && str_contains($standard['rule'], 'exactly ONE person') && str_contains($standard['rule'], 'Never create a second or a different character') && mb_strlen($standard['description']) > 60;
+});
+check('a react is made of scenes: 3 by default, up to 5, stored with the script; the old single duration still works', static function (): bool {
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (602, 'sc1', 'Fonte S', 'Prefeitura abre 300 vagas em concurso', 'https://s.example.com/1', 'Resumo do veículo para o teste de cenas.', ?, ?, ?, 'Geral', 55, 1)", [time() - 900, time() - 900, time()]);
+    $default = radar_react_generate(602, []);
+    $five = radar_react_generate(602, ['scenes' => 5]);
+    $one = radar_react_generate(602, ['scenes' => 1]);
+    $legacy = radar_react_generate(602, ['duration' => 25]);
+    $tooMany = rejects(static fn() => radar_react_generate(602, ['scenes' => 6]), InvalidArgumentException::class);
+    $none = rejects(static fn() => radar_react_generate(602, ['scenes' => 0]), InvalidArgumentException::class);
+    $badLegacy = rejects(static fn() => radar_react_generate(602, ['duration' => 99]), InvalidArgumentException::class);
+    return $default['scenes'] === RADAR_SCENES_DEFAULT && $default['duration'] === RADAR_SCENES_DEFAULT * RADAR_SCENE_TARGET_SECONDS && count($default['video_prompts']) >= 1 && count($default['video_prompts']) <= 3
+        && $five['scenes'] === 5 && count($five['video_prompts']) <= 5 && $one['scenes'] === 1 && count($one['video_prompts']) === 1 && $legacy['scenes'] === 1 && $tooMany && $none && $badLegacy
+        && radar_script_get($five['id'])['scenes'] === 5 && str_contains($default['video_prompt'], 'REFERENCE IMAGE');
+});
+check('the script page edit can change the number of scenes and the prompts follow', static function (): bool {
+    $script = radar_react_generate(602, ['scenes' => 1]);
+    $long = implode(' ', array_map(static fn(int $i): string => 'Sentença ' . $i . ' ' . implode(' ', array_fill(0, 18, 'fala')) . ' pronto.', range(1, 6)));
+    $updated = radar_script_update($script['id'], ['script' => $long, 'scenes' => 3]);
+    $invalid = radar_script_update($script['id'], ['scenes' => 9]);
+    return $updated['scenes'] === 3 && count($updated['video_prompts']) >= 3 && $invalid['scenes'] === 3 && str_contains($updated['video_prompt'], 'SCENE 2 OF');
+});
+check('a text that needs more scenes than asked gets a warning', static function (): bool {
+    $script = radar_react_generate(602, ['scenes' => 1, 'context' => implode(' ', array_map(static fn(int $i): string => 'Fato ' . $i . ' ' . implode(' ', array_fill(0, 20, 'detalhe')) . ' ok.', range(1, 8)))]);
+    $warned = false;
+    foreach ($script['warnings'] as $warning) {
+        $warned = $warned || str_contains($warning, 'cenas de até 25 s');
+    }
+    return $warned === (count($script['video_prompts']) > 1);
+});
+check('the reference sheet is a single image: a new one replaces the old one and it never becomes a character image', static function () use ($png): bool {
+    $before = count(radar_character_images());
+    $first = radar_media_save_bytes($png, 'reference', ['label' => 'Folha 1']);
+    $second = radar_media_save_bytes($png . '', 'reference', ['label' => 'Folha 2']);
+    $current = radar_character_reference();
+    $count = (int)radar_db_value("SELECT COUNT(*) FROM media WHERE kind = 'reference'");
+    $ok = $current !== null && $current['id'] === $second['id'] && $count === 1 && radar_media_path($first['id']) === null && count(radar_character_images()) === $before && (int)radar_media_get($second['id'])['is_primary'] === 0;
+    radar_media_delete($second['id']);
+    return $ok && radar_character_reference() === null;
 });
 check('two video templates exist: the full-screen caption + news card (default, first) and the original split', static function (): bool {
     $templates = radar_video_templates();

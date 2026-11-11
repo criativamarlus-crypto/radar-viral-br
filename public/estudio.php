@@ -28,7 +28,7 @@ $newsOptions = array_values(array_map(static fn(array $n): array => [
 $scriptOptions = array_map(static fn(array $s): array => [
     'id' => $s['id'], 'news_id' => $s['news_id'], 'news_title' => $s['news_title'], 'news_source' => $s['news_source'],
     'headline' => $s['headlines'][0] ?? $s['news_title'], 'headlines' => $s['headlines'], 'hook' => $s['hook'], 'spoken' => $s['spoken'], 'expression' => $s['expression'], 'scene' => $s['scene'],
-    'layout' => $s['layout'], 'duration' => $s['duration'], 'video_prompt' => $s['video_prompt'],
+    'layout' => $s['layout'], 'duration' => $s['duration'], 'scenes' => $s['scenes'], 'video_prompt' => $s['video_prompt'], 'video_prompts' => $s['video_prompts'],
 ], radar_scripts_list(100));
 
 $media = $news !== null ? $news['media'] : [];
@@ -45,6 +45,8 @@ $state = [
     'scenes' => radar_character_scenes(),
     'tones' => RADAR_TONES,
     'defaultTemplate' => radar_video_default_template(),
+    'defaultScenes' => RADAR_SCENES_DEFAULT,
+    'reference' => ($reference = radar_character_reference()) === null ? null : ['id' => $reference['id'], 'width' => $reference['width'], 'height' => $reference['height']],
     'templates' => array_map(static fn(array $t): array => ['label' => $t['label'], 'description' => $t['description']], radar_video_templates()),
     'project' => $project,
     'scriptId' => $script['id'] ?? null,
@@ -73,7 +75,7 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js']
             <label>Roteiro<select id="st-script-select"><option value="">Sem roteiro (escrever aqui)</option></select></label>
             <?php if ($news !== null): ?>
                 <div class="field-row">
-                    <label>Duração<select id="st-duration"><option>15</option><option>20</option><option selected>25</option><option>30</option><option>35</option></select></label>
+                    <label>Cenas<select id="st-scenes"><option value="1">1 cena (até 25 s)</option><option value="2">2 cenas (até 50 s)</option><option value="3" selected>3 cenas (até 75 s)</option><option value="4">4 cenas (até 100 s)</option><option value="5">5 cenas (até 125 s)</option></select></label>
                     <label>Tom<select id="st-tone"></select></label>
                 </div>
                 <button type="button" class="btn small" id="st-generate">Gerar outro roteiro</button>
@@ -127,8 +129,11 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js']
             <label>Roteiro falado<textarea id="st-script" rows="7" maxlength="4000" placeholder="O texto que o personagem fala"></textarea><span class="hint" id="st-words"></span></label>
         </div>
         <div class="panel script-block">
-            <div class="head"><span>Prompt de vídeo</span><button type="button" class="btn primary small" data-copy="st-prompt">Copiar prompt</button></div>
-            <textarea id="st-prompt" rows="9" readonly class="mono"></textarea>
+            <div class="head"><span>Prompts de vídeo</span><button type="button" class="btn primary small" data-copy="st-prompt">Copiar todas as cenas</button></div>
+            <div class="reference-box" id="st-reference"></div>
+            <p class="hint" id="st-scenes-hint"></p>
+            <div class="stack" id="st-prompts"></div>
+            <textarea id="st-prompt" rows="3" readonly class="mono" hidden></textarea>
         </div>
         <div class="panel stack">
             <button type="button" class="btn primary" id="st-save">Salvar projeto</button>

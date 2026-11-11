@@ -126,7 +126,8 @@ try {
             api_limit('generate', 20, 600);
             @set_time_limit(120);
             $script = radar_react_generate(api_int($input['news_id'] ?? 0), [
-                'duration' => api_int($input['duration'] ?? 25), 'tone' => (string)($input['tone'] ?? 'bem-humorado'), 'context' => (string)($input['context'] ?? ''),
+                'scenes' => isset($input['scenes']) ? api_int($input['scenes']) : null, 'duration' => isset($input['duration']) && !isset($input['scenes']) ? api_int($input['duration']) : null,
+                'tone' => (string)($input['tone'] ?? 'bem-humorado'), 'context' => (string)($input['context'] ?? ''),
                 'expression' => (string)($input['expression'] ?? ''), 'scene' => (string)($input['scene'] ?? ''), 'layout' => radar_str($input['layout'] ?? ''),
             ]);
             radar_json(['item' => $script], 201);
@@ -168,7 +169,7 @@ try {
             api_limit('upload', 30, 3600);
             $kind = (string)($input['kind'] ?? '');
             $file = $_FILES['file'] ?? null;
-            if (!in_array($kind, ['cover', 'character', 'upload'], true) || !is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+            if (!in_array($kind, ['cover', 'character', 'upload', 'reference'], true) || !is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
                 || !is_string($file['tmp_name'] ?? null) || !is_uploaded_file($file['tmp_name'])) {
                 radar_json(['error' => 'Selecione uma imagem JPEG, PNG ou WebP de até 5 MB.'], 400);
             }
@@ -176,9 +177,9 @@ try {
             $newsId = api_int($input['news_id'] ?? 0);
             $media = radar_media_save_bytes($bytes, $kind, [
                 'news_id' => $newsId > 0 && radar_db_value('SELECT 1 FROM news WHERE id = ?', [$newsId]) !== null ? $newsId : null,
-                'label' => (string)($input['label'] ?? ($kind === 'character' ? 'Referência do personagem' : 'Imagem enviada')),
+                'label' => (string)($input['label'] ?? ($kind === 'character' ? 'Referência do personagem' : ($kind === 'reference' ? 'Folha de referência do personagem' : 'Imagem enviada'))),
                 'credit' => (string)($input['credit'] ?? ''),
-                'note' => $kind === 'character' ? 'Imagem de referência enviada pelo administrador.' : 'Imagem enviada manualmente pelo administrador; o direito de uso é de sua responsabilidade.',
+                'note' => in_array($kind, ['character', 'reference'], true) ? 'Imagem de referência enviada pelo administrador.' : 'Imagem enviada manualmente pelo administrador; o direito de uso é de sua responsabilidade.',
             ]);
             radar_json(['media' => $media], 201);
 
@@ -190,15 +191,17 @@ try {
         case 'video_prompt':
             $expressionKey = (string)($input['expression'] ?? '');
             $sceneKey = (string)($input['scene'] ?? '');
-            radar_json(['prompt' => radar_video_prompt([
+            $promptParts = [
                 'spoken' => mb_substr((string)($input['spoken'] ?? ''), 0, 4000),
                 'expression' => isset(radar_character_expressions()[$expressionKey]) ? $expressionKey : 'sorriso-largo',
                 'scene' => isset(radar_character_scenes()[$sceneKey]) ? $sceneKey : 'carro',
-                'duration' => max(15, min(35, api_int($input['duration'] ?? 25) ?: 25)),
+                'scenes' => max(1, min(RADAR_SCENE_MAX_COUNT, api_int($input['scenes'] ?? 1) ?: 1)),
                 'headline' => mb_substr((string)($input['headline'] ?? ''), 0, 200),
                 'source' => mb_substr((string)($input['source'] ?? ''), 0, 100),
                 'layout' => radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : radar_video_default_template(),
-            ])]);
+            ];
+            $scenePrompts = radar_video_prompts($promptParts);
+            radar_json(['prompt' => radar_video_prompt($promptParts), 'prompts' => $scenePrompts, 'scenes' => count($scenePrompts)]);
 
         case 'source_test':
             api_limit('source-test', 30, 600);

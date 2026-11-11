@@ -190,7 +190,7 @@ function radar_react_dialog(): string
     return '<dialog id="react-dialog" aria-labelledby="react-dialog-title"><form method="dialog" id="react-form" class="dialog-body">'
         . '<div class="dialog-head"><h2 id="react-dialog-title">Gerar react com IA</h2><button type="button" class="icon-btn" data-close aria-label="Fechar">' . radar_icon('close') . '</button></div>'
         . '<p class="muted" id="react-news-title"></p><p class="hint">' . radar_h($mode) . '</p>'
-        . '<div class="field-row"><label>Duração<select id="react-duration"><option>15</option><option>20</option><option selected>25</option><option>30</option><option>35</option></select></label>'
+        . '<div class="field-row"><label>Cenas<select id="react-scenes"><option value="1">1 cena (até 25 s)</option><option value="2">2 cenas (até 50 s)</option><option value="3" selected>3 cenas (até 75 s)</option><option value="4">4 cenas (até 100 s)</option><option value="5">5 cenas (até 125 s)</option></select></label>'
         . '<label>Tom<select id="react-tone">' . $tones . '</select></label></div>'
         . '<label>Modelo do vídeo<select id="react-layout">' . $layouts . '</select></label>'
         . '<label>O que você já conferiu? <span class="optional">opcional</span><textarea id="react-context" rows="3" maxlength="2000" placeholder="Fatos confirmados na matéria. Sem isso, o roteiro usa só a manchete e o resumo do veículo."></textarea></label>'

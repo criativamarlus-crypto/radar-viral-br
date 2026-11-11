@@ -94,7 +94,7 @@
     $('#react-news-title').textContent = title || '';
     $('#react-error').hidden = true;
     dialog.showModal();
-    $('#react-duration')?.focus();
+    $('#react-scenes')?.focus();
   }
   window.RadarOpenReact = openReact;
   dialog?.addEventListener('click', (event) => {
@@ -109,7 +109,7 @@
       const result = await api({
         action: 'generate',
         news_id: reactNewsId,
-        duration: Number($('#react-duration').value),
+        scenes: Number($('#react-scenes').value),
         tone: $('#react-tone').value,
         layout: $('#react-layout')?.value || '',
         context: $('#react-context').value,

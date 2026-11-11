@@ -200,6 +200,7 @@ SAÍDA: responda APENAS com um objeto JSON válido, sem texto fora dele, com exa
   "fact_check_notes": ["o que o criador deve conferir na matéria antes de gravar (0 a 4 itens)"]
 }
 O texto de hook + script + commentary + cta, falado em sequência, deve caber na duração pedida.
+O vídeo é dividido em CENAS (campo "cenas" do pedido), cada uma com no máximo 25 segundos (cerca de 60 palavras). Escreva frases curtas e completas, para que cada cena possa terminar numa pausa natural, e distribua o conteúdo de forma equilibrada entre as cenas pedidas, sem repetir informação.
 PROMPT;
 }
 
@@ -207,7 +208,7 @@ PROMPT;
  * @param array<string,mixed> $news  decoded news row
  * @return string JSON document sent as the user message
  */
-function radar_ai_user_message(array $news, int $duration, string $tone, string $context): string
+function radar_ai_user_message(array $news, int $duration, string $tone, string $context, int $scenes = 1): string
 {
     $words = (int)round($duration * 2.5);
     $payload = [
@@ -224,6 +225,8 @@ function radar_ai_user_message(array $news, int $duration, string $tone, string 
         'contexto_confirmado' => $context !== '' ? $context : null,
         'pedido' => [
             'duracao_total_segundos' => $duration,
+            'cenas' => $scenes,
+            'segundos_maximos_por_cena' => RADAR_SCENE_MAX_SECONDS,
             'palavras_aproximadas_no_total' => $words,
             'tom' => $tone,
             'personagem' => radar_character_master_prompt('pt'),
@@ -291,7 +294,7 @@ function radar_ai_normalize(array $data, array $news, string $context): array
     $result = [
         'headlines' => array_slice($headlines, 0, 3),
         'hook' => radar_ai_clean($data['hook'] ?? '', 200),
-        'script' => radar_ai_clean($data['script'] ?? '', 1800),
+        'script' => radar_ai_clean($data['script'] ?? '', 2600),
         'commentary' => radar_ai_clean($data['commentary'] ?? '', 600),
         'cta' => radar_ai_clean($data['cta'] ?? '', 250),
         'expression' => (string)($data['expression'] ?? ''),
