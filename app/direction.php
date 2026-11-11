@@ -222,7 +222,7 @@ function radar_direction_generate(array $context, int $scenes, array $avoid = []
         return $chosen;
     };
     $count = max(1, min(RADAR_SCENE_MAX_COUNT, $scenes));
-    return [
+    return radar_direction_resolve([
         'outfit' => $pick($pools['outfit'][$mood]),
         'accessories' => $pick($pools['accessories'][$mood]),
         'lighting' => $pick($pools['lighting'][$mood]),
@@ -230,7 +230,28 @@ function radar_direction_generate(array $context, int $scenes, array $avoid = []
         'gestures' => $distinct(radar_direction_gesture_pool(), $count),
         'mood' => $mood,
         'origin' => 'sorteio',
-    ];
+    ], $context['character'] ?? null);
+}
+
+/**
+ * Put the character's pronouns in ({he}, {his}, {him} become she/her for a woman). Looks are stored and shown with the
+ * words already resolved; running it again changes nothing.
+ *
+ * @return array<string,mixed>
+ */
+function radar_direction_resolve(array $direction, ?string $slug): array
+{
+    foreach (['outfit', 'accessories', 'lighting'] as $key) {
+        if (isset($direction[$key]) && is_string($direction[$key])) {
+            $direction[$key] = radar_character_words($direction[$key], $slug);
+        }
+    }
+    foreach (['angles', 'gestures'] as $key) {
+        if (isset($direction[$key]) && is_array($direction[$key])) {
+            $direction[$key] = array_map(static fn(mixed $text): mixed => is_string($text) ? radar_character_words($text, $slug) : $text, $direction[$key]);
+        }
+    }
+    return $direction;
 }
 
 /** One short line of clean text (no markup, no line breaks), or ''. */

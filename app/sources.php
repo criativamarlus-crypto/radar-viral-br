@@ -6,7 +6,7 @@ declare(strict_types=1);
 const RADAR_TRENDS_URL = 'https://trends.google.com/trending/rss?geo=BR';
 
 /** Bumped whenever built-in sources or category keywords change (see radar_sources_seed). */
-const RADAR_SOURCES_SEED_VERSION = '2';
+const RADAR_SOURCES_SEED_VERSION = '3';
 
 /** @return array<int,string> */
 function radar_category_list(): array
@@ -292,7 +292,9 @@ function radar_classify(string $title, string $summary = '', string $sourceCateg
     if ($best !== null && $bestScore >= 3) {
         return $best;
     }
-    if ($pinned !== null) {
+    // A finance outlet or search feed is noisy (lottery results, politics, football): with no keyword hit the
+    // headline stays general instead of being called finance just because of where it came from.
+    if ($pinned !== null && !in_array($pinned, radar_finance_categories(), true)) {
         return $pinned;
     }
     return $trending ? 'Assuntos virais' : 'Geral';

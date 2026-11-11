@@ -393,7 +393,8 @@ function radar_ai_fallback(array $news, int $duration, string $tone, string $con
         $extras[] = 'Informação conferida: ' . rtrim($context, '.') . '.';
     }
     if ($news['summary'] !== '') {
-        $extras[] = 'O veículo resume assim: ' . $news['summary'];
+        $summary = trim($news['summary']);
+        $extras[] = 'O veículo resume assim: ' . $summary . (preg_match('/[.!?…]["”)]?$/u', $summary) === 1 ? '' : '.');
     }
     $extras[] = 'Antes de tirar conclusão, vale abrir a matéria e ver o contexto completo.';
     foreach ($extras as $extra) {

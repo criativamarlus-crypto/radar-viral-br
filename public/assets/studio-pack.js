@@ -48,7 +48,7 @@
     const card = state.template === 'caption_card';
     const lines = [];
     const add = (...parts) => lines.push(...parts);
-    add('RADAR VIRAL BR · PACOTE COMPLETO DO REACT', SEPARATOR, '');
+    add('RADAR VIRAL BR · PACOTE COMPLETO DO REACT', SEPARATOR, '', 'COMO USAR: o template é o primeiro quadro de cada cena (a IA mantém a faixa, o título e o card e troca só a personagem do fundo). Se a ferramenta aceitar uma imagem só, use a PRANCHA (template + referências na mesma imagem).', '');
     add('Personagem: ' + characterName(), 'Título: ' + (state.title || '—'), 'Modelo do vídeo: ' + data.templates[state.template].label);
     if (data.news) {
       add('', 'NOTÍCIA', 'Manchete real: ' + data.news.title, 'Fonte: ' + data.news.source, 'Categoria: ' + (data.news.category || '—'), 'Link: ' + data.news.url);
@@ -88,7 +88,7 @@
     if (!files.length) add('Nenhuma imagem disponível.');
 
     const prompts = state.prompts.length ? state.prompts : (state.prompt ? [state.prompt] : []);
-    add('', SEPARATOR, 'PROMPTS DE VÍDEO (' + prompts.length + (prompts.length === 1 ? ' cena' : ' cenas') + ' de até 25 s; cole uma por vez, sempre com a folha de referência anexada)', SEPARATOR);
+    add('', SEPARATOR, 'PROMPTS DE VÍDEO (' + prompts.length + (prompts.length === 1 ? ' cena' : ' cenas') + ' de até 25 s; cole uma por vez, sempre com a imagem do template, as imagens de referência e a imagem da notícia anexadas)', SEPARATOR);
     prompts.forEach((prompt, i) => add('', '##### CENA ' + (i + 1) + ' DE ' + prompts.length + ' #####', prompt));
     return lines.join('\n') + '\n';
   }
@@ -96,36 +96,78 @@
   /** Every image that belongs to this react, with a plain file name. */
   async function collectFiles() {
     const files = [];
-    const push = (blob, name, label, note) => { if (blob) files.push({ blob, name, label, note }); };
+    const push = (blob, name, label, note, kind, role) => { if (blob) files.push({ blob, name, label, note, kind: kind || 'other', role }); };
     let count = 0;
     const next = () => String(++count).padStart(2, '0');
+    // The template comes first: it is the frame the video AI must deliver (it only swaps the person in the background).
+    push(await composition(false), next() + '-template-1080x1920.png', 'IMAGEM DO TEMPLATE (a principal)', 'use como primeiro quadro (start frame) de cada cena: a IA mantém a faixa, o título e o card exatamente assim e troca só a personagem do fundo', 'template');
     // Every reference image of the character goes with the prompts (the video tool needs all of them in every scene).
     for (const reference of data.references[state.character] || []) {
       const blob = await mediaBlob(reference.id);
       if (blob) {
         const photo = reference.role === 'photo';
-        push(blob, next() + '-referencia-' + (photo ? 'foto' : 'folha-de-vistas') + '.' + extension(blob.type), (photo ? 'Foto de referência' : 'Folha de referência') + ' de ' + characterName() + (reference.label ? ' (' + reference.label + ')' : ''), 'anexe em TODAS as cenas (só serve para manter o rosto)');
+        push(blob, next() + '-referencia-' + (photo ? 'foto' : 'folha-de-vistas') + '.' + extension(blob.type), (photo ? 'Foto de referência' : 'Folha de referência') + ' de ' + characterName() + (reference.label ? ' (' + reference.label + ')' : ''), 'anexe em TODAS as cenas (só serve para manter o rosto)', 'reference', reference.role);
       }
     }
-    push(await composition(false), next() + '-template-1080x1920.png', 'Imagem do template (o modelo do vídeo)', 'anexe em TODAS as cenas junto com as imagens de referência: é o layout que a IA de vídeo deve entregar');
-    push(await composition(true), next() + '-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', 'Camada transparente', 'vai por cima do vídeo gerado');
+    push(await composition(true), next() + '-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', 'Camada transparente', 'vai por cima do vídeo gerado', 'overlay');
     const coverBlob = await mediaBlob(state.coverId);
-    if (coverBlob) push(coverBlob, next() + '-imagem-da-noticia.' + extension(coverBlob.type), 'Imagem da notícia (miniatura do artigo)', 'anexe também: vai dentro do card, com o crédito da fonte');
+    if (coverBlob) push(coverBlob, next() + '-imagem-da-noticia.' + extension(coverBlob.type), 'Imagem da notícia (miniatura do artigo)', 'anexe também: vai dentro do card, com o crédito da fonte', 'news');
     const characterBlob = await mediaBlob(state.characterId);
     if (characterBlob) push(characterBlob, next() + '-personagem-no-estudio.' + extension(characterBlob.type), 'Imagem do personagem usada no Estúdio', '');
     return files;
   }
 
+  /**
+   * ONE image with everything the video AI needs to see: the template on the left (the frame to keep) and the
+   * character references on the right (only for the face). It is the single image to attach when the tool takes one.
+   */
+  async function makeBoard(files) {
+    const template = files.find((f) => f.kind === 'template');
+    if (!template) return null;
+    const references = files.filter((f) => f.kind === 'reference');
+    const bitmaps = [await createImageBitmap(template.blob), ...(await Promise.all(references.map((f) => createImageBitmap(f.blob))))];
+    const M = 40; const head = 80; const colW = references.length ? 1000 : 0;
+    const tw = bitmaps[0].width; const th = bitmaps[0].height;
+    const canvas = document.createElement('canvas');
+    canvas.width = M + tw + (references.length ? M + colW : 0) + M;
+    canvas.height = head + th + M;
+    const c = canvas.getContext('2d');
+    c.fillStyle = '#101216'; c.fillRect(0, 0, canvas.width, canvas.height);
+    c.fillStyle = '#ffc233'; c.font = '800 38px system-ui, sans-serif'; c.textBaseline = 'middle';
+    c.fillText('TEMPLATE · manter a faixa, o título e o card iguais; trocar só a personagem do fundo', M, head / 2 + 4, tw);
+    c.drawImage(bitmaps[0], M, head, tw, th);
+    if (references.length) {
+      const x0 = M + tw + M;
+      c.fillStyle = '#ffc233';
+      c.fillText('PERSONAGEM · só para manter o rosto', x0, head / 2 + 4, colW);
+      const gap = 30; const label = 44;
+      const slot = (th - gap * (references.length - 1)) / references.length;
+      references.forEach((file, i) => {
+        const bmp = bitmaps[i + 1];
+        const maxH = slot - label;
+        const scale = Math.min((colW - 40) / bmp.width, maxH / bmp.height);
+        const w = bmp.width * scale; const h = bmp.height * scale;
+        const y = head + i * (slot + gap);
+        c.fillStyle = '#ffffff'; c.font = '600 28px system-ui, sans-serif';
+        c.fillText((file.role === 'photo' ? 'Foto' : 'Folha com vistas') + ' · ' + characterName(), x0, y + label / 2, colW);
+        c.drawImage(bmp, x0 + (colW - w) / 2, y + label, w, h);
+      });
+    }
+    return canvasBlob(canvas);
+  }
+
   async function buildPack() {
     const files = await collectFiles();
+    const board = await makeBoard(files);
     const text = buildText(files);
     const parts = ['<h1>Radar Viral BR · pacote completo do react</h1>'];
+    if (board) parts.push('<h3>Prancha única: template + referências da personagem</h3><img src="' + (await read(board)) + '" alt="Prancha com o template e as referências" style="max-width:640px;height:auto">');
     parts.push('<pre style="white-space:pre-wrap;font-family:Consolas,monospace;font-size:12px">' + escapeHtml(text) + '</pre>');
     for (const file of files) {
       const url = await read(file.blob);
       parts.push('<h3>' + escapeHtml(file.label) + '</h3><p>' + escapeHtml(file.name) + (file.note ? ' — ' + escapeHtml(file.note) : '') + '</p><img src="' + url + '" alt="' + escapeHtml(file.label) + '" style="max-width:520px;height:auto">');
     }
-    return { text, html: '<!doctype html><html><body>' + parts.join('\n') + '</body></html>', files };
+    return { text, html: '<!doctype html><html><body>' + parts.join('\n') + '</body></html>', files, board };
   }
 
   /* ---- minimal ZIP (stored, no compression) ---- */
@@ -196,21 +238,23 @@
   }
 
   // Small hook for diagnostics and automated checks.
-  window.RadarStudioPack = { buildPack, buildText, makeZip, crc32 };
+  window.RadarStudioPack = { buildPack, buildText, makeZip, crc32, makeBoard, collectFiles };
 
   $('st-copy-all').addEventListener('click', (event) => withBusy(event.currentTarget, 'Preparando…', async () => {
     if (!state.spoken.trim() && !state.prompt) { status('Escreva ou gere o roteiro antes de copiar.', true); return; }
     const packPromise = buildPack();
     if (navigator.clipboard && window.ClipboardItem) {
+      // One copy carries the text, the same text with the images, and the board as an image: each place you paste into takes what it understands.
       await navigator.clipboard.write([new ClipboardItem({
         'text/plain': packPromise.then((pack) => new Blob([pack.text], { type: 'text/plain' })),
         'text/html': packPromise.then((pack) => new Blob([pack.html], { type: 'text/html' })),
+        'image/png': packPromise.then((pack) => pack.board),
       })]);
     } else {
       await navigator.clipboard.writeText((await packPromise).text);
     }
     const pack = await packPromise;
-    status('Copiado: roteiro, visual, coordenadas, ' + state.prompts.length + ' prompt(s) e ' + pack.files.length + ' imagem(ns). Cole em um documento ou editor para vir texto e imagens; em um campo só de texto vem o texto (para anexar as imagens, use “Baixar pacote”).');
+    status('Copiado de uma vez: o texto completo (' + state.prompts.length + ' prompt(s), coordenadas e visual) e a prancha com o template e as referências como imagem. Cole na ferramenta de vídeo: o texto vai no prompt e, onde ela aceitar imagem, a prancha vem junto. Em um documento ou editor vêm todas as ' + pack.files.length + ' imagens.');
     toast('Pacote completo copiado.');
   }));
 
@@ -218,6 +262,7 @@
     const pack = await buildPack();
     const encoder = new TextEncoder();
     const entries = [{ name: '00-LEIA-ME-prompts-e-roteiro.txt', bytes: encoder.encode(pack.text) }];
+    if (pack.board) entries.push({ name: '00-prancha-template-e-referencias.png', bytes: new Uint8Array(await pack.board.arrayBuffer()) });
     for (const file of pack.files) entries.push({ name: file.name, bytes: new Uint8Array(await file.blob.arrayBuffer()) });
     download(makeZip(entries), 'radar-pacote-' + (state.projectId || state.scriptId || 'novo') + '.zip');
     status('Pacote baixado: o texto completo e ' + pack.files.length + ' imagem(ns) em um .zip.');

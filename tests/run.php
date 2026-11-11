@@ -336,7 +336,9 @@ check('finance headlines land in the right money category; football cards and co
         ['IPCA desacelera e Banco Central avalia a inflação', 'auto', 'Economia'],
         ['Jogador leva cartão vermelho e Flamengo perde a rodada do Brasileirão', 'auto', 'Futebol'],
         ['Golpe de Estado é tema de julgamento no Supremo', 'auto', 'Geral'],
-        ['Algo qualquer sem palavras-chave conhecidas', 'Cartão de crédito', 'Cartão de crédito'],
+        ['Algo qualquer sem palavras-chave conhecidas', 'Cartão de crédito', 'Geral'],
+        ['Bolão de MG leva prêmio de R$ 3,2 milhões da Mega-Sena 3084. Veja resultado', 'Finanças', 'Geral'],
+        ['Algo qualquer sem palavras-chave conhecidas', 'Política', 'Política'],
     ];
     foreach ($cases as [$title, $pinned, $expected]) {
         if (radar_classify($title, '', $pinned) !== $expected) {
@@ -1247,16 +1249,18 @@ check('the caption-card prompt carries the template as a detailed brief: image, 
         'caption' => 'Atenção: cartão cobra 451% ao ano', 'source_line' => 'INFOMONEY • 10/11/2026'];
     $prompt = radar_video_prompts($parts)[0];
     $plain = radar_video_prompts(['caption' => ''] + $parts)[0];
-    return str_contains($prompt, 'TEMPLATE IMAGE (attach the template image to the video tool together with this prompt, in every scene)') && str_contains($prompt, 'TEMPLATE LAYOUT (vertical 9:16 frame; positions as a percentage of the frame):')
+    return str_contains($prompt, 'TEMPLATE IMAGE (attach the template image to the video tool together with this prompt, in every scene; if the tool accepts a start image or first frame, use it as the FIRST FRAME)') && str_contains($prompt, 'TEMPLATE LAYOUT (what the template image shows; vertical 9:16 frame, positions as a percentage of the frame):')
+        && str_contains($prompt, 'KEEP UNCHANGED and completely static') && str_contains($prompt, 'ONLY the person in the background changes: she is the character of the REFERENCE IMAGES') && str_contains($prompt, 'The person in the template image is just a placeholder photo')
         && str_contains($prompt, 'TOP BAND, from 0% to about 17% of the height') && str_contains($prompt, '"ATENÇÃO: CARTÃO COBRA 451% AO ANO"') && str_contains($prompt, '"INFOMONEY • 10/11/2026"') && str_contains($prompt, '"ROTATIVO DO CARTÃO CHEGA A 451% AO ANO"')
         && str_contains($prompt, 'NEWS CARD, bottom center, from about 62% to 94% of the height and 71% of the frame width') && str_contains($prompt, 'NEWS IMAGE (the article thumbnail, attached to this prompt)') && str_contains($prompt, 'thin white border and a soft drop shadow')
         && str_contains($prompt, 'her face between 22% and 62% of the height') && str_contains($prompt, 'Spell every word exactly as written above') && str_contains($prompt, 'The only text allowed on screen is the text listed in TEMPLATE LAYOUT') && !str_contains($prompt, 'do not show or invent any text')
-        && str_contains($plain, '"ROTATIVO DO CARTÃO CHEGA A 451% AO ANO"') && preg_match('/\{[a-zA-Z]+\}/', $prompt) === 0;
+        && str_contains($plain, '"ROTATIVO DO CARTÃO CHEGA A 451% AO ANO"') && preg_match('/\{[a-zA-Z]+\}/', $prompt) === 0
+        && str_contains($prompt, 'SINGLE-IMAGE OPTION (if the video tool accepts only ONE image): attach the REFERENCE BOARD instead of the separate images.') && str_contains($prompt, 'the TEMPLATE on the left') && str_contains($prompt, 'used only for her face');
 });
 check('the split template has its own brief (photo on top, character below) and never mentions the caption band', static function (): bool {
     $prompt = radar_video_prompts(['spoken' => 'Fala curta.', 'expression' => 'serio', 'scene' => 'casa', 'source' => 'G1', 'headline' => 'Senado vota projeto', 'layout' => 'split', 'character' => 'beto'])[0];
     return str_contains($prompt, 'TEMPLATE IMAGE (attach the template image') && str_contains($prompt, 'TOP HALF, 0% to 50%') && str_contains($prompt, '"Fonte: G1"') && str_contains($prompt, '"Senado vota projeto"') && str_contains($prompt, 'BOTTOM HALF, 50% to 100%')
-        && !str_contains($prompt, 'caption band') && !str_contains($prompt, 'IMPACT PHRASE');
+        && !str_contains($prompt, 'caption band') && !str_contains($prompt, 'IMPACT PHRASE') && str_contains($prompt, 'SINGLE-IMAGE OPTION') && str_contains($prompt, 'used only for his face');
 });
 check('a stored script gets the impact phrase and the source line of its news in the template brief', static function (): bool {
     $published = time() - 3600;
@@ -1269,6 +1273,35 @@ check('a stored script gets the impact phrase and the source line of its news in
     return str_contains($script['video_prompt'], '"' . $line . '"') && str_contains($script['video_prompt'], 'TEMPLATE LAYOUT') && str_contains($script['video_prompt'], '"BANCO MUDA A ANUIDADE DO CARTÃO"')
         && str_contains($script['video_prompt'], '"ATENÇÃO: BANCO MUDA A ANUIDADE DO CARTÃO"')
         && str_contains($undated['video_prompt'], '"FONTE U"') && !str_contains($undated['video_prompt'], 'FONTE U •') && str_contains($edited['video_prompt'], '"' . $line . '"');
+});
+check('looks are stored and shown with the character\'s pronouns already in: no marker is left in the UI, the pack or the MCP', static function (): bool {
+    for ($i = 0; $i < 40; $i++) {
+        foreach (['beto', 'clara'] as $slug) {
+            $look = radar_direction_generate(['category' => ['Tecnologia', 'Famosos', 'Política', 'Futebol'][$i % 4], 'character' => $slug], 5);
+            if (preg_match('/\{[a-zA-Z]+\}/', json_encode($look, JSON_UNESCAPED_UNICODE)) === 1) {
+                return false;
+            }
+        }
+    }
+    $clara = radar_direction_generate(['category' => 'Famosos', 'character' => 'clara'], 5, [], 7);
+    $beto = radar_direction_generate(['category' => 'Famosos', 'character' => 'beto'], 5, [], 7);
+    $text = implode(' ', array_merge($clara['angles'], $clara['gestures']));
+    $legacy = radar_direction_resolve(['outfit' => 'a shirt', 'accessories' => 'earbuds in {his} ears', 'lighting' => 'soft light on {his} face', 'angles' => ['looking up at {him}; {he} smiles'], 'gestures' => ['rests {his} hand on {his} chin']], 'clara');
+    $again = radar_direction_resolve($legacy, 'clara');
+    return preg_match('/\b(his|him|he)\b/', $text) === 0 && preg_match('/\b(she|her)\b/', implode(' ', array_merge($beto['angles'], $beto['gestures']))) === 0
+        && $legacy['accessories'] === 'earbuds in her ears' && $legacy['angles'][0] === 'looking up at her; she smiles' && $legacy['gestures'][0] === 'rests her hand on her chin' && $again === $legacy;
+});
+check('a script saved with markers in its look reads back with the right pronouns (Studio, roteiro, pack and MCP show it)', static function (): bool {
+    $stored = json_encode(['outfit' => 'a navy blazer', 'accessories' => 'small gold hoops', 'lighting' => 'soft light', 'angles' => ['three-quarter view from {his} left side; {he} turns to the camera'], 'gestures' => ['crosses {his} arms'], 'mood' => 'business', 'origin' => 'sorteio']);
+    radar_db_exec("INSERT INTO scripts (news_title, news_url, news_source, mode, duration, tone, hook, script, commentary, cta, expression, scene, direction, character_slug, video_prompt, created_at, updated_at) VALUES ('Antiga com marcadores', 'https://old.example.com/m', 'F', 'rascunho', 25, 'direto', 'g', 's', 'c', 'x', 'serio', 'casa', ?, 'clara', '', ?, ?)", [$stored, time(), time()]);
+    $script = radar_script_get((int)radar_db()->lastInsertId());
+    return $script['direction']['angles'][0] === 'three-quarter view from her left side; she turns to the camera' && $script['direction']['gestures'][0] === 'crosses her arms' && preg_match('/\{[a-zA-Z]+\}/', json_encode($script['direction'])) === 0 && str_contains($script['video_prompts'][0], 'three-quarter view from her left side');
+});
+check('the draft closes the summary with a full stop, so the scenes can be cut at sentence ends', static function (): bool {
+    $news = ['title' => 'Bolão de MG leva prêmio', 'source' => 'Metrópoles', 'summary' => 'Aposta feita em Iturama acertou as seis dezenas. Prêmio foi dividido em 15 cotas', 'category' => 'Geral'];
+    $without = radar_ai_fallback($news, 66, 'direto', '')['script'];
+    $with = radar_ai_fallback(['summary' => 'Resumo já pontuado!'] + $news, 66, 'direto', '')['script'];
+    return str_contains($without, 'dividido em 15 cotas. Antes de tirar conclusão') && str_contains($with, 'Resumo já pontuado! Antes de tirar conclusão') && !str_contains($with, '!.');
 });
 check('two video templates exist: the full-screen caption + news card (default, first) and the original split', static function (): bool {
     $templates = radar_video_templates();

@@ -116,7 +116,7 @@ function radar_script_direction(array $row): array
 {
     $stored = radar_direction_normalize(json_decode((string)($row['direction'] ?? ''), true), 'manual');
     if ($stored !== null) {
-        return $stored;
+        return radar_direction_resolve($stored, (string)($row['character_slug'] ?? ''));
     }
     $category = $row['news_id'] !== null ? (string)radar_db_value('SELECT category FROM news WHERE id = ?', [(int)$row['news_id']]) : '';
     return radar_direction_generate(['category' => $category, 'expression' => (string)($row['expression'] ?? ''), 'character' => (string)($row['character_slug'] ?? '')], max(1, (int)($row['scenes'] ?? 1)), [], (int)$row['id']);
@@ -299,7 +299,7 @@ function radar_project_decode(array $row): array
         'expression' => (string)$row['expression'],
         'template' => radar_video_template_valid((string)$row['template']) ? (string)$row['template'] : 'split',
         'caption' => (string)$row['caption'],
-        'direction' => radar_direction_normalize(json_decode((string)($row['direction'] ?? ''), true), 'manual'),
+        'direction' => ($projectLook = radar_direction_normalize(json_decode((string)($row['direction'] ?? ''), true), 'manual')) === null ? null : radar_direction_resolve($projectLook, (string)($row['character_slug'] ?? '')),
         'character' => radar_character_slug($row['character_slug'] ?? null),
         'created_at' => gmdate(DATE_ATOM, (int)$row['created_at']), 'updated_at' => gmdate(DATE_ATOM, (int)$row['updated_at']),
     ];
