@@ -55,14 +55,18 @@
     let count = 0;
     const next = () => String(++count).padStart(2, '0');
     // The template comes first: it is the frame the video AI must deliver (it only swaps the person in the background).
-    plan.push({ kind: 'template', name: next() + '-template-1080x1920.png', label: 'IMAGEM DO TEMPLATE (a principal)', note: 'primeiro quadro (start frame) da cena: a IA mantém a faixa, o título e o card exatamente assim e troca só a personagem do fundo' });
+    const tvStudio = state.template === 'tv_studio';
+    if (!tvStudio) plan.push({ kind: 'template', name: next() + '-template-1080x1920.png', label: 'IMAGEM DO TEMPLATE (a principal)', note: 'primeiro quadro (start frame) da cena: a IA mantém a faixa, o título e o card exatamente assim e troca só a personagem do fundo' });
     // Every reference image of the character goes with the prompts (the video tool needs all of them in every scene).
     for (const reference of data.references[state.character] || []) {
       const photo = reference.role === 'photo';
-      plan.push({ kind: 'reference', role: reference.role, mediaId: reference.id, name: next() + '-referencia-' + (photo ? 'foto' : 'folha-de-vistas') + '.' + mediaExt(reference.id),
-        label: (photo ? 'Foto de referência' : 'Folha de referência') + ' de ' + characterName() + (reference.label ? ' (' + reference.label + ')' : ''), note: 'só serve para manter o rosto' });
+      const slot = (data.slots || {})[reference.role];
+      const slug = reference.role === 'photo' ? 'foto' : (reference.role === 'sheet' ? 'folha-de-vistas' : reference.role.replace(/_/g, '-'));
+      plan.push({ kind: 'reference', role: reference.role, mediaId: reference.id, name: next() + '-referencia-' + slug + '.' + mediaExt(reference.id),
+        label: (slot && reference.role !== 'photo' && reference.role !== 'sheet' ? slot : (photo ? 'Foto de referência' : 'Folha de referência')) + ' de ' + characterName() + (reference.label && !slot ? ' (' + reference.label + ')' : ''),
+        note: reference.role === 'master' ? 'a imagem oficial: vale mais do que qualquer descrição; anexe esta primeiro' : 'só serve para manter o rosto' });
     }
-    plan.push({ kind: 'overlay', name: next() + '-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', label: 'Camada transparente', note: 'vai por cima do vídeo gerado, na edição' });
+    if (!tvStudio) plan.push({ kind: 'overlay', name: next() + '-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', label: 'Camada transparente', note: 'vai por cima do vídeo gerado, na edição' });
     if (state.coverId) plan.push({ kind: 'news', mediaId: state.coverId, name: next() + '-imagem-da-noticia.' + mediaExt(state.coverId), label: 'Imagem da notícia (miniatura do artigo)', note: 'vai dentro do card, com o crédito da fonte' });
     if (state.characterId) plan.push({ kind: 'other', mediaId: state.characterId, name: next() + '-personagem-no-estudio.' + mediaExt(state.characterId), label: 'Imagem do personagem usada no Estúdio', note: '' });
     return plan;
@@ -97,6 +101,8 @@
           '  Imagem da notícia dentro do card: ' + box(L.image, L), '  Barra preta com FONTE • DATA e manchete: ' + box(L.bar, L),
           'Área livre para o rosto e os gestos: ' + box(L.safe, L));
       }
+    } else if (state.template === 'tv_studio') {
+      lines.push('Modelo: estúdio de TV, sem texto dentro do vídeo. Título e legendas entram na edição.', 'Imagem da notícia (opcional): vai no telão do estúdio, sem texto.');
     } else {
       lines.push('Headline sobre a imagem: ' + (state.headline || '—'));
       if (L && L.template === 'split') lines.push('Metade de cima (notícia): ' + box(L.news, L), 'Metade de baixo (personagem): ' + box(L.character, L));

@@ -183,9 +183,11 @@ function radar_react_dialog(): string
     foreach (radar_video_templates() as $key => $template) {
         $layouts .= '<option value="' . radar_h($key) . '">' . radar_h($template['label']) . '</option>';
     }
+    // The default character is selected; "Automático" picks by the category of the news.
+    $default = radar_character_default_slug();
     $characters = '<option value="">Automático (pela categoria da notícia)</option>';
     foreach (array_keys(radar_characters()) as $slug) {
-        $characters .= '<option value="' . radar_h($slug) . '">' . radar_h(radar_character_get($slug)['name']) . '</option>';
+        $characters .= '<option value="' . radar_h($slug) . '" data-format="' . radar_h(radar_character_format($slug)) . '"' . ($slug === $default ? ' selected' : '') . '>' . radar_h(radar_character_get($slug)['name']) . '</option>';
     }
     $config = radar_ai_config();
     $mode = $config['provider'] !== 'none' && $config['has_key']
@@ -197,8 +199,10 @@ function radar_react_dialog(): string
         . '<div class="field-row"><label>Cenas<select id="react-scenes"><option value="1">1 cena (até 25 s)</option><option value="2">2 cenas (até 50 s)</option><option value="3" selected>3 cenas (até 75 s)</option><option value="4">4 cenas (até 100 s)</option><option value="5">5 cenas (até 125 s)</option></select></label>'
         . '<label>Tom<select id="react-tone">' . $tones . '</select></label></div>'
         . '<label>Quem fala<select id="react-character">' . $characters . '</select></label>'
+        . '<p class="hint" id="react-tv-hint" hidden>Ela sempre faz 3 cenas conectadas: gancho, desenvolvimento e reação com fechamento (8 segundos cada, ajustável em Meus Personagens).</p>'
         . '<label>Modelo do vídeo<select id="react-layout">' . $layouts . '</select></label>'
         . '<label>O que você já conferiu? <span class="optional">opcional</span><textarea id="react-context" rows="3" maxlength="2000" placeholder="Fatos confirmados na matéria. Sem isso, o roteiro usa só a manchete e o resumo do veículo."></textarea></label>'
+        . '<div class="notice warn" id="react-duplicates" role="alert" hidden></div>'
         . '<p class="error-text" id="react-error" role="alert" hidden></p>'
         . '<div class="dialog-actions"><button type="button" class="btn ghost" data-close>Cancelar</button><button type="submit" class="btn primary" id="react-submit">Gerar react</button></div>'
         . '</form></dialog>';

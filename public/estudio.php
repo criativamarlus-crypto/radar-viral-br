@@ -38,7 +38,7 @@ $characterList = [];
 $references = [];
 foreach (array_keys(radar_characters()) as $characterSlug) {
     $info = radar_character_get($characterSlug);
-    $characterList[] = ['slug' => $characterSlug, 'name' => $info['name'], 'tagline' => $info['tagline'], 'gender' => $info['gender']];
+    $characterList[] = ['slug' => $characterSlug, 'name' => $info['name'], 'tagline' => $info['tagline'], 'gender' => $info['gender'], 'format' => radar_character_format($characterSlug), 'template' => radar_character_format($characterSlug) === 'tv3' ? 'tv_studio' : radar_video_default_template()];
     $references[$characterSlug] = array_map(static fn(array $r): array => ['id' => $r['id'], 'width' => $r['width'], 'height' => $r['height'], 'role' => $r['role'], 'label' => $r['label']], radar_character_references($characterSlug));
 }
 
@@ -56,6 +56,7 @@ $state = [
     'defaultScenes' => RADAR_SCENES_DEFAULT,
     'characterList' => $characterList,
     'references' => $references,
+    'slots' => array_map(static fn(array $slot): string => $slot['label'], radar_reference_slots()),
     'suggestedCharacter' => radar_character_for_category((string)($news['category'] ?? '')),
     'templates' => array_map(static fn(array $t): array => ['label' => $t['label'], 'description' => $t['description']], radar_video_templates()),
     'project' => $project,

@@ -82,7 +82,7 @@ $tools = [
     ['name' => 'listar_reacts', 'description' => 'Lista os roteiros de react já preparados (headlines, gancho, roteiro, comentário, CTA e prompt de vídeo com o personagem fixo). Opcionalmente de uma notícia.',
         'inputSchema' => ['type' => 'object', 'properties' => ['noticia_id' => ['type' => 'integer', 'minimum' => 1], 'limite' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 30]], 'additionalProperties' => false], 'annotations' => ['readOnlyHint' => true]],
     ['name' => 'preparar_react', 'description' => 'Prepara um react para uma notícia: 3 headlines, gancho, roteiro de 15 a 35 s, comentário (opinião), CTA e prompt de vídeo com o personagem fixo. Usa a IA configurada no servidor; sem IA, gera um rascunho conservador. Requer token com acesso "preparar react". Cria um roteiro salvo.',
-        'inputSchema' => ['type' => 'object', 'properties' => ['noticia_id' => ['type' => 'integer', 'minimum' => 1], 'cenas' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 5, 'description' => 'Quantidade de cenas do vídeo (padrão 3). Cada cena tem até 25 segundos e vira um prompt de vídeo próprio.'], 'duracao_segundos' => ['type' => 'integer', 'minimum' => 15, 'maximum' => 35, 'description' => 'Antigo: duração de uma cena só. Prefira "cenas".'], 'personagem' => ['type' => 'string', 'enum' => array_keys(radar_characters()), 'description' => 'Quem fala. Sem isso, vale o personagem da categoria da notícia (ex.: a Clara para finanças e cartão de crédito).'], 'tom' => ['type' => 'string', 'enum' => array_keys(RADAR_TONES)], 'modelo_video' => ['type' => 'string', 'enum' => array_keys(radar_video_templates()), 'description' => '"caption_card" (padrão) = vídeo em tela cheia com frase de impacto no topo e card da notícia embaixo; "split" = notícia em cima e personagem embaixo.'], 'contexto_confirmado' => ['type' => 'string', 'maxLength' => 2000, 'description' => 'Fatos que o usuário já conferiu na matéria.']], 'required' => ['noticia_id'], 'additionalProperties' => false],
+        'inputSchema' => ['type' => 'object', 'properties' => ['noticia_id' => ['type' => 'integer', 'minimum' => 1], 'gerar_mesmo_assim' => ['type' => 'boolean', 'description' => 'Só para confirmar um react de uma notícia que já tem roteiro (por padrão, a ferramenta avisa e não gera).'], 'atualizacao_do_roteiro' => ['type' => 'integer', 'minimum' => 1, 'description' => 'id de um roteiro anterior: gera uma atualização com só os fatos novos (informe-os em contexto_confirmado).'], 'cenas' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 5, 'description' => 'Quantidade de cenas do vídeo (padrão 3). Cada cena tem até 25 segundos e vira um prompt de vídeo próprio.'], 'duracao_segundos' => ['type' => 'integer', 'minimum' => 15, 'maximum' => 35, 'description' => 'Antigo: duração de uma cena só. Prefira "cenas".'], 'personagem' => ['type' => 'string', 'enum' => array_keys(radar_characters()), 'description' => 'Quem fala. Sem isso, vale o personagem da categoria da notícia (ex.: a Clara para finanças e cartão de crédito).'], 'tom' => ['type' => 'string', 'enum' => array_keys(RADAR_TONES)], 'modelo_video' => ['type' => 'string', 'enum' => array_keys(radar_video_templates()), 'description' => '"caption_card" (padrão) = vídeo em tela cheia com frase de impacto no topo e card da notícia embaixo; "split" = notícia em cima e personagem embaixo.'], 'contexto_confirmado' => ['type' => 'string', 'maxLength' => 2000, 'description' => 'Fatos que o usuário já conferiu na matéria.']], 'required' => ['noticia_id'], 'additionalProperties' => false],
         'annotations' => ['readOnlyHint' => false, 'destructiveHint' => false, 'idempotentHint' => false]],
 ];
 
@@ -116,7 +116,7 @@ $allowed = [
     'consultar_tendencias' => [],
     'obter_noticia' => ['id'], 'obter_imagens' => ['id'],
     'listar_reacts' => ['noticia_id', 'limite'],
-    'preparar_react' => ['noticia_id', 'cenas', 'duracao_segundos', 'personagem', 'tom', 'modelo_video', 'contexto_confirmado'],
+    'preparar_react' => ['noticia_id', 'gerar_mesmo_assim', 'atualizacao_do_roteiro', 'cenas', 'duracao_segundos', 'personagem', 'tom', 'modelo_video', 'contexto_confirmado'],
 ];
 if (!isset($allowed[$name]) || array_diff(array_keys($arguments), $allowed[$name]) !== []) {
     $fail(-32602, 'Ferramenta ou argumentos inválidos.');
@@ -210,6 +210,7 @@ try {
             }
             @set_time_limit(120);
             $script = radar_react_generate($arguments['noticia_id'], [
+                'on_duplicate' => ($arguments['gerar_mesmo_assim'] ?? false) === true ? 'allow' : 'block', 'update_of' => $arguments['atualizacao_do_roteiro'] ?? null, 'fetch_article' => true,
                 'scenes' => $arguments['cenas'] ?? null, 'duration' => isset($arguments['cenas']) ? null : ($arguments['duracao_segundos'] ?? null), 'character' => $arguments['personagem'] ?? '', 'tone' => $arguments['tom'] ?? 'bem-humorado', 'context' => $arguments['contexto_confirmado'] ?? '', 'layout' => $arguments['modelo_video'] ?? radar_video_default_template(),
             ]);
             $data = [
@@ -222,6 +223,22 @@ try {
                 'alertas' => $script['warnings'], 'conferir_antes_de_gravar' => $script['fact_check'],
                 'proximo_passo' => 'O usuário deve conferir a matéria original e pode ajustar a composição 9:16 no Estúdio de React do painel.',
             ];
+            if ($script['format'] === 'tv3') {
+                // The react of a TV character: three scenes, each with everything it needs, and the publication texts.
+                $data['titulo_do_video'] = $script['video_title'];
+                $data['legenda_de_publicacao'] = $script['publication_caption'];
+                $data['personagem_id'] = $script['character_id'];
+                $data['versao_do_personagem'] = $script['character_version'];
+                $data['estrategia_criativa'] = $script['strategy'];
+                $data['cenas_detalhe'] = array_map(static fn(array $scene): array => [
+                    'numero' => $scene['number'], 'objetivo' => $scene['objective'], 'duracao_segundos' => $scene['duration_seconds'], 'fala_exata' => $scene['narration'], 'tom_emocional' => $scene['emotion'],
+                    'expressao' => $scene['expression_label'], 'gestos' => $scene['gestures'], 'camera' => $scene['camera'], 'movimento_de_camera' => $scene['camera_movement'], 'continuidade' => $scene['continuity'],
+                    'legenda' => $scene['caption'], 'titulo_na_tela' => $scene['screen_title'], 'referencia_visual' => $scene['visual_reference'], 'prompt_para_o_muse' => $scene['muse_prompt'],
+                ], $script['scenes_data']);
+                $data['fatos'] = ['reportados_pela_fonte' => $script['facts']['verified'] ?? [], 'atribuidos' => $script['facts']['attributed'] ?? [], 'incertos' => $script['facts']['uncertain'] ?? [], 'novos_da_atualizacao' => $script['facts']['new'] ?? []];
+                $data['legendas_srt'] = $script['subtitles_srt'];
+                $data['imagem_de_referencia'] = 'Anexe em cada cena a imagem-mestre e, se a ferramenta aceitar, as outras imagens da galeria (baixe em Meus Personagens, no painel). A imagem-mestre vale mais do que qualquer descrição.';
+            }
             break;
         default:
             $fail(-32602, 'Ferramenta desconhecida.');

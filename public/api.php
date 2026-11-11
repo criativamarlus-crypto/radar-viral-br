@@ -53,6 +53,15 @@ try {
                 if ($script === null) {
                     radar_json(['error' => 'Roteiro não encontrado.'], 404);
                 }
+                if (($_GET['format'] ?? '') === 'srt') {
+                    if ($script['subtitles_srt'] === '') {
+                        radar_json(['error' => 'Só os roteiros em três cenas têm legendas.'], 404);
+                    }
+                    header('Content-Type: application/x-subrip; charset=utf-8');
+                    header('Content-Disposition: attachment; filename="legendas-roteiro-' . $script['id'] . '.srt"');
+                    echo "\xEF\xBB\xBF" . $script['subtitles_srt'];
+                    exit;
+                }
                 if (($_GET['format'] ?? '') === 'txt') {
                     header('Content-Type: text/plain; charset=utf-8');
                     header('Content-Disposition: attachment; filename="roteiro-' . $script['id'] . '.txt"');
@@ -60,6 +69,9 @@ try {
                     exit;
                 }
                 radar_json(['item' => $script]);
+            case 'duplicates':
+                $checked = radar_news_get(api_int($_GET['news_id'] ?? 0));
+                $checked === null ? radar_json(['error' => 'Notícia não encontrada.'], 404) : radar_json(['duplicates' => radar_editorial_duplicates($checked, radar_str($_GET['character'] ?? '') !== '' ? radar_str($_GET['character']) : null), 'note' => 'Reacts já feitos para a mesma notícia ou para o mesmo acontecimento.']);
             case 'projects':
                 radar_json(['items' => radar_projects_list()]);
             case 'stats':
@@ -130,8 +142,25 @@ try {
                 'tone' => (string)($input['tone'] ?? 'bem-humorado'), 'context' => (string)($input['context'] ?? ''),
                 'expression' => (string)($input['expression'] ?? ''), 'scene' => (string)($input['scene'] ?? ''), 'layout' => radar_str($input['layout'] ?? ''),
                 'character' => radar_str($input['character'] ?? ''),
+                'scene_seconds' => isset($input['scene_seconds']) ? api_int($input['scene_seconds']) : null, 'update_of' => isset($input['update_of']) ? api_int($input['update_of']) : null,
+                // A news that already has a react is reported, never generated again by itself ('allow_duplicate' => true confirms).
+                'on_duplicate' => ($input['allow_duplicate'] ?? false) === true ? 'allow' : 'block', 'fetch_article' => true,
             ]);
             radar_json(['item' => $script], 201);
+
+        case 'scene_regenerate':
+            api_limit('generate', 20, 600);
+            @set_time_limit(120);
+            radar_json(['item' => radar_tv_scene_regenerate(api_int($input['id'] ?? 0), api_int($input['scene'] ?? 0), (string)($input['instruction'] ?? ''))]);
+
+        case 'scene_update':
+            $sceneScript = api_int($input['id'] ?? 0);
+            radar_tv_scene_update($sceneScript, api_int($input['scene'] ?? 0), $input);
+            radar_json(['item' => radar_script_get($sceneScript)]);
+
+        case 'character_default':
+            radar_character_default_set(radar_str($input['character'] ?? ''));
+            radar_json(['ok' => true, 'message' => 'Personagem padrão atualizado.']);
 
         case 'script_update':
             radar_json(['item' => radar_script_update(api_int($input['id'] ?? 0), $input)]);
@@ -210,6 +239,14 @@ try {
                 'source_line' => mb_substr((string)($input['source_line'] ?? ''), 0, 120),
                 'layout' => radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : radar_video_default_template(),
             ];
+            // A TV character keeps the plan of its saved scenes (emotion, camera, gestures) while the Studio edits the text.
+            $planScript = api_int($input['script_id'] ?? 0);
+            if (radar_character_format($promptCharacter) === 'tv3' && $planScript > 0) {
+                $stored = radar_script_get($planScript);
+                if ($stored !== null && $stored['format'] === 'tv3' && $stored['character'] === $promptCharacter) {
+                    $promptParts['plan'] = radar_tv_plan_of_script($planScript);
+                }
+            }
             $scenePrompts = radar_video_prompts($promptParts);
             radar_json(['prompt' => radar_video_prompt($promptParts), 'prompts' => $scenePrompts, 'scenes' => count($scenePrompts)]);
 
@@ -259,6 +296,8 @@ try {
         default:
             radar_json(['error' => 'Ação desconhecida.'], 400);
     }
+} catch (RadarDuplicateException $error) {
+    radar_json(['error' => $error->getMessage(), 'duplicate' => true, 'duplicates' => $error->matches], 409);
 } catch (InvalidArgumentException $error) {
     radar_json(['error' => $error->getMessage()], 400);
 } catch (RuntimeException $error) {

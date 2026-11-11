@@ -12,10 +12,12 @@
   const initialScript = !project && data.scriptId ? data.scripts.find((s) => s.id === data.scriptId) : null;
   // The chosen video template survives the reload that happens when another news is picked.
   const requestedTemplate = new URLSearchParams(location.search).get('modelo') || '';
-  const chosenTemplate = Object.prototype.hasOwnProperty.call(data.templates, requestedTemplate) ? requestedTemplate : data.defaultTemplate;
   // The character that covers the news category, unless the person chose another (it survives a news change).
   const requestedCharacter = new URLSearchParams(location.search).get('personagem') || '';
   const chosenCharacter = data.characterList.some((c) => c.slug === requestedCharacter) ? requestedCharacter : data.suggestedCharacter;
+  /** The template a character starts with: the TV studio for the TV character, the default one for the others. */
+  const templateOf = (slug) => (data.characterList.find((c) => c.slug === slug) || {}).template || data.defaultTemplate;
+  const chosenTemplate = Object.prototype.hasOwnProperty.call(data.templates, requestedTemplate) ? requestedTemplate : templateOf(chosenCharacter);
   const state = {
     character: project ? project.character : (initialScript ? initialScript.character : chosenCharacter),
     newsId: data.news ? data.news.id : null,
@@ -274,6 +276,24 @@
     c.strokeRect(cx, cy, cw, ch);
   }
 
+  /* ---- template 3: the TV studio, no text inside the video (titles and subtitles are added in editing) ---- */
+  function renderTvStudio(c, W, H, assets, overlay) {
+    const { character } = assets;
+    lastLayout = { W, H, template: 'tv_studio', safe: { x: 0, y: H * 0.05, w: W, h: H * 0.9 } };
+    if (overlay) return; // nothing to put over the video
+    if (character) {
+      const scale = Math.max(W / character.width, H / character.height);
+      const dw = character.width * scale; const dh = character.height * scale;
+      c.drawImage(character, (W - dw) / 2, 0, dw, dh);
+    } else {
+      const g = c.createLinearGradient(0, 0, W, H);
+      g.addColorStop(0, '#8a1f6b'); g.addColorStop(0.55, '#4b1f7a'); g.addColorStop(1, '#c9972b');
+      c.fillStyle = g; c.fillRect(0, 0, W, H);
+      c.fillStyle = 'rgba(255,255,255,.75)'; c.textAlign = 'center'; c.font = heavy(W * 0.05);
+      c.fillText('ESTÚDIO DE TV', W / 2, H * 0.47);
+    }
+  }
+
   /** Draw the composition. `overlay` skips the character video so only caption band and news card remain (transparent PNG). */
   async function render(target, W, H, options = {}) {
     const c = target.getContext('2d');
@@ -282,6 +302,7 @@
     c.clearRect(0, 0, W, H);
     if (!overlay) { c.fillStyle = '#0b0c10'; c.fillRect(0, 0, W, H); }
     if (state.template === 'caption_card') renderCaptionCard(c, W, H, { cover, character }, overlay);
+    else if (state.template === 'tv_studio') renderTvStudio(c, W, H, { cover, character }, overlay);
     else renderSplit(c, W, H, { cover, character }, overlay);
   }
 
@@ -467,7 +488,7 @@
     promptTimer = setTimeout(async () => {
       try {
         const result = await api({
-          action: 'video_prompt', character: state.character, caption: state.caption, source_line: sourceLine(), spoken: state.spoken, expression: state.expression, scene: state.scene,
+          action: 'video_prompt', character: state.character, script_id: state.scriptId || 0, caption: state.caption, source_line: sourceLine(), spoken: state.spoken, expression: state.expression, scene: state.scene,
           direction: state.direction, scenes: state.scenes, headline: data.news ? data.news.title : state.headline, source: data.news ? data.news.source : '', layout: state.template,
         });
         state.prompt = result.prompt; state.prompts = result.prompts;
@@ -573,6 +594,11 @@
     $('st-character-hint').textContent = info ? info.tagline + (data.suggestedCharacter === state.character && data.news ? ' · sugerida pela categoria “' + data.news.category + '”.' : '.') : '';
   }
   $('st-character').addEventListener('change', (e) => {
+    // The template follows the character only while it is still the previous character's own template.
+    if (state.template === templateOf(state.character) && data.templates[templateOf(e.target.value)]) {
+      state.template = templateOf(e.target.value);
+      $('st-template').value = state.template;
+    }
     state.character = e.target.value;
     characterTouched = true;
     const primary = primaryImage();
@@ -643,10 +669,28 @@
     scriptSelect.disabled = true;
     setGenStatus('Gerando o roteiro…');
     try {
-      const result = await api({
+      const request = {
         action: 'generate', character: state.character, news_id: data.news.id, scenes: Number($('st-scenes').value) || data.defaultScenes,
         tone: toneSelect ? toneSelect.value : 'bem-humorado', layout: state.template,
-      });
+      };
+      let result;
+      try {
+        result = await api(request);
+      } catch (error) {
+        // A react already exists for this news: say so and let the user decide (nothing was generated).
+        if (error.status === 409 && error.data && error.data.duplicates) {
+          const first = error.data.duplicates[0];
+          const again = window.confirm(error.message + '\n\nGerar mesmo assim? Para abrir o existente, cancele e use o seletor de roteiros.');
+          if (!again) {
+            setGenStatus('Já existe um react (roteiro #' + (first ? first.script_id : '') + ') para esta notícia. Nada foi gerado: escolha-o no seletor de roteiros.', true);
+            box.placeholder = placeholder; scriptSelect.disabled = false; if (genButton) genButton.disabled = false; generating = false;
+            return;
+          }
+          result = await api({ ...request, allow_duplicate: true });
+        } else {
+          throw error;
+        }
+      }
       const item = result.item;
       const script = {
         id: item.id, news_id: item.news_id, news_title: item.news_title, news_source: item.news_source,

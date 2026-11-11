@@ -10,7 +10,10 @@ declare(strict_types=1);
  *   --character  which character (a slug such as beto or clara); the default character when omitted.
  *   --reference  a reference image (the sheet with the front, profile and 3/4 views, or a photo). It is added to
  *                the others and ALL of them go with every video prompt, so the video tool keeps the same face.
- *   --role       sheet (several views, the default) or photo.
+ *   --role       the kind of image: master (the official image), frontal, profile_right, profile_left, fullbody, seated,
+ *                surprise, extra, sheet (several views, the default) or photo. The slots hold one image: a new one replaces the old one.
+ *   --voice      an optional reference audio (mp3, wav, ogg or m4a, up to 8 MB) the user is allowed to use.
+ *   --default    make this character the default one (selected first when a react is generated).
  *   --primary    an image for the Studio preview; it becomes the main character image.
  *
  * Exit codes: 0 saved, 1 an image was refused, 2 wrong usage.
@@ -22,14 +25,14 @@ if (PHP_SAPI !== 'cli') {
 
 require dirname(__DIR__) . '/app/bootstrap.php';
 
-$options = getopt('', ['character:', 'reference:', 'primary:', 'label:', 'role:']);
+$options = getopt('', ['character:', 'reference:', 'primary:', 'label:', 'role:', 'voice:', 'default']);
 $characterSlug = isset($options['character']) ? (is_array($options['character']) ? (string)$options['character'][0] : (string)$options['character']) : '';
 if ($characterSlug !== '' && !radar_character_valid($characterSlug)) {
     fwrite(STDERR, 'Personagem desconhecido: ' . $characterSlug . ' (use ' . implode(', ', array_keys(radar_characters())) . ")\n");
     exit(2);
 }
 $first = static fn(mixed $value): string => is_array($value) ? (string)($value[0] ?? '') : (string)$value;
-if (!isset($options['reference']) && !isset($options['primary'])) {
+if (!isset($options['reference']) && !isset($options['primary']) && !isset($options['voice']) && !isset($options['default'])) {
     fwrite(STDERR, "Uso: php bin/import-character.php --reference=ARQUIVO [--primary=ARQUIVO] [--label=TEXTO]\n");
     exit(2);
 }
@@ -43,7 +46,7 @@ try {
         $media = radar_media_save_bytes($bytes, 'reference', [
             'character' => $characterSlug,
             'role' => isset($options['role']) ? $first($options['role']) : 'sheet',
-            'label' => isset($options['label']) && !isset($options['primary']) ? $first($options['label']) : (isset($options['role']) && $first($options['role']) === 'photo' ? 'Foto' : 'Folha de referência'),
+            'label' => isset($options['label']) && !isset($options['primary']) ? $first($options['label']) : (radar_reference_slots()[isset($options['role']) ? $first($options['role']) : 'sheet']['label'] ?? 'Folha de referência'),
             'note' => 'Imagem de referência importada pela linha de comando.',
         ]);
         printf("Imagem de referência salva (%dx%d, %s).\n", $media['width'], $media['height'], $media['role']);
@@ -60,6 +63,18 @@ try {
             'note' => 'Imagem do personagem importada pela linha de comando.',
         ]);
         printf("Imagem principal do personagem salva (%dx%d).\n", $media['width'], $media['height']);
+    }
+    if (isset($options['voice'])) {
+        $bytes = @file_get_contents($first($options['voice']));
+        if ($bytes === false) {
+            throw new InvalidArgumentException('Não foi possível ler o áudio de referência.');
+        }
+        $media = radar_voice_save_bytes($bytes, $characterSlug, isset($options['label']) ? $first($options['label']) : 'Áudio de referência');
+        printf("Áudio de referência salvo (%s, %d bytes).\n", $media['mime'], $media['bytes']);
+    }
+    if (isset($options['default'])) {
+        radar_character_default_set($characterSlug !== '' ? $characterSlug : radar_character_default_slug());
+        printf("Personagem padrão: %s.\n", radar_character_get($characterSlug)['name']);
     }
 } catch (Throwable $error) {
     fwrite(STDERR, 'Erro: ' . $error->getMessage() . "\n");

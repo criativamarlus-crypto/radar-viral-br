@@ -59,7 +59,7 @@ function radar_tv_reaction_bank(string $group): array
 {
     return match ($group) {
         'politica' => ['Na minha opinião, vale ler a matéria completa antes de tirar conclusão.', 'Opinião minha, tá? Em política, a gente separa o que foi dito do que foi comprovado.', 'Na minha opinião, é assunto para acompanhar com calma e fonte confiável.', 'Eu não sou de falar da vida de ninguém... prefiro ficar com o que foi publicado.', 'Opinião minha: política pede atenção e menos pressa para opinar.', 'Na minha opinião, o melhor é conferir a fonte original.'],
-        'financas' => ['Isso é informação, não é recomendação financeira. Cada caso é um caso.', 'Na minha opinião, informação ajuda. Mas isso não é recomendação financeira.', 'Eu não disse? Dinheiro pede atenção. Não é recomendação financeira.', 'Informação é uma coisa, decisão é outra. Cada caso é um caso.', 'Isso aqui vai dar pano pra manga! Mas não é recomendação financeira.', 'Na minha opinião, vale entender antes de decidir. Não é recomendação financeira.'],
+        'financas' => ['Isso é informação, não é recomendação financeira. Cada caso é um caso.', 'Na minha opinião, informação ajuda. Mas isso não é recomendação financeira.', 'Eu não disse? Dinheiro pede atenção. Não é recomendação financeira.', 'Informação é uma coisa, decisão é outra. Não é recomendação financeira.', 'Isso aqui vai dar pano pra manga! Mas não é recomendação financeira.', 'Na minha opinião, vale entender antes de decidir. Não é recomendação financeira.'],
         'internacional' => ['Na minha opinião, é bom entender o que acontece lá fora, que sempre chega aqui.', 'Rapaz, na minha opinião, o mundo dá voltas e a gente precisa acompanhar.', 'Opinião minha, tá? Vale conferir a matéria para entender o contexto.', 'Isso aqui vai dar pano pra manga lá fora e aqui também!', 'Na minha opinião, notícia de fora a gente precisa ler com calma.', 'Eu não disse? O mundo sempre tem história pra contar.'],
         'sensivel' => ['É uma notícia triste, e a minha opinião é que ela merece respeito.', 'Na minha opinião, o momento é de respeito e de cuidado com quem está envolvido.', 'Opinião minha: antes de comentar, vale lembrar que há pessoas por trás da notícia.', 'Na minha opinião, cabe a gente acompanhar com cuidado e sem especular.', 'Meus sentimentos a quem está passando por isso.', 'Opinião minha: respeito acima de tudo.'],
         default => ['Eu não disse? Esse assunto vai render o dia inteiro.', 'Isso aqui vai dar pano pra manga, pode anotar!', 'Eu não sou de falar da vida de ninguém... mas que rende assunto, rende!', 'Na minha opinião, essa história ainda vai ser muito comentada.', 'Minha filha, na minha opinião, essa vai render conversa.', 'Opinião minha, tá? Achei essa história de arrancar o fôlego.', 'Rapaz, na minha opinião, o povo vai falar disso por muito tempo.', 'Confesso que levantei a sobrancelha. Opinião minha, hein?', 'Segura esse babado! Na minha opinião, é assunto para o dia todo.', 'Na minha opinião, tem história que cai no gosto do povo, e essa caiu.', 'Opinião minha: notícia assim anima qualquer conversa.', 'Eu juro que li duas vezes. Opinião minha, é curiosa!'],
@@ -727,6 +727,17 @@ function radar_tv_scenes_view(array $row, array $direction, array $templateTexts
         ];
     }
     return ['scenes' => $scenes, 'prompts' => $prompts, 'srt' => radar_tv_srt($rows)];
+}
+
+/** The plan (emotion, camera, gestures...) stored with the scenes of a script, for prompts built from edited text. @return array<int,array<string,mixed>> */
+function radar_tv_plan_of_script(int $scriptId): array
+{
+    $labels = ['gancho' => 'Gancho', 'desenvolvimento' => 'Desenvolvimento', 'reacao' => 'Reação e fechamento'];
+    return array_map(static fn(array $scene): array => [
+        'number' => (int)$scene['scene_number'], 'role' => (string)$scene['role'], 'role_label' => $labels[(string)$scene['role']] ?? 'Cena', 'objective' => (string)$scene['objective'], 'duration_seconds' => (int)$scene['duration_seconds'],
+        'emotion' => (string)$scene['emotion'], 'expression' => (string)$scene['expression'], 'gestures' => (string)$scene['gestures'], 'camera' => (string)$scene['camera'], 'camera_movement' => (string)$scene['camera_movement'],
+        'continuity' => (string)$scene['continuity'], 'caption' => (string)$scene['caption'], 'screen_title' => (string)$scene['screen_title'],
+    ], radar_tv_scene_rows($scriptId));
 }
 
 /* ---------- editing ---------- */

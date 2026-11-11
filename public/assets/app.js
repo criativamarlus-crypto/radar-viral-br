@@ -17,7 +17,12 @@
     let data = null;
     try { data = await response.json(); } catch (_) { /* non-JSON error page */ }
     if (response.status === 401) { location.href = 'login.php'; throw new Error('Sessão expirada.'); }
-    if (!response.ok) throw new Error((data && data.error) || `Erro ${response.status}`);
+    if (!response.ok) {
+      const error = new Error((data && data.error) || `Erro ${response.status}`);
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
     return data || {};
   }
   window.RadarApi = api;
@@ -93,18 +98,62 @@
     reactNewsId = Number(newsId);
     $('#react-news-title').textContent = title || '';
     $('#react-error').hidden = true;
+    if ($('#react-duplicates')) $('#react-duplicates').hidden = true;
+    syncReactCharacter();
     dialog.showModal();
-    $('#react-scenes')?.focus();
+    $('#react-character')?.focus();
   }
+  /** A TV character always makes three scenes: the number of scenes is not a choice for her. */
+  function syncReactCharacter() {
+    const select = $('#react-character');
+    const tv = select ? select.selectedOptions[0]?.dataset.format === 'tv3' : false;
+    if ($('#react-scenes')) $('#react-scenes').disabled = tv;
+    if ($('#react-tv-hint')) $('#react-tv-hint').hidden = !tv;
+  }
+  $('#react-character')?.addEventListener('change', syncReactCharacter);
   window.RadarOpenReact = openReact;
   dialog?.addEventListener('click', (event) => {
     if (event.target === dialog || event.target.closest('[data-close]')) dialog.close();
   });
-  $('#react-form')?.addEventListener('submit', async (event) => {
-    event.preventDefault();
+  /** A react already exists for this news: show it and let the user decide (open it, generate anyway, or generate an update). */
+  function showDuplicates(error) {
+    const box = $('#react-duplicates');
+    if (!box) return false;
+    box.replaceChildren();
+    const message = document.createElement('p');
+    message.textContent = error.message;
+    box.append(message);
+    for (const match of error.data.duplicates || []) {
+      const row = document.createElement('p');
+      const link = document.createElement('a');
+      link.href = 'roteiro.php?id=' + match.script_id;
+      link.textContent = 'Abrir o roteiro #' + match.script_id + ' (' + match.character_name + ')';
+      row.append(link, ' · ' + match.type_label + (match.is_update ? ' (atualização)' : ''));
+      const update = document.createElement('button');
+      update.type = 'button';
+      update.className = 'btn ghost small';
+      update.textContent = 'Gerar como atualização';
+      update.addEventListener('click', () => {
+        if (!$('#react-context').value.trim() && !window.confirm('Sem o fato novo no campo de contexto, só gero a atualização se eu achar algo novo na matéria. Continuar?')) { $('#react-context').focus(); return; }
+        submitReact({ update_of: match.script_id });
+      });
+      row.append(' ', update);
+      box.append(row);
+    }
+    const again = document.createElement('button');
+    again.type = 'button';
+    again.className = 'btn small';
+    again.textContent = 'Gerar mesmo assim';
+    again.addEventListener('click', () => submitReact({ allow_duplicate: true }));
+    box.append(again);
+    box.hidden = false;
+    return true;
+  }
+  async function submitReact(extra = {}) {
     const submit = $('#react-submit');
     setBusy(submit, true, 'Gerando…');
     $('#react-error').hidden = true;
+    if ($('#react-duplicates')) $('#react-duplicates').hidden = true;
     try {
       const result = await api({
         action: 'generate',
@@ -114,14 +163,20 @@
         layout: $('#react-layout')?.value || '',
         character: $('#react-character')?.value || '',
         context: $('#react-context').value,
+        ...extra,
       });
       location.href = 'estudio.php?news=' + reactNewsId + '&roteiro=' + result.item.id;
     } catch (error) {
+      if (error.status === 409 && error.data && error.data.duplicates && showDuplicates(error)) { setBusy(submit, false); return; }
       const box = $('#react-error');
       box.textContent = error.message;
       box.hidden = false;
       setBusy(submit, false);
     }
+  }
+  $('#react-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    submitReact();
   });
 
   /* ---- delegated actions ---- */
@@ -187,15 +242,16 @@
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       const file = $('input[type="file"]', form);
-      if (!file?.files?.length) { toast('Escolha uma imagem primeiro.', true); return; }
-      if (file.files[0].size > 5 * 1024 * 1024) { toast('A imagem deve ter até 5 MB.', true); return; }
+      if (!file?.files?.length) { toast('Escolha um arquivo primeiro.', true); return; }
+      const limit = Number(form.dataset.max || 5 * 1024 * 1024);
+      if (file.files[0].size > limit) { toast((form.dataset.maxLabel || 'A imagem deve ter até 5 MB.'), true); return; }
       const data = new FormData(form);
       data.set('action', 'upload');
       const button = $('button[type="submit"]', form);
       setBusy(button, true, 'Enviando…');
       try {
         await api(data);
-        toast('Imagem enviada.');
+        toast('Enviado.');
         setTimeout(() => location.reload(), 500);
       } catch (error) { toast(error.message, true); setBusy(button, false); }
     });

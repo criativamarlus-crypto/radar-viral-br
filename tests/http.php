@@ -245,9 +245,9 @@ try {
     check('unexpected tool arguments are refused', static fn(): bool => (json_decode($extraArgs['body'], true)['error']['code'] ?? 0) === -32602);
     $unknownTool = $call($readToken, 'apagar_tudo', []);
     check('unknown tools are refused', static fn(): bool => (json_decode($unknownTool['body'], true)['error']['code'] ?? 0) === -32602);
-    $readOnlyReact = $call($readToken, 'preparar_react', ['noticia_id' => $firstNewsId]);
+    $readOnlyReact = $call($readToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true]);
     check('a read-only token cannot prepare a react', static fn(): bool => (json_decode($readOnlyReact['body'], true)['result']['isError'] ?? false) === true && str_contains($readOnlyReact['body'], 'preparar react'));
-    $react = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'duracao_segundos' => 20]);
+    $react = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true, 'duracao_segundos' => 20]);
     $reactData = json_decode(json_decode($react['body'], true)['result']['content'][0]['text'] ?? '{}', true);
     check('a react-scoped token prepares a react with fixed-character prompt, fact-check notes and source', static fn(): bool => ($reactData['origem'] ?? '') !== '' && str_contains($reactData['prompt_de_video'] ?? '', 'recurring fictional Brazilian character') && ($reactData['link'] ?? '') === 'https://http-fixture.example.com/gol' && isset($reactData['conferir_antes_de_gravar']));
     $listedReacts = json_decode(json_decode($call($readToken, 'listar_reacts', [])['body'], true)['result']['content'][0]['text'] ?? '{}', true);
@@ -265,11 +265,11 @@ try {
     $post = static fn(array $payload): array => localRequest('api.php', 'POST', json_encode($payload, JSON_THROW_ON_ERROR), ['Content-Type: application/json', 'X-CSRF-Token: ' . $writeCsrf]);
     $saved = $post(['action' => 'save_news', 'id' => $firstNewsId, 'saved' => true]);
     check('saving a story via the API works and shows up in the saved page', static fn(): bool => $saved['status'] === 200 && str_contains(localRequest('salvas.php')['body'], 'Gol decisivo'));
-    $generated = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'duration' => 25, 'tone' => 'bem-humorado', 'context' => '']);
+    $generated = $post(['action' => 'generate', 'allow_duplicate' => true, 'news_id' => $firstNewsId, 'duration' => 25, 'tone' => 'bem-humorado', 'context' => '']);
     $generatedData = json_decode($generated['body'], true);
     check('GERAR REACT returns headlines, hook, script, commentary, CTA and the video prompt', static fn(): bool => $generated['status'] === 201 && count($generatedData['item']['headlines']) === 3 && $generatedData['item']['hook'] !== '' && $generatedData['item']['script'] !== '' && $generatedData['item']['commentary'] !== '' && $generatedData['item']['cta'] !== '' && str_contains($generatedData['item']['video_prompt'], '9:16'));
     $scriptId = $generatedData['item']['id'] ?? 0;
-    check('invalid generation requests are rejected with readable errors', static fn(): bool => $post(['action' => 'generate', 'news_id' => $firstNewsId, 'duration' => 99])['status'] === 400 && $post(['action' => 'generate', 'news_id' => 0, 'duration' => 25])['status'] === 400);
+    check('invalid generation requests are rejected with readable errors', static fn(): bool => $post(['action' => 'generate', 'allow_duplicate' => true, 'news_id' => $firstNewsId, 'duration' => 99])['status'] === 400 && $post(['action' => 'generate', 'allow_duplicate' => true, 'news_id' => 0, 'duration' => 25])['status'] === 400);
     $txt = localRequest('api.php?action=script&id=' . $scriptId . '&format=txt');
     check('a script exports as a downloadable text file', static fn(): bool => $txt['status'] === 200 && str_contains($txt['headers']['content-type'] ?? '', 'text/plain') && str_contains($txt['body'], 'PROMPT DE VÍDEO'));
     $roteiroPage = localRequest('roteiro.php?id=' . $scriptId);
@@ -278,7 +278,7 @@ try {
     check('editing a script through the form redirects back and rebuilds the prompt', static fn(): bool => $edit['status'] === 303 && str_contains(radar_script_get($scriptId)['video_prompt'], 'Gancho editado pelo usuário'));
     $editNoCsrf = localRequest('roteiro.php', 'POST', formBody(['id' => $scriptId, 'hook' => 'Invasor']), FORM);
     check('the script form without CSRF changes nothing', static fn(): bool => $editNoCsrf['status'] === 303 && !str_contains(radar_script_get($scriptId)['hook'], 'Invasor'));
-    $generatedCard = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'duration' => 25, 'tone' => 'direto', 'layout' => 'caption_card']);
+    $generatedCard = $post(['action' => 'generate', 'allow_duplicate' => true, 'news_id' => $firstNewsId, 'duration' => 25, 'tone' => 'direto', 'layout' => 'caption_card']);
     $generatedCardData = json_decode($generatedCard['body'], true);
     check('GERAR REACT accepts the video template and returns the matching prompt', static fn(): bool => $generatedCard['status'] === 201 && ($generatedCardData['item']['layout'] ?? '') === 'caption_card' && str_contains($generatedCardData['item']['video_prompt'] ?? '', 'caption band') && ($generatedData['item']['layout'] ?? '') === 'caption_card');
     $promptCard = $post(['action' => 'video_prompt', 'spoken' => 'Fala', 'expression' => 'serio', 'scene' => 'carro', 'duration' => 20, 'headline' => 'H', 'source' => 'S', 'layout' => 'caption_card']);
@@ -297,13 +297,13 @@ try {
     check('the "Gerar react" dialog lists the video templates', static fn(): bool => str_contains($newsWithDialog['body'], 'id="react-layout"') && str_contains($newsWithDialog['body'], 'Vídeo em tela cheia, frase de impacto no topo e card da notícia'));
     $scriptCardPage = localRequest('roteiro.php?id=' . ($generatedCardData['item']['id'] ?? 0));
     check('the script page lets you change the template and shows the matching prompt', static fn(): bool => str_contains($scriptCardPage['body'], 'name="layout"') && str_contains($scriptCardPage['body'], 'caption band is composed'));
-    $reactTemplate = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'modelo_video' => 'caption_card']);
+    $reactTemplate = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true, 'modelo_video' => 'caption_card']);
     $reactTemplateData = json_decode(json_decode($reactTemplate['body'], true)['result']['content'][0]['text'] ?? '{}', true);
-    $reactBadTemplate = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'modelo_video' => 'inventado']);
+    $reactBadTemplate = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true, 'modelo_video' => 'inventado']);
     check('the MCP prepares a react for a chosen template and refuses an unknown one', static fn(): bool => str_contains($reactTemplateData['prompt_de_video'] ?? '', 'caption band') && (json_decode($reactBadTemplate['body'], true)['error']['code'] ?? 0) === -32602);
-    $scenesGenerated = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'scenes' => 3, 'tone' => 'direto']);
+    $scenesGenerated = $post(['action' => 'generate', 'allow_duplicate' => true, 'news_id' => $firstNewsId, 'scenes' => 3, 'tone' => 'direto']);
     $scenesData = json_decode($scenesGenerated['body'], true)['item'] ?? [];
-    $badScenes = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'scenes' => 8]);
+    $badScenes = $post(['action' => 'generate', 'allow_duplicate' => true, 'news_id' => $firstNewsId, 'scenes' => 8]);
     check('GERAR REACT takes the number of scenes and returns one prompt per scene', static fn(): bool => $scenesGenerated['status'] === 201 && ($scenesData['scenes'] ?? 0) === 3 && is_array($scenesData['video_prompts'] ?? null) && count($scenesData['video_prompts']) >= 1 && count($scenesData['video_prompts']) <= 3
         && str_contains($scenesData['video_prompts'][0] ?? '', 'REFERENCE IMAGE') && $badScenes['status'] === 400);
     $promptScenes = $post(['action' => 'video_prompt', 'spoken' => implode(' ', array_map(static fn(int $i): string => 'Parte ' . $i . ' ' . implode(' ', array_fill(0, 18, 'fala')) . ' fim.', range(1, 6))), 'expression' => 'serio', 'scene' => 'casa', 'scenes' => 3, 'headline' => 'H', 'source' => 'S']);
@@ -324,7 +324,7 @@ try {
         && !str_contains($studioLook['body'], 'id="st-copy-template"') && !str_contains($studioLook['body'], 'id="st-copy-board"') && !str_contains($studioLook['body'], 'id="st-copy-news"') && preg_match('#src="assets/studio-pack\.js\?v=[a-f0-9]{10}"#', $studioLook['body']) === 1 && str_contains($studioLook['body'], '"moods":{"serious"'));
     $lookScript = localRequest('roteiro.php?id=' . ($scenesData['id'] ?? 0));
     check('the script page shows the look and lets it be edited or drawn again', static fn(): bool => str_contains($lookScript['body'], 'name="outfit"') && str_contains($lookScript['body'], 'name="reroll_direction"') && str_contains($lookScript['body'], 'Ângulo:') && str_contains($lookScript['body'], 'Visual:'));
-    $mcpLook = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 2]);
+    $mcpLook = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true, 'cenas' => 2]);
     $mcpLookData = json_decode(json_decode($mcpLook['body'], true)['result']['content'][0]['text'] ?? '{}', true);
     check('the MCP react brings the look of the news and says the face never changes', static fn(): bool => ($mcpLookData['visual_desta_noticia']['roupa'] ?? '') !== '' && ($mcpLookData['visual_desta_noticia']['o_rosto_nunca_muda'] ?? false) === true && str_contains($mcpLookData['prompt_de_video'] ?? '', 'WARDROBE'));
     $claraPage = localRequest('personagem.php?c=clara');
@@ -334,7 +334,7 @@ try {
     $afterSave = localRequest('personagem.php?c=clara');
     check('the name and categories of a character can be saved from the panel', static fn(): bool => in_array($saveCharacter['status'], [302, 303], true) && str_contains($afterSave['body'], 'name="categories[]" value="Finanças" checked') && !str_contains($afterSave['body'], 'name="categories[]" value="Economia" checked'));
     localRequest('personagem.php', 'POST', formBody(['csrf' => $writeCsrf, 'slug' => 'clara', 'name' => 'Clara Contas', 'categories' => ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia']]), FORM);
-    $genClara = $post(['action' => 'generate', 'news_id' => $firstNewsId, 'scenes' => 2, 'character' => 'clara']);
+    $genClara = $post(['action' => 'generate', 'allow_duplicate' => true, 'news_id' => $firstNewsId, 'scenes' => 2, 'character' => 'clara']);
     $genClaraData = json_decode($genClara['body'], true)['item'] ?? [];
     check('GERAR REACT takes the character and returns her name and her prompt', static fn(): bool => $genClara['status'] === 201 && ($genClaraData['character'] ?? '') === 'clara' && ($genClaraData['character_name'] ?? '') === 'Clara Contas' && str_contains($genClaraData['video_prompt'] ?? '', 'Brazilian woman'));
     $promptClara = $post(['action' => 'video_prompt', 'character' => 'clara', 'spoken' => 'Oi. Tchau.', 'expression' => 'serio', 'scene' => 'casa', 'scenes' => 1, 'headline' => 'H', 'source' => 'S']);
@@ -344,9 +344,9 @@ try {
     $studioChar = localRequest('estudio.php?news=' . $firstNewsId);
     check('the Studio offers the characters, their sheets and the one suggested for the news', static fn(): bool => str_contains($studioChar['body'], 'id="st-character"') && str_contains($studioChar['body'], '"characterList":[{"slug":"beto"') && str_contains($studioChar['body'], '"slug":"clara"') && str_contains($studioChar['body'], '"suggestedCharacter":"'));
     check('the "Gerar react" dialog lets you pick who speaks, automatic by default', static fn(): bool => str_contains(localRequest('noticias.php?janela=24')['body'], 'id="react-character"') && str_contains(localRequest('noticias.php?janela=24')['body'], 'Automático (pela categoria da notícia)'));
-    $mcpClara = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 1, 'personagem' => 'clara']);
+    $mcpClara = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true, 'cenas' => 1, 'personagem' => 'clara']);
     $mcpClaraData = json_decode(json_decode($mcpClara['body'], true)['result']['content'][0]['text'] ?? '{}', true);
-    $mcpBadCharacter = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'personagem' => 'inventado']);
+    $mcpBadCharacter = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true, 'personagem' => 'inventado']);
     check('the MCP accepts the character and refuses an unknown one', static fn(): bool => ($mcpClaraData['personagem'] ?? '') === 'Clara Contas' && str_contains($mcpClaraData['prompt_de_video'] ?? '', 'Brazilian woman') && (json_decode($mcpBadCharacter['body'], true)['error']['code'] ?? 0) === -32602);
     $templatePrompt = $post(['action' => 'video_prompt', 'character' => 'beto', 'spoken' => 'Fala.', 'expression' => 'serio', 'scene' => 'carro', 'scenes' => 1, 'headline' => 'Manchete real da fonte', 'source' => 'G1', 'layout' => 'caption_card', 'caption' => 'Frase de impacto do teste', 'source_line' => 'G1 • 10/11/2026']);
     check('the Studio sends the impact phrase and the source line, and they land in the template brief', static fn(): bool => $templatePrompt['status'] === 200 && str_contains(json_decode($templatePrompt['body'], true)['prompt'] ?? '', '"FRASE DE IMPACTO DO TESTE"') && str_contains(json_decode($templatePrompt['body'], true)['prompt'] ?? '', '"G1 • 10/11/2026"') && str_contains(json_decode($templatePrompt['body'], true)['prompt'] ?? '', 'TEMPLATE IMAGE'));
@@ -369,6 +369,7 @@ try {
         $body .= '--' . $boundary . "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\nContent-Type: $mime\r\n\r\n" . $bytes . "\r\n--" . $boundary . "--\r\n";
         return [$body, ['Content-Type: multipart/form-data; boundary=' . $boundary]];
     };
+    require __DIR__ . '/http_tv.php';
     [$upBody, $upHeaders] = $multipart(['action' => 'upload', 'kind' => 'character', 'label' => 'Teste'], 'test.php.png', 'image/png', $png);
     $upload = localRequest('api.php', 'POST', $upBody, array_merge($upHeaders, ['X-CSRF-Token: ' . $writeCsrf]));
     $uploadData = json_decode($upload['body'], true);
@@ -380,9 +381,9 @@ try {
     $scenePageWithSheet = localRequest('roteiro.php?id=' . ($scenesData['id'] ?? 0));
     check('after uploading the reference sheet the Studio and the script page offer it for download with the prompts', static fn(): bool => $sheetUpload['status'] === 201 && str_contains($studioWithSheet['body'], '"references":{"beto":[{"id":"') && str_contains($studioWithSheet['body'], '"role":"sheet"') && str_contains($studioWithSheet['body'], 'id="st-scenes"') && str_contains($studioWithSheet['body'], 'id="st-prompts"')
         && str_contains($scenePageWithSheet['body'], 'Anexe esta imagem em cada cena') && str_contains($scenePageWithSheet['body'], 'download=1'));
-    $mcpScenes = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 2]);
+    $mcpScenes = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true, 'cenas' => 2]);
     $mcpScenesData = json_decode(json_decode($mcpScenes['body'], true)['result']['content'][0]['text'] ?? '{}', true);
-    $mcpBadScenes = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'cenas' => 9]);
+    $mcpBadScenes = $call($reactToken, 'preparar_react', ['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true, 'cenas' => 9]);
     check('the MCP prepares a react by scenes, one prompt per scene, and refuses a wrong count', static fn(): bool => ($mcpScenesData['cenas'] ?? 0) >= 1 && ($mcpScenesData['cenas'] ?? 9) <= 2 && count($mcpScenesData['prompts_de_video_por_cena'] ?? []) === ($mcpScenesData['cenas'] ?? -1)
         && str_contains($mcpScenesData['imagem_de_referencia'] ?? '', 'folha de referência') && (json_decode($mcpBadScenes['body'], true)['error']['code'] ?? 0) === -32602);
     $post(['action' => 'media_delete', 'id' => json_decode($sheetUpload['body'], true)['media']['id'] ?? '']);
@@ -400,7 +401,7 @@ try {
     $traversal = localRequest('media.php?id=..%2Fconfig.php');
     check('media endpoint rejects traversal to private configuration', static fn(): bool => $traversal['status'] === 404 && !str_contains($traversal['body'], 'admin_password_hash'));
     $personagem = localRequest('personagem.php');
-    check('"Meu Personagem" shows the immutable master prompt and the uploaded reference', static fn(): bool => str_contains($personagem['body'], 'Padrões do vídeo (fixos)') && str_contains($personagem['body'], 'Sem sorrir depois da fala') && str_contains($personagem['body'], 'Prompt mestre (imutável)') && str_contains($personagem['body'], $mediaId) && str_contains($personagem['body'], 'readonly'));
+    check('"Meu Personagem" shows the immutable master prompt and the uploaded reference', static fn(): bool => str_contains($personagem['body'], 'Padrões do vídeo (fixos)') && str_contains($personagem['body'], 'Sem sorrir depois da fala') && str_contains($personagem['body'], 'Descrição que vai para o prompt') && str_contains($personagem['body'], $mediaId) && str_contains($personagem['body'], 'readonly'));
 
     /* ---- forms: sources, AI settings, integrations ---- */
     $sourceForm = localRequest('fontes.php', 'POST', formBody(['csrf' => $writeCsrf, 'op' => 'create', 'name' => 'Nova Fonte', 'url' => 'https://nova.example.com/rss', 'category' => 'Economia', 'region' => 'BR', 'weight' => '1.1']), FORM);
@@ -491,7 +492,7 @@ try {
     $mcpWith = static fn(string $token, string $payload): array => localRequest('mcp.php', 'POST', $payload, ['Content-Type: application/json', 'Authorization: Bearer ' . $token], false);
     $oauthList = $mcpWith($tokenJson['access_token'] ?? '', $rpc(2, 'tools/list'));
     check('the OAuth access token works on the MCP endpoint', static fn(): bool => $oauthList['status'] === 200 && count(json_decode($oauthList['body'], true)['result']['tools'] ?? []) === 7);
-    $oauthReact = json_decode($mcpWith($tokenJson['access_token'], $rpc(3, 'tools/call', ['name' => 'preparar_react', 'arguments' => (object)['noticia_id' => $firstNewsId]]))['body'], true);
+    $oauthReact = json_decode($mcpWith($tokenJson['access_token'], $rpc(3, 'tools/call', ['name' => 'preparar_react', 'arguments' => (object)['noticia_id' => $firstNewsId, 'gerar_mesmo_assim' => true]]))['body'], true);
     check('with the react scope approved, preparar_react works through OAuth', static fn(): bool => ($oauthReact['result']['isError'] ?? true) === false);
     check('replaying a used authorization code fails and revokes the tokens it produced', static fn(): bool => json_decode($tokenPost(['code' => $secondCallback['code'] ?? ''] + $exchangeFields)['body'], true)['error'] === 'invalid_grant' && $mcpWith($tokenJson['access_token'], $rpc(4, 'ping'))['status'] === 401);
     $readOnlyApproval = localRequest('oauth-authorize.php', 'POST', $consentFields($clientId, 'approve', []), FORM);

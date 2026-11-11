@@ -36,7 +36,8 @@ radar_page_start('Roteiro de react', 'roteiros.php');
         <p><?= radar_h($script['character_name']) ?> · <?= radar_h($script['mode_label']) ?> · <?= count($script['video_prompts']) ?> <?= count($script['video_prompts']) === 1 ? 'cena' : 'cenas' ?> · ~<?= (int)$script['estimated_seconds'] ?> s falados · tom <?= radar_h($script['tone']) ?></p></div>
     <div class="row-actions">
         <a class="btn primary" href="estudio.php?roteiro=<?= (int)$script['id'] ?>">Abrir no Estúdio</a>
-        <a class="btn ghost" href="api.php?action=script&amp;id=<?= (int)$script['id'] ?>&amp;format=txt">Exportar .txt</a>
+        <a class="btn ghost" href="api.php?action=script&amp;id=<?= (int)$script['id'] ?>&amp;format=txt">Baixar roteiro (.txt)</a>
+        <?php if ($script['subtitles_srt'] !== ''): ?><a class="btn ghost" href="api.php?action=script&amp;id=<?= (int)$script['id'] ?>&amp;format=srt">Baixar legendas (.srt)</a><?php endif; ?>
         <?php if ($script['news_id'] !== null): ?><a class="btn ghost" href="noticia.php?id=<?= (int)$script['news_id'] ?>">Ver notícia</a><?php endif; ?>
     </div>
 </div>
@@ -44,11 +45,107 @@ radar_page_start('Roteiro de react', 'roteiros.php');
 <div class="panel"><strong><?= radar_h($script['news_title']) ?></strong><br>
     <a href="<?= radar_h($script['news_url']) ?>" target="_blank" rel="noopener noreferrer"><?= radar_h($script['news_source']) ?> — conferir a matéria original <?= radar_icon('ext') ?></a></div>
 
+<?php if ($script['update_of'] !== null): ?>
+    <div class="notice info section"><strong>Atualização</strong> do <a href="roteiro.php?id=<?= (int)$script['update_of'] ?>">roteiro #<?= (int)$script['update_of'] ?></a>: este vídeo usa só os fatos novos.</div>
+<?php endif; ?>
 <?php if ($script['warnings'] !== [] || $script['fact_check'] !== []): ?>
     <div class="warnings section">
         <?php foreach ($script['warnings'] as $warning): ?><div class="notice warn" role="status"><?= radar_h($warning) ?></div><?php endforeach; ?>
         <?php if ($script['fact_check'] !== []): ?><div class="notice info"><strong>Conferir antes de gravar:</strong><ul><?php foreach ($script['fact_check'] as $note): ?><li><?= radar_h($note) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
     </div>
+<?php endif; ?>
+
+<?php if ($script['format'] === 'tv3'): ?>
+<?php
+$facts = $script['facts'];
+$factGroups = ['verified' => 'O que a fonte reporta', 'attributed' => 'Alegações atribuídas a alguém', 'uncertain' => 'Incertezas (não viram fato)', 'new' => 'Fatos novos desta atualização'];
+$slotLabels = array_map(static fn(array $slot): string => $slot['label'], radar_reference_slots());
+?>
+<div class="detail">
+    <form method="post" action="roteiro.php" class="stack">
+        <input type="hidden" name="csrf" value="<?= radar_h($csrf) ?>"><input type="hidden" name="id" value="<?= (int)$script['id'] ?>">
+        <div class="panel">
+            <h2>Título e publicação</h2>
+            <p class="hint"><?= radar_h($script['character_name']) ?> · id <code><?= radar_h($script['character_id']) ?></code> · versão <?= (int)$script['character_version'] ?> do cadastro<?= $script['strategy'] !== '' ? ' · estratégia: ' . radar_h($script['strategy']) : '' ?></p>
+            <label>Título do vídeo<input name="video_title" maxlength="140" value="<?= radar_h($script['video_title']) ?>"></label>
+            <label>Legenda de publicação<textarea name="publication_caption" rows="5" maxlength="600" id="f-caption"><?= radar_h($script['publication_caption']) ?></textarea></label>
+            <p><button type="button" class="btn ghost small" data-copy="f-caption">Copiar legenda</button></p>
+            <?php foreach ($script['headlines'] as $index => $headline): ?>
+                <div class="headline-option"><span id="hl-<?= $index ?>"><?= radar_h($headline) ?></span><button type="button" class="btn ghost small" data-copy="hl-<?= $index ?>"><?= radar_icon('copy') ?>Copiar</button></div>
+            <?php endforeach; ?>
+        </div>
+        <?php foreach ($script['scenes_data'] as $scene): $n = (int)$scene['number']; ?>
+            <div class="panel script-block">
+                <div class="head"><span>Cena <?= $n ?> de 3 — <?= radar_h($scene['role_label']) ?> · <?= (int)$scene['duration_seconds'] ?> s · <?= (int)$scene['words'] ?> palavras</span>
+                    <span><button type="button" class="btn ghost small" data-copy="scene-prompt-<?= $n ?>">Copiar prompt da cena <?= $n ?></button>
+                    <button type="button" class="btn small" data-act="scene_regenerate" data-id="<?= (int)$script['id'] ?>" data-scene="<?= $n ?>" data-busy="Refazendo…" data-confirm="Refazer só a cena <?= $n ?>? As outras cenas ficam como estão.">Refazer só esta cena</button></span></div>
+                <p class="hint"><strong>Objetivo:</strong> <?= radar_h($scene['objective']) ?></p>
+                <label>Fala exata da cena <?= $n ?><textarea name="scene_<?= $n ?>" rows="3" maxlength="420" id="f-scene-<?= $n ?>"><?= radar_h($scene['narration']) ?></textarea></label>
+                <div class="field-row">
+                    <label>Título na tela<input name="scene_<?= $n ?>_title" maxlength="60" value="<?= radar_h($scene['screen_title']) ?>"></label>
+                    <label>Legenda (sincronizada com a fala)<input value="<?= radar_h($scene['caption']) ?>" readonly></label>
+                </div>
+                <div class="pills">
+                    <span class="pill">Tom: <?= radar_h($scene['emotion']) ?></span><span class="pill">Expressão: <?= radar_h($scene['expression_label']) ?></span><span class="pill"><?= radar_h($scene['camera_label']) ?></span>
+                </div>
+                <p class="hint">Gestos: <?= radar_h($scene['gestures']) ?> · Câmera: <?= radar_h($scene['camera_movement']) ?></p>
+                <p class="hint">Continuidade: <?= radar_h($scene['continuity']) ?></p>
+                <p class="hint">Referência visual: <?= radar_h(implode(' · ', $scene['visual_reference'])) ?: 'nenhuma imagem cadastrada' ?></p>
+                <textarea id="scene-prompt-<?= $n ?>" rows="10" readonly class="mono"><?= radar_h($scene['muse_prompt']) ?></textarea>
+            </div>
+        <?php endforeach; ?>
+        <div class="panel">
+            <div class="field-row">
+                <label>Modelo do vídeo<select name="layout"><?php foreach (radar_video_templates() as $key => $template): ?><option value="<?= radar_h($key) ?>"<?= $script['layout'] === $key ? ' selected' : '' ?>><?= radar_h($template['label']) ?></option><?php endforeach; ?></select></label>
+                <label>Iluminação e clima<input name="lighting" maxlength="240" value="<?= radar_h($script['direction']['lighting']) ?>"></label>
+            </div>
+            <p class="hint">Roupa e joias da personagem são fixas (vêm da imagem-mestre). Só a luz, a câmera e os gestos mudam.</p>
+            <label class="check"><input type="checkbox" name="reroll_direction" value="1"> Sortear gestos e câmera novos ao salvar</label>
+            <button class="btn primary" type="submit">Salvar alterações e refazer os prompts</button>
+        </div>
+    </form>
+
+    <aside class="stack">
+        <div class="panel">
+            <h2>Fatos usados</h2>
+            <?php foreach ($factGroups as $key => $label): if (empty($facts[$key])) { continue; } ?>
+                <h3><?= radar_h($label) ?></h3><ul><?php foreach ((array)$facts[$key] as $item): ?><li><?= radar_h($item) ?></li><?php endforeach; ?></ul>
+            <?php endforeach; ?>
+            <?php if (!empty($facts['opinions'])): ?><h3>Opinião da apresentadora</h3><ul><?php foreach ((array)$facts['opinions'] as $item): ?><li><?= radar_h($item) ?></li><?php endforeach; ?></ul><?php endif; ?>
+            <p class="hint"><?= !empty($facts['incomplete']) ? 'Só havia a manchete: confirme os fatos na matéria antes de gravar. ' : '' ?>A criatividade fica na apresentação; os fatos vêm da matéria<?= !empty($facts['article_chars']) ? ' (' . (int)$facts['article_chars'] . ' caracteres do texto foram lidos na fonte)' : '' ?>.</p>
+        </div>
+        <div class="panel">
+            <div class="head"><h2>Anexe estas imagens em cada cena</h2></div>
+            <?php if ($references !== []): ?>
+                <p class="hint">A imagem-mestre vale mais do que qualquer texto. Se a ferramenta aceitar poucas imagens, anexe a mestre primeiro.</p>
+                <div class="reference-list">
+                    <?php foreach ($references as $reference): ?>
+                        <figure><img src="media.php?id=<?= radar_h($reference['id']) ?>" alt="<?= radar_h($slotLabels[$reference['role']] ?? 'Referência') ?>" loading="lazy"><figcaption><?= radar_h($slotLabels[$reference['role']] ?? 'Referência') ?><br><a class="btn ghost small" href="media.php?id=<?= radar_h($reference['id']) ?>&amp;download=1">Baixar</a></figcaption></figure>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <div class="notice warn">Faltam as imagens de <?= radar_h($script['character_name']) ?>. Cadastre em <a href="personagem.php?c=<?= radar_h($script['character']) ?>">Meus Personagens</a> para anexar aqui.</div>
+            <?php endif; ?>
+            <?php $voice = radar_character_voice_asset($script['character']); if ($voice !== null): ?>
+                <p class="hint">Áudio de referência da voz (se a ferramenta aceitar): <a href="media.php?id=<?= radar_h($voice['id']) ?>&amp;download=1">baixar</a></p>
+            <?php endif; ?>
+        </div>
+        <div class="panel script-block">
+            <div class="head"><span>Todos os prompts do Muse</span><button type="button" class="btn primary small" data-copy="video-prompt">Copiar todos</button></div>
+            <textarea id="video-prompt" rows="6" readonly class="mono"><?= radar_h($script['video_prompt']) ?></textarea>
+        </div>
+        <div class="panel script-block">
+            <div class="head"><span>Texto falado completo · ~<?= (int)$script['estimated_seconds'] ?> s</span><button type="button" class="btn ghost small" data-copy="spoken">Copiar</button></div>
+            <textarea id="spoken" rows="7" readonly><?= radar_h($script['spoken']) ?></textarea>
+        </div>
+        <div class="panel script-block">
+            <div class="head"><span>Legendas (SRT) · tempos estimados</span><button type="button" class="btn ghost small" data-copy="srt">Copiar</button></div>
+            <textarea id="srt" rows="8" readonly class="mono"><?= radar_h($script['subtitles_srt']) ?></textarea>
+            <p class="hint">Os textos e títulos são dados para a edição: não dependa do gerador de vídeo para escrever palavras dentro do quadro. Com o áudio pronto, troque os tempos pelos reais.</p>
+        </div>
+    </aside>
+</div>
+<?php radar_page_end(); exit; ?>
 <?php endif; ?>
 
 <div class="detail">

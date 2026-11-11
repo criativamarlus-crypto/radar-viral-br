@@ -396,9 +396,10 @@ function radar_tv_prompts(array $parts): array
             '',
             'VOICE (the same voice in every scene and every video): ' . $voice['en'],
             'LANGUAGE: Brazilian Portuguese, natural and colloquial.',
-            'DIALOGUE (spoken exactly as written, with natural lip-sync; do not add, remove, change or invent any word):',
+            'DIALOGUE (spoken in natural, colloquial Brazilian Portuguese, with lip-sync, exactly as written):',
             '"' . $chunk . '"',
             '',
+            'SPEECH RULES: she says exactly these words with natural lip-sync; do not add, remove, change or invent any word, and add no other speech.',
             $layout === 'tv_studio'
                 ? 'SCREEN TEXT: none inside the video. Titles and subtitles are added later in editing' . ($title !== '' ? ' (title for this scene: "' . $title . '"; subtitle: "' . $caption . '")' : '') . '. If a news image is attached to this prompt, show it unchanged on the big studio screen behind her, with no text on it; otherwise the screen shows soft pink and purple light. Never invent headlines or words on the screen.'
                 : $brief,

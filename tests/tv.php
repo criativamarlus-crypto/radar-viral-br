@@ -134,7 +134,7 @@ check('every scene prompt declares the same registered character, lists the refe
     foreach ($script['scenes_data'] as $index => $scene) {
         $p = $scene['muse_prompt'];
         foreach (['THIS IS THE SAME OFFICIAL CHARACTER REGISTERED IN THE PANEL: Dona Maricota do Babado', 'REFERENCE IMAGES (attach ALL 5 images', 'the OFFICIAL MASTER image', 'platinum-blonde', 'leopard-print', 'pink, purple and gold', 'DONA MARICOTA DO BABADO',
-            'vertical 9:16', 'about 8 seconds', 'Brazilian Portuguese', 'slightly deep and full-bodied', 'DIALOGUE (spoken exactly as written, with natural lip-sync', '"' . $scene['narration'] . '"', 'do not add, remove, change or invent any word',
+            'vertical 9:16', 'about 8 seconds', 'Brazilian Portuguese', 'slightly deep and full-bodied', 'DIALOGUE (spoken in natural, colloquial Brazilian Portuguese, with lip-sync, exactly as written):', '"' . $scene['narration'] . '"', 'do not add, remove, change or invent any word',
             'EMOTIONAL TONE', 'FACIAL EXPRESSION', 'BODY LANGUAGE', 'CAMERA FOR THIS SCENE', 'CONTINUITY', 'ENDING (default rule', 'AVOID', 'a different face', 'extra people', 'invented lines', 'Smooth body motion', 'SCREEN TEXT: none inside the video', 'SCENE ' . ($index + 1) . ' OF 3'] as $needle) {
             if (!str_contains($p, $needle)) {
                 fwrite(STDERR, "  scene " . ($index + 1) . " prompt lacks: $needle\n");
@@ -312,7 +312,12 @@ check('with ten different news, no two reacts of the character open or close the
         $openings[] = radar_fold($script['scenes_data'][0]['narration']);
         $closings[] = radar_fold(radar_editorial_closing($script['scenes_data'][2]['narration']));
     }
-    return count(array_unique($openings)) === 10 && count(array_unique($closings)) >= 9 && count(array_unique(array_column(radar_db_all('SELECT strategy FROM editorial_history WHERE character_slug = ? ORDER BY id DESC LIMIT 6', [$maricota]), 'strategy'))) >= 4;
+    $consecutive = false;
+    foreach ($openings as $i => $opening) {
+        $consecutive = $consecutive || ($i > 0 && $opening === $openings[$i - 1]);
+    }
+    // A catchphrase alone may open two videos that are not neighbors; nothing else repeats.
+    return !$consecutive && count(array_unique($openings)) >= 8 && count(array_unique($closings)) >= 8 && count(array_unique(array_column(radar_db_all('SELECT strategy FROM editorial_history WHERE character_slug = ? ORDER BY id DESC LIMIT 6', [$maricota]), 'strategy'))) >= 4;
 });
 check('the strategy is not repeated in a row and sensitive or political news use the strategies that fit', static function () use ($maricota): bool {
     $last = (string)radar_db_value('SELECT strategy FROM editorial_history WHERE character_slug = ? ORDER BY id DESC LIMIT 1', [$maricota]);

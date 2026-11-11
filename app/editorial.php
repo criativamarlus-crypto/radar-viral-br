@@ -322,9 +322,14 @@ function radar_editorial_check(array $narrations, string $slug, ?int $exceptScri
     $opening = radar_editorial_plain(radar_editorial_opening($narrations[0], $phrases), $phrases);
     $lastIndex = count($narrations) - 1;
     $closing = radar_editorial_plain(radar_editorial_closing($narrations[$lastIndex]), $phrases);
-    foreach (radar_editorial_recent($slug, RADAR_EDITORIAL_WINDOW, $exceptScript) as $history) {
+    $openingRaw = radar_fold(radar_editorial_opening($narrations[0], $phrases));
+    foreach (radar_editorial_recent($slug, RADAR_EDITORIAL_WINDOW, $exceptScript) as $position => $history) {
         $sid = (int)$history['script_id'];
         $oldOpening = radar_editorial_plain((string)($history['openings'][0] ?? ''), $phrases);
+        // An opening made only of a catchphrase may come back, but never in the next videos in a row.
+        if ($opening === '' && $position < 3 && $openingRaw !== '' && $openingRaw === radar_fold((string)($history['openings'][0] ?? ''))) {
+            $issues[] = ['scene' => 1, 'kind' => 'abertura', 'with' => $sid, 'score' => 1.0, 'text' => (string)($history['openings'][0] ?? '')];
+        }
         if ($opening !== '' && $oldOpening !== '') {
             $score = radar_editorial_jaccard(radar_editorial_shingles($opening), radar_editorial_shingles($oldOpening));
             if ($opening === $oldOpening || $score >= 0.6 || (count(explode(' ', $opening)) >= 4 && $firstWords($opening, 4) === $firstWords($oldOpening, 4))) {
