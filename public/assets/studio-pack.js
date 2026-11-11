@@ -67,7 +67,7 @@
         note: reference.role === 'master' ? 'a imagem oficial: vale mais do que qualquer descrição; anexe esta primeiro' : 'só serve para manter o rosto' });
     }
     if (!tvStudio) plan.push({ kind: 'overlay', name: next() + '-camada-' + (state.template === 'caption_card' ? 'legenda-e-card' : 'noticia') + '-transparente.png', label: 'Camada transparente', note: 'vai por cima do vídeo gerado, na edição' });
-    if (state.coverId) plan.push({ kind: 'news', mediaId: state.coverId, name: next() + '-imagem-da-noticia.' + mediaExt(state.coverId), label: 'Imagem da notícia (miniatura do artigo)', note: 'vai dentro do card, com o crédito da fonte' });
+    if (state.coverId) plan.push({ kind: 'news', mediaId: state.coverId, name: next() + '-imagem-da-noticia.' + mediaExt(state.coverId), label: 'Imagem da notícia (miniatura do artigo)', note: tvStudio ? 'opcional: vai no telão do estúdio, sem texto' : 'vai dentro do card, com o crédito da fonte' });
     if (state.characterId) plan.push({ kind: 'other', mediaId: state.characterId, name: next() + '-personagem-no-estudio.' + mediaExt(state.characterId), label: 'Imagem do personagem usada no Estúdio', note: '' });
     return plan;
   }
@@ -124,7 +124,7 @@
     lines.push('   Prancha única: 00-prancha-template-e-referencias.png (o template e as referências da personagem na mesma imagem)');
     const look = state.direction;
     if (look && look.outfit) {
-      lines.push('', '2) ROUPA, CENÁRIO E ÂNGULO DESTA CENA (mudam a cada notícia: use estes, não os do vídeo anterior)',
+      lines.push('', state.template === 'tv_studio' ? '2) ROUPA, ESTÚDIO E CÂMERA DESTA CENA (roupa e joias são fixas: vêm da imagem-mestre; só a luz, a câmera e os gestos mudam)' : '2) ROUPA, CENÁRIO E ÂNGULO DESTA CENA (mudam a cada notícia: use estes, não os do vídeo anterior)',
         'Roupa: ' + look.outfit, 'Acessórios: ' + (look.accessories || 'nenhum extra'), 'Cenário: ' + (data.scenes[state.scene] || state.scene), 'Iluminação: ' + (look.lighting || '—'),
         'Ângulo desta cena: ' + (look.angles && look.angles.length ? look.angles[index % look.angles.length] : '—') + (look.gestures && look.gestures.length ? ' · gesto: ' + look.gestures[index % look.gestures.length] : ''),
         'O rosto da personagem nunca muda (vem das imagens de referência).');
@@ -142,7 +142,9 @@
     const lines = [];
     const add = (...parts) => lines.push(...parts);
     add('RADAR VIRAL BR · PACOTE COMPLETO DO REACT', SEPARATOR, '',
-      'COMO USAR: cada cena abaixo é um bloco completo (imagens, roupa e cenário, coordenadas, roteiro e prompt). A roupa e o cenário mudam a cada notícia: valem os desta notícia, não os do vídeo anterior. O template é o primeiro quadro de cada cena: a IA mantém a faixa, o título e o card e troca só a personagem do fundo. Se a ferramenta aceitar uma imagem só, use a PRANCHA (template + referências na mesma imagem).', '');
+      state.template === 'tv_studio'
+        ? 'COMO USAR: cada cena abaixo é um bloco completo (imagens, roupa e estúdio, roteiro e prompt). A imagem-mestre é a referência oficial (anexe-a primeiro): rosto, roupa e joias da personagem não mudam. Não há texto dentro do vídeo: título e legendas entram na edição.' + ' ' + 'Se a ferramenta aceitar uma imagem só, use a PRANCHA (as referências na mesma imagem).'
+        : 'COMO USAR: cada cena abaixo é um bloco completo (imagens, roupa e cenário, coordenadas, roteiro e prompt). A roupa e o cenário mudam a cada notícia: valem os desta notícia, não os do vídeo anterior. O template é o primeiro quadro de cada cena: a IA mantém a faixa, o título e o card e troca só a personagem do fundo. Se a ferramenta aceitar uma imagem só, use a PRANCHA (template + referências na mesma imagem).', '');
     add('Personagem: ' + characterName(), 'Título: ' + (state.title || '—'), 'Modelo do vídeo: ' + data.templates[state.template].label);
     if (data.news) {
       add('', 'NOTÍCIA', 'Manchete real: ' + data.news.title, 'Fonte: ' + data.news.source, 'Categoria: ' + (data.news.category || '—'), 'Link: ' + data.news.url);
