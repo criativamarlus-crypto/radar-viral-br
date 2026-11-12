@@ -199,7 +199,7 @@ try {
             if (isset($arguments['modelo_video']) && (!is_string($arguments['modelo_video']) || !radar_video_template_valid($arguments['modelo_video']))) {
                 $fail(-32602, 'modelo_video inválido.');
             }
-            if (isset($arguments['personagem']) && (!is_string($arguments['personagem']) || !radar_character_valid($arguments['personagem']))) {
+            if (isset($arguments['personagem']) && (!is_string($arguments['personagem']) || !radar_character_selectable($arguments['personagem']))) {
                 $fail(-32602, 'personagem inválido.');
             }
             if (isset($arguments['cenas']) && (!is_int($arguments['cenas']) || $arguments['cenas'] < 1 || $arguments['cenas'] > RADAR_SCENE_MAX_COUNT)) {

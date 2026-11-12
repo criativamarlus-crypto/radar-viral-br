@@ -285,6 +285,43 @@
     button.disabled = false; button.textContent = original;
   }
 
+  /** The image of the template (1080x1920 PNG, exactly the preview): copy it or download it. */
+  const imageStatus = (text, isError) => {
+    const el = $('st-image-status');
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle('error-text', Boolean(isError));
+  };
+  const imageName = () => 'radar-template-' + (state.projectId || state.scriptId || 'novo') + '.png';
+  const copyImage = $('st-copy-image');
+  if (copyImage) {
+    copyImage.addEventListener('click', async () => {
+      copyImage.disabled = true;
+      try {
+        // The promise goes straight to the clipboard so the browser keeps the click permission while the image is drawn.
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': composition(false) })]);
+        imageStatus('Imagem do template copiada. É só colar na ferramenta de vídeo.');
+        toast('Imagem copiada.');
+      } catch (error) {
+        imageStatus('O navegador não deixou copiar a imagem (' + error.message + '). Use “Baixar imagem”.', true);
+      }
+      copyImage.disabled = false;
+    });
+  }
+  const downloadImage = $('st-download-image');
+  if (downloadImage) {
+    downloadImage.addEventListener('click', async () => {
+      downloadImage.disabled = true;
+      try {
+        download(await composition(false), imageName());
+        imageStatus('Imagem do template baixada (PNG 1080×1920).');
+      } catch (error) {
+        imageStatus('Não deu certo: ' + error.message, true);
+      }
+      downloadImage.disabled = false;
+    });
+  }
+
   // Small hook for diagnostics and automated checks.
   window.RadarStudioPack = { buildPack, buildText, sceneText, makeZip, crc32, makeBoard, collectFiles, plannedFiles };
 

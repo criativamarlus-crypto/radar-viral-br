@@ -36,9 +36,12 @@ $mediaOptions = array_map(static fn(array $m): array => ['id' => $m['id'], 'labe
 $characters = array_map(static fn(array $m): array => ['id' => $m['id'], 'label' => $m['label'], 'primary' => (int)$m['is_primary'] === 1, 'character' => $m['character_slug']], radar_character_images_all());
 $characterList = [];
 $references = [];
+// An archived character is only listed when the script or project being opened was made by it.
+$neededCharacters = array_filter([$script['character'] ?? null, $project['character'] ?? null]);
 foreach (array_keys(radar_characters()) as $characterSlug) {
     $info = radar_character_get($characterSlug);
-    $characterList[] = ['slug' => $characterSlug, 'name' => $info['name'], 'tagline' => $info['tagline'], 'gender' => $info['gender'], 'format' => radar_character_format($characterSlug), 'template' => radar_character_format($characterSlug) === 'tv3' ? 'tv_studio' : radar_video_default_template()];
+    $listed = !radar_character_is_archived($characterSlug) || in_array($characterSlug, $neededCharacters, true);
+    if ($listed) $characterList[] = ['slug' => $characterSlug, 'name' => $info['name'], 'tagline' => $info['tagline'], 'gender' => $info['gender'], 'format' => radar_character_format($characterSlug), 'template' => radar_character_format($characterSlug) === 'tv3' ? 'tv_studio' : radar_video_default_template()];
     $references[$characterSlug] = array_map(static fn(array $r): array => ['id' => $r['id'], 'width' => $r['width'], 'height' => $r['height'], 'role' => $r['role'], 'label' => $r['label']], radar_character_references($characterSlug));
 }
 
@@ -137,6 +140,11 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js',
     <section class="stack" aria-label="Prévia vertical">
         <div class="phone" aria-label="Prévia 9:16"><canvas id="st-canvas" width="540" height="960" role="img" aria-label="Prévia da composição vertical"></canvas></div>
         <p class="hint">Prévia fiel ao PNG exportado (1080×1920). A imagem da notícia mantém o crédito da fonte.</p>
+        <div class="row-actions">
+            <button type="button" class="btn primary" id="st-copy-image">Copiar imagem do template</button>
+            <button type="button" class="btn ghost" id="st-download-image">Baixar imagem</button>
+        </div>
+        <p class="hint" id="st-image-status" role="status" aria-live="polite"></p>
     </section>
 
     <section class="stack" aria-label="Texto e exportação">
@@ -153,15 +161,16 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js',
         </div>
         <div class="panel script-block">
             <div class="head"><span>Prompts de vídeo</span></div>
+            <button type="button" class="btn primary" id="st-copy-all">Copiar todos os textos</button>
+            <p class="hint" id="st-pack-status" role="status" aria-live="polite">Copia só o texto de todas as cenas (imagens a anexar, roupa e estúdio, roteiro e prompt). Cole junto com o print do template que você escolheu.</p>
             <div class="reference-box" id="st-reference"></div>
             <p class="hint" id="st-scenes-hint"></p>
             <div class="stack" id="st-prompts"></div>
             <textarea id="st-prompt" rows="3" readonly class="mono" hidden></textarea>
         </div>
         <div class="panel stack">
-            <button type="button" class="btn primary" id="st-copy-all">Copiar todos os textos</button>
             <button type="button" class="btn ghost" id="st-download-pack">Baixar pacote completo (.zip)</button>
-            <p class="hint" id="st-pack-status" role="status" aria-live="polite">Copia só o texto de todas as cenas (imagens a anexar, roupa e estúdio, roteiro e prompt). Cole junto com o print do template que você escolheu.</p>
+            
         </div>
         <div class="panel stack">
             <button type="button" class="btn primary" id="st-save">Salvar projeto</button>

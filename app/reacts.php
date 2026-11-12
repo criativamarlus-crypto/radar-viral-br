@@ -35,7 +35,7 @@ function radar_react_generate(int $newsId, array $options = []): array
     }
     // The character that covers the category, unless one was chosen.
     $requestedCharacter = (string)($options['character'] ?? '');
-    $slug = radar_character_valid($requestedCharacter) ? $requestedCharacter : radar_character_for_category((string)$news['category']);
+    $slug = radar_character_selectable($requestedCharacter) ? $requestedCharacter : radar_character_for_category((string)$news['category']);
     if (radar_character_format($slug) === 'tv3') {
         return radar_tv_generate($newsId, $news, $options, $slug);
     }
@@ -266,7 +266,7 @@ function radar_script_update(int $id, array $input): array
     $expression = isset(radar_character_expressions()[(string)($input['expression'] ?? '')]) ? (string)$input['expression'] : $current['expression'];
     $scene = isset(radar_character_scenes()[(string)($input['scene'] ?? '')]) ? (string)$input['scene'] : $current['scene'];
     $layout = radar_video_template_valid(radar_str($input['layout'] ?? '')) ? radar_str($input['layout']) : $current['layout'];
-    $slug = radar_character_valid(radar_str($input['character'] ?? '')) ? radar_str($input['character']) : $current['character'];
+    $slug = radar_character_selectable(radar_str($input['character'] ?? '')) ? radar_str($input['character']) : $current['character'];
     $scenes = isset($input['scenes']) && (int)$input['scenes'] >= 1 && (int)$input['scenes'] <= RADAR_SCENE_MAX_COUNT ? (int)$input['scenes'] : $current['scenes'];
     $row = ['hook' => $text('hook', 200), 'script' => $text('script', 2600), 'commentary' => $text('commentary', 600), 'cta' => $text('cta', 250)];
     $direction = $current['direction'];

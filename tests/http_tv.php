@@ -103,3 +103,23 @@ $mcpForced = $call($reactToken, 'preparar_react', ['noticia_id' => 9001, 'person
 $mcpData = json_decode(json_decode($mcpForced['body'], true)['result']['content'][0]['text'] ?? '{}', true);
 check('MCP warns about a news that already has a react and, when confirmed, returns the three scenes of the TV character', static fn(): bool => str_contains($mcpDuplicate['body'], 'Nada foi gerado') && str_contains($mcpDuplicate['body'], '"isError":true') && ($mcpData['personagem_id'] ?? '') === 'dona-maricota' && count($mcpData['cenas_detalhe'] ?? []) === 3
     && str_contains($mcpData['cenas_detalhe'][0]['prompt_para_o_muse'] ?? '', 'REGISTERED IN THE PANEL') && str_contains($mcpData['legendas_srt'] ?? '', '-->') && ($mcpData['titulo_do_video'] ?? '') !== '');
+// Archiving through the API and the pages (and the Studio buttons).
+$studioButtons = localRequest('estudio.php?news=9001&roteiro=' . ($tvItem['id'] ?? 0));
+$copyAt = strpos($studioButtons['body'], 'id="st-copy-all"');
+check('the Studio has one "Copiar todos os textos" above the scene texts, and buttons to copy or download the template image under the preview', static fn(): bool => $studioButtons['status'] === 200 && substr_count($studioButtons['body'], 'id="st-copy-all"') === 1 && $copyAt !== false && $copyAt < strpos($studioButtons['body'], 'id="st-prompts"')
+    && $copyAt > strpos($studioButtons['body'], 'Prompts de vídeo') && str_contains($studioButtons['body'], 'id="st-copy-image"') && str_contains($studioButtons['body'], 'Copiar imagem do template') && str_contains($studioButtons['body'], 'id="st-download-image"')
+    && strpos($studioButtons['body'], 'id="st-copy-image"') < strpos($studioButtons['body'], 'id="st-copy-all"') && !str_contains($studioButtons['body'], 'prancha + texto'));
+$archiveCall = $post(['action' => 'character_archive', 'character' => 'beto']);
+$archivedChips = localRequest('personagem.php?c=dona-maricota');
+$archivedPage = localRequest('personagem.php?c=beto');
+$archivedDialog = radar_react_dialog();
+$archivedStudio = localRequest('estudio.php');
+$lastOne = $post(['action' => 'character_archive', 'character' => 'clara']) ;
+$lastTwo = $post(['action' => 'character_archive', 'character' => 'dona-maricota']);
+$restoreCall = $post(['action' => 'character_restore', 'character' => 'beto']);
+check('archiving Beto through the API removes him from the chips, the dialog and the Studio, keeps his page with a restore button, and restoring brings him back', static fn(): bool => $archiveCall['status'] === 200
+    && !str_contains($archivedChips['body'], 'personagem.php?c=beto">Beto</a></div>') && str_contains($archivedChips['body'], 'Arquivados') && !str_contains($archivedDialog, 'value="beto"') && !str_contains($archivedStudio['body'], '"slug":"beto"')
+    && $archivedPage['status'] === 200 && str_contains($archivedPage['body'], 'Restaurar no painel') && str_contains($archivedPage['body'], 'data-act="character_restore"') && str_contains($archivedChips['body'], 'data-act="character_archive"')
+    && $restoreCall['status'] === 200 && in_array('beto', array_keys(radar_characters_visible()), true) && str_contains(radar_react_dialog(), 'value="beto"') && $post(['action' => 'character_archive', 'character' => 'inventado'])['status'] === 400);
+radar_character_restore('clara');
+radar_character_restore('dona-maricota');

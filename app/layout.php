@@ -186,7 +186,7 @@ function radar_react_dialog(): string
     // The default character is selected; "Automático" picks by the category of the news.
     $default = radar_character_default_slug();
     $characters = '<option value="">Automático (pela categoria da notícia)</option>';
-    foreach (array_keys(radar_characters()) as $slug) {
+    foreach (array_keys(radar_characters_visible()) as $slug) {
         $characters .= '<option value="' . radar_h($slug) . '" data-format="' . radar_h(radar_character_format($slug)) . '" data-seconds="' . (int)radar_character_get($slug)['narration']['scene_seconds'] . '" data-photo="' . radar_h((string)radar_character_photo_id($slug)) . '"' . ($slug === $default ? ' selected' : '') . '>' . radar_h(radar_character_get($slug)['name']) . '</option>';
     }
     $config = radar_ai_config();
@@ -223,7 +223,7 @@ function radar_news_card(array $n, bool $showSave = true): string
         : '<div class="no-image">' . radar_icon('image') . '<span>Sem imagem</span></div>';
     $age = $n['published_known'] ? radar_age_label($n['age_minutes']) : 'visto ' . radar_age_label($n['age_minutes']);
     $coverage = $n['source_count'] > 1 ? '<span class="pill">' . (int)$n['source_count'] . ' veículos</span>' : '';
-    $speaker = count(radar_characters()) > 1 ? '<span class="pill">' . radar_h(radar_character_get(radar_character_for_category((string)$n['category']))['name']) . '</span>' : '';
+    $speaker = count(radar_characters_visible()) > 1 ? '<span class="pill">' . radar_h(radar_character_get(radar_character_for_category((string)$n['category']))['name']) . '</span>' : '';
     $trend = $n['trend_hits'] !== [] ? '<span class="pill trend">Em alta: ' . radar_h($n['trend_hits'][0]['query']) . '</span>' : '';
     $html = '<article class="card" data-news="' . (int)$n['id'] . '">'
         . '<a class="card-media" href="noticia.php?id=' . (int)$n['id'] . '" tabindex="-1" aria-hidden="true">' . $image

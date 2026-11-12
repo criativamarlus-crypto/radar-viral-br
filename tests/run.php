@@ -1722,6 +1722,7 @@ check('front-end code has no inline scripts or styles (strict CSP)', static func
 
 require __DIR__ . '/neymar.php';
 require __DIR__ . '/tv.php';
+require __DIR__ . '/archive.php';
 require __DIR__ . '/http.php';
 
 echo "\n$passed passed; $failed failed.\n";

@@ -154,13 +154,72 @@ function radar_characters(): array
 function radar_character_default_slug(): string
 {
     $chosen = (string)radar_setting('character_default', '');
-    return $chosen !== '' && isset(radar_characters()[$chosen]) ? $chosen : (string)array_key_first(radar_characters());
+    if ($chosen !== '' && isset(radar_characters()[$chosen]) && !radar_character_is_archived($chosen)) {
+        return $chosen;
+    }
+    return (string)(array_key_first(radar_characters_visible()) ?? array_key_first(radar_characters()));
+}
+
+/**
+ * Characters taken out of the panel ("arquivados"). They are not offered any more (no selector, no suggestion by category),
+ * but what they made stays readable: older scripts and images keep their identity. Restoring brings them back.
+ *
+ * @return array<int,string> slugs
+ */
+function radar_character_archived(): array
+{
+    $decoded = json_decode((string)radar_setting('characters_archived', '[]'), true);
+    return is_array($decoded) ? array_values(array_filter($decoded, static fn(mixed $slug): bool => is_string($slug) && isset(radar_characters()[$slug]))) : [];
+}
+
+function radar_character_is_archived(string $slug): bool
+{
+    return in_array($slug, radar_character_archived(), true);
+}
+
+/** The characters the panel offers. @return array<string,array<string,mixed>> slug => preset */
+function radar_characters_visible(): array
+{
+    $archived = radar_character_archived();
+    return array_filter(radar_characters(), static fn(string $slug): bool => !in_array($slug, $archived, true), ARRAY_FILTER_USE_KEY);
+}
+
+/** A character that can be chosen for a new react: it exists and is not archived. */
+function radar_character_selectable(?string $slug): bool
+{
+    return $slug !== null && isset(radar_characters_visible()[$slug]);
+}
+
+/** Take a character out of the panel. At least one must stay; when it was the default, the first visible one takes over. */
+function radar_character_archive(string $slug): void
+{
+    if (!radar_character_valid($slug)) {
+        throw new InvalidArgumentException('Personagem não encontrado.');
+    }
+    if (radar_character_is_archived($slug)) {
+        return;
+    }
+    if (count(radar_characters_visible()) <= 1) {
+        throw new InvalidArgumentException('Precisa sobrar pelo menos um personagem no painel.');
+    }
+    radar_setting_set('characters_archived', json_encode(array_values(array_unique(array_merge(radar_character_archived(), [$slug])))));
+    if ((string)radar_setting('character_default', '') === $slug) {
+        radar_setting_set('character_default', (string)array_key_first(radar_characters_visible()));
+    }
+}
+
+function radar_character_restore(string $slug): void
+{
+    if (!radar_character_valid($slug)) {
+        throw new InvalidArgumentException('Personagem não encontrado.');
+    }
+    radar_setting_set('characters_archived', json_encode(array_values(array_diff(radar_character_archived(), [$slug]))));
 }
 
 /** Make a character the default one (selected first in the Studio and used for categories nobody covers). */
 function radar_character_default_set(string $slug): void
 {
-    if (!radar_character_valid($slug)) {
+    if (!radar_character_selectable($slug)) {
         throw new InvalidArgumentException('Personagem não encontrado.');
     }
     radar_setting_set('character_default', $slug);
@@ -385,7 +444,7 @@ function radar_character_save(string $slug, string $name, array $categories): vo
 function radar_character_for_category(string $category): string
 {
     // The default character is looked at first, so when it is a generalist it takes what nobody covers.
-    $order = array_values(array_unique(array_merge([radar_character_default_slug()], array_keys(radar_characters()))));
+    $order = array_values(array_unique(array_merge([radar_character_default_slug()], array_keys(radar_characters_visible()))));
     $generalist = null;
     foreach ($order as $slug) {
         $categories = radar_character_categories($slug);

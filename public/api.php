@@ -158,6 +158,14 @@ try {
             radar_tv_scene_update($sceneScript, api_int($input['scene'] ?? 0), $input);
             radar_json(['item' => radar_script_get($sceneScript)]);
 
+        case 'character_archive':
+            radar_character_archive(radar_str($input['character'] ?? ''));
+            radar_json(['ok' => true, 'message' => 'Personagem arquivado: saiu do painel e os roteiros dele continuam guardados.']);
+
+        case 'character_restore':
+            radar_character_restore(radar_str($input['character'] ?? ''));
+            radar_json(['ok' => true, 'message' => 'Personagem de volta ao painel.']);
+
         case 'character_default':
             radar_character_default_set(radar_str($input['character'] ?? ''));
             radar_json(['ok' => true, 'message' => 'Personagem padrão atualizado.']);

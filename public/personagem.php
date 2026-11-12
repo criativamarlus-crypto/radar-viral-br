@@ -50,17 +50,25 @@ radar_page_start('Meus Personagens', 'personagem.php');
 <div class="page-head"><div><h1>Meus Personagens</h1><p>Cada personagem tem identidade, voz e visual próprios. A notícia sugere quem fala pela categoria.</p></div></div>
 
 <div class="chips" role="group" aria-label="Personagens">
-    <?php foreach (array_keys(radar_characters()) as $other): ?>
+    <?php foreach (array_keys(radar_characters_visible()) as $other): ?>
         <a class="chip<?= $other === $slug ? ' on' : '' ?>" href="personagem.php?c=<?= radar_h($other) ?>"><?= radar_h(radar_character_get($other)['name']) ?><?= radar_character_default_slug() === $other ? ' ★' : '' ?></a>
     <?php endforeach; ?>
 </div>
+<?php $archivedList = radar_character_archived(); if ($archivedList !== []): ?>
+    <p class="hint">Arquivados (fora do painel, o que fizeram continua guardado): <?php foreach ($archivedList as $archivedSlug): ?><a href="personagem.php?c=<?= radar_h($archivedSlug) ?>"><?= radar_h(radar_character_get($archivedSlug)['name']) ?></a> <?php endforeach; ?></p>
+<?php endif; ?>
 
 <div class="grid-2 section">
     <section class="panel" aria-labelledby="id-h">
         <h2 id="id-h"><?= radar_h($character['name']) ?></h2>
         <p class="hint">Identificador permanente: <code><?= radar_h($slug) ?></code> · versão da configuração: <strong><?= (int)$character['version'] ?></strong> · <?= radar_character_format($slug) === 'tv3' ? 'react em 3 cenas, ' . (int)$character['narration']['scene_seconds'] . ' s cada' : 'react em cenas de até 25 s' ?></p>
         <?php if ($isDefault): ?><p><span class="pill">★ Personagem padrão</span></p>
-        <?php else: ?><form method="post" action="personagem.php"><input type="hidden" name="csrf" value="<?= radar_h($csrf) ?>"><input type="hidden" name="slug" value="<?= radar_h($slug) ?>"><input type="hidden" name="form" value="default"><button class="btn ghost small" type="submit">Tornar a personagem padrão</button></form><?php endif; ?>
+        <?php elseif (!radar_character_is_archived($slug)): ?><form method="post" action="personagem.php"><input type="hidden" name="csrf" value="<?= radar_h($csrf) ?>"><input type="hidden" name="slug" value="<?= radar_h($slug) ?>"><input type="hidden" name="form" value="default"><button class="btn ghost small" type="submit">Tornar a personagem padrão</button></form><?php endif; ?>
+        <?php if (radar_character_is_archived($slug)): ?>
+            <div class="notice warn"><strong>Arquivado:</strong> não aparece mais para escolher nem é sugerido. Os roteiros e imagens que ele já tem continuam aqui. <button type="button" class="btn small" data-act="character_restore" data-character="<?= radar_h($slug) ?>">Restaurar no painel</button></div>
+        <?php elseif (count(radar_characters_visible()) > 1): ?>
+            <p><button type="button" class="btn danger small" data-act="character_archive" data-character="<?= radar_h($slug) ?>" data-confirm="Tirar <?= radar_h($character['name']) ?> do painel? Ele deixa de aparecer para escolher e de ser sugerido. Os roteiros e imagens dele continuam guardados e dá para restaurar.">Arquivar (tirar do painel)</button></p>
+        <?php endif; ?>
         <p><strong><?= radar_h($character['tagline']) ?></strong></p>
         <p><?= radar_h($character['bio']) ?></p>
         <h3>Personalidade</h3>
