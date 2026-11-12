@@ -6,12 +6,12 @@ declare(strict_types=1);
 const RADAR_TRENDS_URL = 'https://trends.google.com/trending/rss?geo=BR';
 
 /** Bumped whenever built-in sources or category keywords change (see radar_sources_seed). */
-const RADAR_SOURCES_SEED_VERSION = '3';
+const RADAR_SOURCES_SEED_VERSION = '4';
 
 /** @return array<int,string> */
 function radar_category_list(): array
 {
-    return ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia', 'Política', 'Futebol', 'Esportes', 'Famosos', 'Tecnologia', 'Notícias internacionais', 'Curiosidades', 'Entretenimento', 'Assuntos virais', 'Geral'];
+    return ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia', 'Política', 'Futebol', 'Neymar', 'Esportes', 'Famosos', 'Tecnologia', 'Notícias internacionais', 'Curiosidades', 'Entretenimento', 'Assuntos virais', 'Geral'];
 }
 
 /** The money categories: scripts about them inform and never advise (see the AI rules and the draft). @return array<int,string> */
@@ -40,6 +40,10 @@ function radar_default_sources(): array
         ['name' => 'Google Trends Brasil', 'url' => RADAR_TRENDS_URL, 'category' => 'auto', 'region' => 'BR', 'weight' => 1.0, 'kind' => 'trends'],
         ['name' => 'Google Notícias · Brasil', 'url' => "https://news.google.com/rss/headlines/section/topic/NATION?$g", 'category' => 'auto', 'region' => 'BR', 'weight' => 0.9],
         ['name' => 'Google Notícias · Futebol', 'url' => "https://news.google.com/rss/search?q=futebol&$g", 'category' => 'Futebol', 'region' => 'BR', 'weight' => 0.9],
+        // Everything about Neymar, from any outlet: the headline decides the category (see radar_classify), these feeds only bring it in.
+        ['name' => 'Google Notícias · Neymar', 'url' => "https://news.google.com/rss/search?q=Neymar&$g", 'category' => 'Neymar', 'region' => 'BR', 'weight' => 1.0],
+        ['name' => 'Google Notícias · Neymar (últimas 24 h)', 'url' => "https://news.google.com/rss/search?q=Neymar+when:1d&$g", 'category' => 'Neymar', 'region' => 'BR', 'weight' => 1.0],
+        ['name' => 'Google Notícias · Neymar nas redes', 'url' => "https://news.google.com/rss/search?q=Neymar+Instagram+OR+postou+OR+publicou+OR+%22rede+social%22&$g", 'category' => 'Neymar', 'region' => 'BR', 'weight' => 0.9],
         ['name' => 'Google Notícias · Famosos', 'url' => "https://news.google.com/rss/search?q=celebridades&$g", 'category' => 'Famosos', 'region' => 'BR', 'weight' => 0.9],
         ['name' => 'G1', 'url' => 'https://g1.globo.com/rss/g1/', 'category' => 'auto', 'region' => 'BR', 'weight' => 1.0],
         ['name' => 'G1 · Política', 'url' => 'https://g1.globo.com/rss/g1/politica/', 'category' => 'Política', 'region' => 'BR', 'weight' => 1.0],
@@ -273,6 +277,11 @@ function radar_classify(string $title, string $summary = '', string $sourceCateg
     $pinned = $sourceCategory !== 'auto' && in_array($sourceCategory, radar_category_list(), true) ? $sourceCategory : null;
     $haystack = ' ' . radar_fold($title) . ' ';
     $secondary = $summary === '' ? '' : ' ' . radar_fold($summary) . ' ';
+    // The Neymar category is a subject, not a topic: every story that names him (headline or summary) belongs to it,
+    // whatever the outlet or the beat (football, gossip, business, politics).
+    if (str_contains($haystack, ' neymar ') || ($secondary !== '' && str_contains($secondary, ' neymar '))) {
+        return 'Neymar';
+    }
     $best = null;
     $bestScore = 0;
     foreach ($compiled as $category => $needles) {

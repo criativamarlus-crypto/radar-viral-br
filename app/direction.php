@@ -33,7 +33,7 @@ function radar_direction_mood(string $category, string $expression = ''): string
     }
     return match ($category) {
         'Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia' => 'business',
-        'Futebol', 'Esportes' => 'sport',
+        'Futebol', 'Neymar', 'Esportes' => 'sport',
         'Famosos', 'Entretenimento', 'Curiosidades', 'Assuntos virais' => 'fun',
         'Tecnologia' => 'tech',
         default => 'casual',

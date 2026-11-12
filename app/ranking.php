@@ -127,7 +127,7 @@ function radar_rank_trend_match(array $titleTokens, array $queryTokens): bool
 /** @return array<string,int> category => base public-interest points (0–10) */
 function radar_rank_category_interest(): array
 {
-    return ['Futebol' => 9, 'Esportes' => 6, 'Política' => 8, 'Famosos' => 8, 'Assuntos virais' => 8, 'Finanças pessoais' => 8, 'Cartão de crédito' => 7, 'Finanças' => 7, 'Economia' => 7, 'Notícias internacionais' => 6, 'Tecnologia' => 6, 'Entretenimento' => 6, 'Curiosidades' => 6, 'Geral' => 4];
+    return ['Futebol' => 9, 'Neymar' => 9, 'Esportes' => 6, 'Política' => 8, 'Famosos' => 8, 'Assuntos virais' => 8, 'Finanças pessoais' => 8, 'Cartão de crédito' => 7, 'Finanças' => 7, 'Economia' => 7, 'Notícias internacionais' => 6, 'Tecnologia' => 6, 'Entretenimento' => 6, 'Curiosidades' => 6, 'Geral' => 4];
 }
 
 /**
@@ -231,7 +231,7 @@ function radar_score_item(array $item, array $context): array
     $add('Imagem disponível', $hasImage ? 5 : 0, 5, $hasImage ? 'Há imagem de capa declarada pela fonte.' : 'Sem imagem de capa até agora (dá para anexar ou capturar depois).');
 
     // 8. React viability (5)
-    $friendly = in_array($category, ['Famosos', 'Futebol', 'Política', 'Curiosidades', 'Assuntos virais', 'Entretenimento'], true);
+    $friendly = in_array($category, ['Famosos', 'Futebol', 'Neymar', 'Política', 'Curiosidades', 'Assuntos virais', 'Entretenimento'], true);
     $discussionPoints = $reasons[4]['points'];
     $react = ($friendly ? 2 : 0) + ($discussionPoints >= 4 ? 2 : 0) + ($hasImage ? 1 : 0);
     $add('Viabilidade de react', $react, 5, $friendly ? 'Tema que costuma render comentário pessoal em vídeo curto.' : 'Tema menos natural para react; exige mais contexto.');
