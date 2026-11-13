@@ -440,6 +440,32 @@ function radar_character_save(string $slug, string $name, array $categories): vo
     }
 }
 
+/**
+ * Categories that go with each character, used only to fill the shortcut buttons (the ones it is listed under come first).
+ *
+ * @return array<string,array<int,string>>
+ */
+function radar_character_related_categories(): array
+{
+    return [
+        'beto' => ['Futebol', 'Neymar', 'Esportes', 'Política'],
+        'clara' => ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia'],
+        'dona-maricota' => ['Famosos', 'Entretenimento', 'Neymar', 'Assuntos virais'],
+    ];
+}
+
+/**
+ * Buttons that take to the news of a character: first the categories it is listed under (the main one first), then related
+ * ones, up to four.
+ *
+ * @return array<int,string>
+ */
+function radar_character_shortcuts(string $slug): array
+{
+    $list = array_merge(radar_character_categories($slug), radar_character_related_categories()[$slug] ?? []);
+    return array_slice(array_values(array_filter(array_unique($list), static fn(string $c): bool => in_array($c, radar_category_list(), true))), 0, 4);
+}
+
 /** The character that covers a category: the one listing it, else the generalist, else the default. */
 function radar_character_for_category(string $category): string
 {

@@ -592,6 +592,22 @@
   function characterHint() {
     const info = data.characterList.find((c) => c.slug === state.character);
     $('st-character-hint').textContent = info ? info.tagline + (data.suggestedCharacter === state.character && data.news ? ' · sugerida pela categoria “' + data.news.category + '”.' : '.') : '';
+    // Shortcuts to the news of this character's categories (the main one first).
+    const box = $('st-category-box');
+    if (box) {
+      const links = $('st-category-links');
+      const list = (info && info.shortcuts) || [];
+      links.replaceChildren();
+      box.hidden = list.length === 0;
+      $('st-category-label').textContent = info ? 'Ir para as notícias de ' + info.name + ':' : '';
+      list.forEach((category, index) => {
+        const link = document.createElement('a');
+        link.className = 'chip' + (index === 0 ? ' on' : '');
+        link.href = 'noticias.php?categoria=' + encodeURIComponent(category);
+        link.textContent = category;
+        links.append(link);
+      });
+    }
   }
   $('st-character').addEventListener('change', (e) => {
     // The template follows the character only while it is still the previous character's own template.

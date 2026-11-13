@@ -123,3 +123,11 @@ check('archiving Beto through the API removes him from the chips, the dialog and
     && $restoreCall['status'] === 200 && in_array('beto', array_keys(radar_characters_visible()), true) && str_contains(radar_react_dialog(), 'value="beto"') && $post(['action' => 'character_archive', 'character' => 'inventado'])['status'] === 400);
 radar_character_restore('clara');
 radar_character_restore('dona-maricota');
+// Category shortcuts of each character.
+$shortcutStudio = localRequest('estudio.php');
+$shortcutCharacter = localRequest('personagem.php?c=clara');
+$shortcutNews = localRequest('noticias.php?categoria=' . rawurlencode('Cartão de crédito'));
+check('the Studio carries the category shortcuts of every character and the character page links each category to its news', static fn(): bool => $shortcutStudio['status'] === 200 && str_contains($shortcutStudio['body'], 'id="st-category-box"') && str_contains($shortcutStudio['body'], 'id="st-category-links"')
+    && str_contains($shortcutStudio['body'], '"slug":"clara"') && str_contains($shortcutStudio['body'], '"shortcuts":["Finanças","Cartão de crédito","Finanças pessoais","Economia"]') && str_contains($shortcutStudio['body'], '"shortcuts":["Famosos"')
+    && $shortcutCharacter['status'] === 200 && str_contains($shortcutCharacter['body'], 'href="noticias.php?categoria=Finan%C3%A7as"') && str_contains($shortcutCharacter['body'], 'href="noticias.php?categoria=Cart%C3%A3o%20de%20cr%C3%A9dito"') && str_contains($shortcutCharacter['body'], 'Ir direto para as notícias de')
+    && $shortcutNews['status'] === 200 && str_contains($shortcutNews['body'], 'aria-pressed="true"'));

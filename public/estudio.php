@@ -41,7 +41,7 @@ $neededCharacters = array_filter([$script['character'] ?? null, $project['charac
 foreach (array_keys(radar_characters()) as $characterSlug) {
     $info = radar_character_get($characterSlug);
     $listed = !radar_character_is_archived($characterSlug) || in_array($characterSlug, $neededCharacters, true);
-    if ($listed) $characterList[] = ['slug' => $characterSlug, 'name' => $info['name'], 'tagline' => $info['tagline'], 'gender' => $info['gender'], 'format' => radar_character_format($characterSlug), 'template' => radar_character_format($characterSlug) === 'tv3' ? 'tv_studio' : radar_video_default_template()];
+    if ($listed) $characterList[] = ['slug' => $characterSlug, 'name' => $info['name'], 'tagline' => $info['tagline'], 'gender' => $info['gender'], 'format' => radar_character_format($characterSlug), 'template' => radar_character_format($characterSlug) === 'tv3' ? 'tv_studio' : radar_video_default_template(), 'shortcuts' => radar_character_shortcuts($characterSlug)];
     $references[$characterSlug] = array_map(static fn(array $r): array => ['id' => $r['id'], 'width' => $r['width'], 'height' => $r['height'], 'role' => $r['role'], 'label' => $r['label']], radar_character_references($characterSlug));
 }
 
@@ -87,6 +87,10 @@ radar_page_start('Estúdio de React', 'estudio.php', ['scripts' => ['studio.js',
             <h2>1 · Notícia e roteiro</h2>
             <label>Notícia<select id="st-news"><option value="">Escolha uma notícia…</option></select></label>
             <label>Roteiro<select id="st-script-select"><option value="">Sem roteiro (escrever aqui)</option></select></label>
+            <div id="st-category-box" hidden>
+                <span class="hint" id="st-category-label"></span>
+                <div class="chips" id="st-category-links" role="group" aria-label="Categorias do personagem"></div>
+            </div>
             <?php if ($news !== null): ?>
                 <div class="field-row">
                     <label>Cenas<select id="st-scenes"><option value="1">1 cena (até 25 s)</option><option value="2">2 cenas (até 50 s)</option><option value="3" selected>3 cenas (até 75 s)</option><option value="4">4 cenas (até 100 s)</option><option value="5">5 cenas (até 125 s)</option></select></label>

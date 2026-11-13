@@ -37,3 +37,21 @@ check('the generate dialog does not offer an archived character', static functio
     radar_character_restore('beto');
     return !str_contains($html, 'value="beto"') && str_contains($html, 'value="clara"') && str_contains($html, 'value="dona-maricota"') && str_contains(radar_react_dialog(), 'value="beto"');
 });
+
+check('every character has up to four category shortcuts: the ones it is listed under first, then related ones, all real categories', static function (): bool {
+    $clara = radar_character_shortcuts('clara');
+    radar_character_save('dona-maricota', 'Dona Maricota do Babado', ['Famosos', 'Entretenimento']);
+    $maricota = radar_character_shortcuts('dona-maricota');
+    radar_character_save('dona-maricota', 'Dona Maricota do Babado', ['Política']);
+    $edited = radar_character_shortcuts('dona-maricota');
+    radar_character_save('dona-maricota', 'Dona Maricota do Babado', []);
+    $none = radar_character_shortcuts('dona-maricota');
+    foreach (array_keys(radar_characters()) as $slug) {
+        $list = radar_character_shortcuts($slug);
+        if (count($list) < 1 || count($list) > 4 || count(array_unique($list)) !== count($list) || array_diff($list, radar_category_list()) !== []) {
+            return false;
+        }
+    }
+    return $clara === ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia'] && $maricota === ['Famosos', 'Entretenimento', 'Neymar', 'Assuntos virais']
+        && $edited === ['Política', 'Famosos', 'Entretenimento', 'Neymar'] && $none === ['Famosos', 'Entretenimento', 'Neymar', 'Assuntos virais'] && radar_character_shortcuts('beto') === ['Futebol', 'Neymar', 'Esportes', 'Política'];
+});

@@ -81,6 +81,10 @@ radar_page_start('Meus Personagens', 'personagem.php');
     </section>
     <section class="panel" aria-labelledby="cat-h">
         <h2 id="cat-h">Nome e categorias</h2>
+        <p class="hint">Ir direto para as notícias de <?= radar_h($character['name']) ?>:</p>
+        <div class="chips" role="group" aria-label="Categorias de <?= radar_h($character['name']) ?>">
+            <?php foreach (radar_character_shortcuts($slug) as $shortcutIndex => $shortcut): ?><a class="chip<?= $shortcutIndex === 0 ? ' on' : '' ?>" href="noticias.php?categoria=<?= radar_h(rawurlencode($shortcut)) ?>"><?= radar_h($shortcut) ?></a><?php endforeach; ?>
+        </div>
         <form method="post" action="personagem.php" class="form-grid">
             <input type="hidden" name="csrf" value="<?= radar_h($csrf) ?>"><input type="hidden" name="slug" value="<?= radar_h($slug) ?>">
             <label>Nome<input name="name" maxlength="40" value="<?= radar_h($character['name']) ?>" required></label>
