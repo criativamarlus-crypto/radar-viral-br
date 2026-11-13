@@ -1,32 +1,105 @@
 <?php
 declare(strict_types=1);
-require_once dirname(__DIR__).'/app/feeds.php';
+require_once dirname(__DIR__) . '/app/bootstrap.php';
+// OAuth discovery fallback (try_files / the PHP built-in server route unknown paths here).
+if (str_starts_with((string)parse_url((string)($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH), '/.well-known/')) {
+    require __DIR__ . '/oauth-metadata.php';
+    exit;
+}
+radar_require_login();
+
+$stats = radar_dashboard_stats();
+$trends = array_slice(radar_trends_latest(), 0, 12);
+$top = radar_news_query(radar_news_filters(['janela' => 24, 'ordem' => 'viral', 'limite' => 6]));
+$character = radar_character_primary();
+$broken = radar_db_all("SELECT name, last_error, last_fetched_at FROM sources WHERE active = 1 AND last_status = 'error' ORDER BY name LIMIT 8");
+$last = $stats['last_collect_at'];
+$run = $stats['last_run'];
+
+radar_page_start('Dashboard', 'index.php');
 ?>
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Radar Viral BR</title>
-<style>
-:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0b1020;color:#e8ecf8}header{background:linear-gradient(120deg,#162448,#0a1227);padding:40px max(20px,calc((100vw - 1120px)/2))}h1{font-size:clamp(30px,4vw,48px);margin:0 0 8px}h1 span{color:#ffc349}header p{color:#b9c8e5;max-width:650px}.wrap{max-width:1120px;margin:auto;padding:24px 18px}.notice{padding:16px;border-left:4px solid #ffc349;background:#182846;border-radius:8px;color:#c7d5ef;margin-bottom:24px}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}.tabs button,.card button{background:#263a64;color:#fff;border:1px solid #394c74;border-radius:10px;padding:12px 15px;cursor:pointer}.tabs button.on{background:#ffc349;color:#142036;font-weight:700}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:16px}.card{border:1px solid #2c3b60;background:#171f34;border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:12px}.card h2{font-size:19px;line-height:1.3;margin:0}.card small{color:#a9b8d4}.card a{color:#8ed4ff;overflow-wrap:anywhere}.card button{margin-top:auto}.label{font-size:12px;color:#ffcc58;font-weight:800;text-transform:uppercase}footer{text-align:center;color:#95a6c4;padding:40px}.loading{color:#b4c3da}
-</style></head><body><header><h1>📡 Radar <span>Viral BR</span></h1><p>Manchetes do Brasil e do mundo organizadas para seu personagem reagir em vídeos curtos.</p></header><main class="wrap"><div class="notice">Notícias obtidas de RSS; isto não é uma classificação oficial de tendências. Abra o artigo e confira os fatos antes de gerar o vídeo. Prints e imagens reais serão adicionados em uma próxima etapa.</div><div class="tabs" id="tabs"><?php foreach(array_keys(radar_categories()) as $cat):?><button data-cat="<?=htmlspecialchars($cat,ENT_QUOTES,'UTF-8')?>"><?=htmlspecialchars($cat,ENT_QUOTES,'UTF-8')?></button><?php endforeach;?></div><p id="status" class="loading">Carregando notícias...</p><section id="cards" class="cards"></section></main><footer>Radar Viral BR • Curadoria de pautas e reacts</footer>
-<script>
-let current='Geral',items=[];
-const cards=document.getElementById('cards'),status=document.getElementById('status');
-const buttons=[...document.querySelectorAll('[data-cat]')];
-function react(n){
-const p='Crie um roteiro de react de 20 a 35 segundos, em português brasileiro, para um personagem fictício adulto, negro, robusto, de óculos, corrente de ouro e sorriso marcante, com tom natural, expressivo e divertido. Manchete original: '+n.title+'. Fonte: '+n.source+'. URL: '+n.url+'. Comece com um gancho chamativo sem distorcer os fatos, explique apenas o que puder ser confirmado, distinga opinião de fato e termine com uma pergunta. Sugira composição vertical 9:16, com print REAL da matéria acima e personagem abaixo. Se faltar informação, solicite a matéria em vez de inventar detalhes.';
-if(navigator.clipboard?.writeText){navigator.clipboard.writeText(p).then(()=>alert('Prompt copiado!')).catch(()=>window.prompt('Copie o prompt:',p))}else window.prompt('Copie o prompt:',p);
-}
-async function load(cat){
-current=cat;buttons.forEach(b=>b.classList.toggle('on',b.dataset.cat===cat));
-status.textContent='Carregando '+cat+'...';cards.replaceChildren();
-try{const res=await fetch('api.php?categoria='+encodeURIComponent(cat));const data=await res.json();if(!res.ok)throw Error(data.error||'Falha na coleta');
-items=data.items||[];status.textContent=items.length+' manchetes encontradas • '+cat;
-for(const n of items){const el=document.createElement('article');el.className='card';
-const tag=document.createElement('div');tag.className='label';tag.textContent=n.category;
-const h=document.createElement('h2');h.textContent=n.title;
-const small=document.createElement('small');small.textContent=n.source+' · '+new Date(n.published).toLocaleString('pt-BR');
-const a=document.createElement('a');a.textContent='Abrir notícia original';a.href=n.url;a.target='_blank';a.rel='noopener noreferrer';
-const button=document.createElement('button');button.textContent='Copiar prompt de react';button.addEventListener('click',()=>react(n));
-el.append(tag,h,small,a,button);cards.append(el);
-}
-}catch(e){status.textContent='Não foi possível buscar notícias: '+e.message;}}
-buttons.forEach(b=>b.addEventListener('click',()=>load(b.dataset.cat)));load(current);
-</script></body></html>
+<div class="page-head">
+    <div>
+        <h1>Notícias para seus próximos reacts</h1>
+        <p>Coleta automática a cada 30 minutos nas fontes ativas. Todos os números abaixo vêm das coletas reais.</p>
+    </div>
+    <a class="btn ghost" href="noticias.php">Ver todas as notícias</a>
+</div>
+
+<section class="stats" aria-label="Indicadores">
+    <div class="stat blue"><b><?= (int)$stats['collected_today'] ?></b><span>Notícias coletadas hoje</span></div>
+    <div class="stat red"><b><?= (int)$stats['new_last_3h'] ?></b><span>Novidades das últimas 3 horas</span></div>
+    <div class="stat yellow"><b><?= (int)$stats['saved'] ?></b><span>Notícias selecionadas</span><small>salvas por você</small></div>
+    <div class="stat"><b><?= (int)$stats['reacts_prepared'] ?></b><span>Reacts preparados</span><small><?= (int)$stats['projects'] ?> projeto(s) no Estúdio</small></div>
+    <div class="stat"><b><?= $last === null ? '—' : radar_h(radar_age_label(max(0, (int)round((time() - $last) / 60)))) ?></b><span>Última atualização</span>
+        <small><?= $run === null ? 'Nenhuma coleta ainda' : radar_h($run['sources_ok'] . ' fontes ok · ' . $run['sources_failed'] . ' com falha') ?></small></div>
+</section>
+
+<?php if ($stats['total_news'] === 0): ?>
+    <section class="section">
+        <div class="empty-state">
+            <h3>Ainda não há notícias coletadas</h3>
+            <p>O painel buscará as fontes automaticamente ao abrir. Você também pode iniciar agora.</p>
+            <button type="button" class="btn primary" id="first-collect" data-act="collect" data-busy="Coletando…">Fazer a primeira coleta</button>
+        </div>
+    </section>
+<?php endif; ?>
+
+<?php if ($trends !== []): ?>
+    <section class="section" aria-labelledby="trends-h">
+        <div class="section-head"><h2 id="trends-h">Em alta no Google Trends Brasil</h2><span class="muted">Buscas populares, não verificação de fatos</span></div>
+        <div class="trend-list">
+            <?php foreach ($trends as $trend): ?>
+                <a class="trend" href="<?= radar_h(radar_url('noticias.php', ['q' => $trend['query']])) ?>">
+                    <b><span class="rank">#<?= (int)$trend['rank'] ?></span><?= radar_h($trend['query']) ?></b>
+                    <small><?= $trend['traffic'] !== null ? radar_h($trend['traffic']) . ' buscas' : 'em alta' ?></small>
+                </a>
+            <?php endforeach; ?>
+        </div>
+    </section>
+<?php endif; ?>
+
+<section class="section" aria-labelledby="top-h">
+    <div class="section-head">
+        <h2 id="top-h">Maior potencial viral · últimas 24 h</h2>
+        <span class="muted">Pontuação editorial estimada pelo Radar (0–100); não é audiência medida.</span>
+    </div>
+    <?php if ($top['items'] === []): ?>
+        <div class="empty-state"><h3>Nada nas últimas 24 horas</h3><p>Atualize as fontes ou ative mais fontes em “Fontes monitoradas”.</p></div>
+    <?php else: ?>
+        <div class="cards">
+            <?php foreach ($top['items'] as $news) { echo radar_news_card($news); } ?>
+        </div>
+    <?php endif; ?>
+</section>
+
+<section class="section grid-2">
+    <div class="promo">
+        <?php if ($character !== null): ?>
+            <img src="media.php?id=<?= radar_h($character['id']) ?>" alt="Imagem de referência do personagem">
+        <?php else: ?>
+            <img src="assets/character-placeholder.svg" alt="Espaço reservado para o personagem">
+        <?php endif; ?>
+        <div>
+            <h2>Estúdio de React</h2>
+            <p class="muted">Personagem fixo + manchete + roteiro + prompt de vídeo.</p>
+            <a class="btn primary small" href="estudio.php">Abrir estúdio</a>
+            <?php if ($character === null): ?><a class="btn ghost small" href="personagem.php">Cadastrar personagem</a><?php endif; ?>
+        </div>
+    </div>
+    <div class="panel">
+        <h2>Fontes com problema</h2>
+        <?php if ($broken === []): ?>
+            <p class="muted">Nenhuma fonte ativa com erro na última coleta.</p>
+        <?php else: ?>
+            <ul class="reasons">
+                <?php foreach ($broken as $source): ?>
+                    <li><span><?= radar_h($source['name']) ?></span><span class="pill bad">erro</span><small><?= radar_h((string)$source['last_error']) ?></small></li>
+                <?php endforeach; ?>
+            </ul>
+            <p class="muted">Veja detalhes em <a href="coletas.php">Histórico de coleta</a>.</p>
+        <?php endif; ?>
+    </div>
+</section>
+<p class="footer-note">As notícias são lidas de feeds RSS/Atom públicos e do Google Trends. O Radar não verifica fatos: confira sempre a matéria original antes de gravar.</p>
+<?php radar_page_end();
