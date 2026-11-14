@@ -333,6 +333,33 @@ ALTER TABLE news ADD COLUMN job_city TEXT NOT NULL DEFAULT '';
 ALTER TABLE news ADD COLUMN job_age TEXT NOT NULL DEFAULT '';
 CREATE INDEX news_job ON news(category, job_state);
 SQL,
+        11 => <<<'SQL'
+CREATE TABLE job_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL DEFAULT 'adzuna',
+    external_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    company TEXT NOT NULL DEFAULT '',
+    location TEXT NOT NULL DEFAULT '',
+    region TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT '',
+    city TEXT NOT NULL DEFAULT '',
+    age TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    salary_min REAL,
+    salary_max REAL,
+    salary_predicted INTEGER NOT NULL DEFAULT 0,
+    contract_type TEXT NOT NULL DEFAULT '',
+    contract_time TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    UNIQUE (provider, external_id)
+);
+CREATE INDEX job_posts_place ON job_posts(state, city);
+CREATE INDEX job_posts_created ON job_posts(created_at);
+SQL,
     ];
 }
 

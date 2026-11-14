@@ -69,6 +69,10 @@ try {
                     exit;
                 }
                 radar_json(['item' => $script]);
+            case 'jobs':
+                $jobFilters = radar_jobs_filters($_GET);
+                $jobResult = radar_jobs_query($jobFilters);
+                radar_json(['items' => $jobResult['items'], 'total' => $jobResult['total'], 'page' => $jobFilters['page'], 'limit' => $jobFilters['limit'], 'source' => 'Vagas reais da API da Adzuna (Jobs by Adzuna)', 'connected' => radar_adzuna_configured()]);
             case 'duplicates':
                 $checked = radar_news_get(api_int($_GET['news_id'] ?? 0));
                 $checked === null ? radar_json(['error' => 'Notícia não encontrada.'], 404) : radar_json(['duplicates' => radar_editorial_duplicates($checked, radar_str($_GET['character'] ?? '') !== '' ? radar_str($_GET['character']) : null), 'note' => 'Reacts já feitos para a mesma notícia ou para o mesmo acontecimento.']);
@@ -157,6 +161,24 @@ try {
             $sceneScript = api_int($input['id'] ?? 0);
             radar_tv_scene_update($sceneScript, api_int($input['scene'] ?? 0), $input);
             radar_json(['item' => radar_script_get($sceneScript)]);
+
+        case 'adzuna_save':
+            radar_adzuna_save((string)($input['app_id'] ?? ''), (string)($input['app_key'] ?? ''), api_int($input['daily_limit'] ?? 60) ?: 60);
+            radar_json(['ok' => true, 'message' => 'Chave da Adzuna salva (criptografada).']);
+
+        case 'adzuna_forget':
+            radar_adzuna_forget();
+            radar_json(['ok' => true, 'message' => 'Chave da Adzuna removida.']);
+
+        case 'adzuna_test':
+            api_limit('adzuna-test', 6, 600);
+            radar_json(radar_adzuna_test());
+
+        case 'adzuna_refresh':
+            api_limit('adzuna-refresh', 12, 600);
+            @set_time_limit(120);
+            $refresh = radar_adzuna_refresh();
+            radar_json(['ok' => in_array($refresh['status'], ['ok', 'busy'], true), 'message' => $refresh['message']] + $refresh);
 
         case 'character_archive':
             radar_character_archive(radar_str($input['character'] ?? ''));
