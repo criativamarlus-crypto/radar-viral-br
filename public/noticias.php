@@ -63,7 +63,7 @@ radar_page_start('Notícias em alta', 'noticias.php');
     <?php if ($jobOn):
         $since = time() - ($filters['window'] > 0 ? $filters['window'] : 72) * 3600;
         $facets = radar_job_facets($since, $filters['job_state']);
-        $stateInfo = radar_job_states();
+        $stateInfo = radar_job_all_states();
         $ageLabels = radar_job_ages(); ?>
         <div class="chips" role="group" aria-label="Região das vagas">
             <span class="label">Região</span>
@@ -76,7 +76,7 @@ radar_page_start('Notícias em alta', 'noticias.php');
             <span class="label">Estado</span>
             <a class="chip<?= $filters['job_state'] === '' ? ' on' : '' ?>" href="<?= radar_h(radar_url('noticias.php', ['estado' => '', 'cidade' => ''] + $base)) ?>">Todos</a>
             <?php foreach ($facets['states'] as $uf => $total): if (!isset($stateInfo[$uf])) { continue; } ?>
-                <a class="chip<?= $filters['job_state'] === $uf ? ' on' : '' ?>" title="<?= radar_h($stateInfo[$uf]['name']) ?>" href="<?= radar_h(radar_url('noticias.php', ['estado' => $uf, 'regiao' => '', 'cidade' => ''] + $base)) ?>"><?= radar_h($uf) ?><span class="count"><?= (int)$total ?></span></a>
+                <a class="chip<?= $filters['job_state'] === $uf ? ' on' : '' ?>" title="<?= radar_h($stateInfo[$uf]['name']) ?>" href="<?= radar_h(radar_url('noticias.php', ['estado' => $uf, 'regiao' => '', 'cidade' => ''] + $base)) ?>"><?= radar_h(radar_job_state_label($uf)) ?><span class="count"><?= (int)$total ?></span></a>
             <?php endforeach; ?>
         </div>
         <div class="chips" role="group" aria-label="Idade das vagas">
@@ -91,7 +91,7 @@ radar_page_start('Notícias em alta', 'noticias.php');
                 <select name="cidade" data-autosubmit>
                     <option value="">Todas as cidades</option>
                     <?php foreach ($facets['cities'] as $city): ?>
-                        <option value="<?= radar_h($city['city']) ?>"<?= $filters['job_city'] === $city['city'] ? ' selected' : '' ?>><?= radar_h($city['city'] . ' (' . $city['state'] . ') · ' . $city['total']) ?></option>
+                        <option value="<?= radar_h($city['city']) ?>"<?= $filters['job_city'] === $city['city'] ? ' selected' : '' ?>><?= radar_h($city['city'] . ($city['state'] !== '' ? ' (' . radar_job_state_label($city['state']) . ')' : '') . ' · ' . $city['total']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </label>

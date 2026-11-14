@@ -14,7 +14,71 @@ const RADAR_JOB_CATEGORY = 'Vagas de emprego';
 /** @return array<int,string> */
 function radar_job_regions(): array
 {
+    return ['Norte', 'Nordeste', 'Centro-Oeste', 'Sudeste', 'Sul', 'Paraguai'];
+}
+
+/** @return array<int,string> the five regions of Brazil */
+function radar_job_brazil_regions(): array
+{
     return ['Norte', 'Nordeste', 'Centro-Oeste', 'Sudeste', 'Sul'];
+}
+
+/** The departments of Paraguay (ISO 3166-2:PY codes) with the capital district. @return array<string,string> code => name */
+function radar_job_py_departments(): array
+{
+    return [
+        'PY-ASU' => 'Asunción', 'PY-1' => 'Concepción', 'PY-2' => 'San Pedro', 'PY-3' => 'Cordillera', 'PY-4' => 'Guairá', 'PY-5' => 'Caaguazú', 'PY-6' => 'Caazapá', 'PY-7' => 'Itapúa', 'PY-8' => 'Misiones',
+        'PY-9' => 'Paraguarí', 'PY-10' => 'Alto Paraná', 'PY-11' => 'Central', 'PY-12' => 'Ñeembucú', 'PY-13' => 'Amambay', 'PY-14' => 'Canindeyú', 'PY-15' => 'Presidente Hayes', 'PY-16' => 'Alto Paraguay', 'PY-19' => 'Boquerón',
+    ];
+}
+
+/** Every state of Brazil and department of Paraguay, for the filters. @return array<string,array{name:string,region:string}> */
+function radar_job_all_states(): array
+{
+    $all = radar_job_states();
+    foreach (radar_job_py_departments() as $code => $name) {
+        $all[$code] = ['name' => $name, 'region' => 'Paraguai'];
+    }
+    return $all;
+}
+
+/** What is shown for a state code: the UF of Brazil or the name of the Paraguayan department. */
+function radar_job_state_label(string $code): string
+{
+    return radar_job_py_departments()[$code] ?? $code;
+}
+
+/** Cities of Paraguay (the biggest, by department). @return array<string,string> city => department code */
+function radar_job_py_cities(): array
+{
+    return [
+        'Asunción' => 'PY-ASU', 'Luque' => 'PY-11', 'San Lorenzo' => 'PY-11', 'Lambaré' => 'PY-11', 'Fernando de la Mora' => 'PY-11', 'Capiatá' => 'PY-11', 'Limpio' => 'PY-11', 'Ñemby' => 'PY-11', 'Villa Elisa' => 'PY-11',
+        'Mariano Roque Alonso' => 'PY-11', 'Itauguá' => 'PY-11', 'Areguá' => 'PY-11', 'Ypacaraí' => 'PY-11', 'Ypané' => 'PY-11', 'Guarambaré' => 'PY-11', 'Villeta' => 'PY-11', 'San Antonio' => 'PY-11',
+        'Ciudad del Este' => 'PY-10', 'Hernandarias' => 'PY-10', 'Presidente Franco' => 'PY-10', 'Minga Guazú' => 'PY-10', 'Santa Rita' => 'PY-10', 'Encarnación' => 'PY-7', 'Cambyretá' => 'PY-7', 'Hohenau' => 'PY-7',
+        'Pedro Juan Caballero' => 'PY-13', 'Salto del Guairá' => 'PY-14', 'Katueté' => 'PY-14', 'Curuguaty' => 'PY-14', 'Coronel Oviedo' => 'PY-5', 'Caaguazú' => 'PY-5', 'Villarrica' => 'PY-4', 'Concepción' => 'PY-1',
+        'San Juan Bautista' => 'PY-8', 'San Ignacio' => 'PY-8', 'Ayolas' => 'PY-8', 'Pilar' => 'PY-12', 'Villa Hayes' => 'PY-15', 'Filadelfia' => 'PY-19', 'Loma Plata' => 'PY-19', 'Caacupé' => 'PY-3', 'Paraguarí' => 'PY-9',
+        'Carapeguá' => 'PY-9', 'Caazapá' => 'PY-6', 'Fuerte Olimpo' => 'PY-16', 'Santaní' => 'PY-2',
+    ];
+}
+
+/** City names that, written in a text, already say it is about Paraguay. @return array<int,string> */
+function radar_job_py_markers(): array
+{
+    return ['Asunción', 'Ciudad del Este', 'Encarnación', 'Pedro Juan Caballero', 'Lambaré', 'Fernando de la Mora', 'Capiatá', 'Luque', 'Minga Guazú', 'Hernandarias', 'Presidente Franco', 'Villa Elisa', 'Ñemby', 'Mariano Roque Alonso', 'Coronel Oviedo', 'Salto del Guairá', 'Villa Hayes', 'Caacupé'];
+}
+
+/** True when the text is about Paraguay: the country's name or a city that only exists there. */
+function radar_job_is_paraguay(string $foldedText): bool
+{
+    if (preg_match('/ (paraguay|paraguai|paraguayo|paraguaya|paraguaio|paraguaia|paraguayos|paraguaios) /', $foldedText) === 1) {
+        return true;
+    }
+    foreach (radar_job_py_markers() as $marker) {
+        if (str_contains($foldedText, ' ' . radar_fold($marker) . ' ')) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** @return array<string,array{name:string,region:string}> UF => state */
@@ -92,7 +156,7 @@ function radar_job_ages(): array
 /** Words that, with "vaga(s)", say the story is about jobs (a "vaga" alone can be a final, a parking spot or a seat). @return array<int,string> */
 function radar_job_context_words(): array
 {
-    return ['emprego', 'empregos', 'trabalho', 'estagio', 'estagios', 'aprendiz', 'clt', 'contratacao', 'contratacoes', 'contratando', 'salario', 'salarios', 'carteira assinada', 'candidatos', 'curriculo', 'sine', 'concurso', 'edital', 'inscricoes abertas', 'processo seletivo'];
+    return ['empleo', 'empleos', 'laboral', 'laborales', 'puestos', 'postulacion', 'postulaciones', 'postular', 'curriculum', 'feria de empleo', 'emprego', 'empregos', 'trabalho', 'estagio', 'estagios', 'aprendiz', 'clt', 'contratacao', 'contratacoes', 'contratando', 'salario', 'salarios', 'carteira assinada', 'candidatos', 'curriculo', 'sine', 'concurso', 'edital', 'inscricoes abertas', 'processo seletivo'];
 }
 
 /** Phrases that say it on their own. @return array<int,string> */
@@ -102,6 +166,9 @@ function radar_job_strong_phrases(): array
         'vagas de emprego', 'vaga de emprego', 'vagas de trabalho', 'vaga de trabalho', 'vagas de estagio', 'vaga de estagio', 'vagas de aprendiz', 'vagas abertas', 'oferta de emprego', 'ofertas de emprego',
         'oportunidades de emprego', 'oportunidade de emprego', 'mutirao de emprego', 'feira de emprego', 'feira de empregos', 'jovem aprendiz', 'jovens aprendizes', 'primeiro emprego', 'processo seletivo',
         'vagas temporarias', 'vagas com carteira assinada', 'vagas para pcd', 'vagas pcd', 'vagas de emprego',
+        // Spanish (Paraguay)
+        'ofertas de empleo', 'oferta de empleo', 'oferta laboral', 'ofertas laborales', 'puestos de trabajo', 'puestos laborales', 'bolsa de trabajo', 'feria de empleo', 'ferias de empleo', 'expo empleo',
+        'convocatoria laboral', 'oportunidades laborales', 'oportunidad laboral', 'primer empleo',
     ];
 }
 
@@ -136,6 +203,7 @@ function radar_job_direct_feeds(): array
         ['name' => 'Concursos no Brasil', 'url' => 'https://www.concursosnobrasil.com.br/feed/', 'kind' => 'tag', 'state' => ''],
         ['name' => 'Concursos RN', 'url' => 'https://www.concursosrn.com.br/feed/', 'kind' => 'tag', 'state' => 'RN'],
         ['name' => 'Concursos SC', 'url' => 'https://www.concursossc.com.br/feed/', 'kind' => 'tag', 'state' => 'SC'],
+        ['name' => 'Diario HOY · Empleo (Paraguay)', 'url' => 'https://www.hoy.com.py/tag/empleo/feed', 'kind' => 'tag', 'state' => 'PY'],
     ];
 }
 
@@ -149,6 +217,9 @@ function radar_job_feed_info(string $url): ?array
         if ($feed['url'] === $url) {
             return $feed;
         }
+    }
+    if (str_starts_with($url, 'https://news.google.com/rss/search') && str_contains($url, 'gl=PY')) {
+        return ['name' => 'Google Notícias · Paraguai', 'url' => $url, 'kind' => 'tag', 'state' => 'PY'];
     }
     return null;
 }
@@ -168,7 +239,7 @@ function radar_job_is_listing(string $title, string $summary = ''): bool
         return true;
     }
     $text = ' ' . radar_fold($title . ' ' . $summary) . ' ';
-    return preg_match('/ (contrata|contratam|contratando|selecionam?|recruta|recrutam|admite|abre selecao|abre processo|abre oportunidades?|oferece oportunidades?|oferecem oportunidades?|vagas? para|precisa de|esta contratando|estao contratando) /', $text) === 1;
+    return preg_match('/ (contrata|contratam|contratando|selecionam?|recruta|recrutam|admite|abre selecao|abre processo|abre oportunidades?|oferece oportunidades?|oferecem oportunidades?|vagas? para|precisa de|esta contratando|estao contratando|contratan|busca personal|solicita personal|se buscan|ofrece(n)? (vacantes|puestos|empleos?|oportunidades)|abre(n)? convocatoria) /', $text) === 1;
 }
 
 /** True when the headline or the summary announces job openings. */
@@ -180,7 +251,11 @@ function radar_job_is_vacancy(string $title, string $summary = ''): bool
             return true;
         }
     }
-    if (preg_match('/ vagas? /', $text) !== 1) {
+    // "Ofrecen 200 puestos", "ofrece vacantes": the offer itself, in Spanish.
+    if (preg_match('/ ofrece(n)? (mas de )?([0-9. ]+ )?(puestos|vacantes|empleos|plazas) /', $text) === 1) {
+        return true;
+    }
+    if (preg_match('/ (vagas?|vacantes?|vacancias?) /', $text) !== 1) {
         return false;
     }
     foreach (radar_job_context_words() as $word) {
@@ -202,6 +277,9 @@ function radar_job_extract(string $title, string $summary = '', string $defaultS
     $original = $title . ' ' . $summary;
     $foldedTitle = ' ' . radar_fold($title) . ' ';
     $foldedAll = ' ' . radar_fold($title . ' ' . $summary) . ' ';
+    if ($defaultState === 'PY' || radar_job_is_paraguay($foldedAll)) {
+        return radar_job_extract_py($foldedTitle, $foldedAll, $original);
+    }
     // State: its name, or its abbreviation written as "(SP)", "- SP", "/SP", ", SP" or "em SP".
     $state = '';
     $names = [];
@@ -256,18 +334,60 @@ function radar_job_extract(string $title, string $summary = '', string $defaultS
             }
         }
     }
-    $age = '';
-    if (preg_match('/ (jovem aprendiz|jovens aprendizes|menor aprendiz|vagas? de aprendiz|programa aprendiz) /', $foldedAll) === 1) {
-        $age = 'aprendiz';
-    } elseif (str_contains($foldedAll, ' primeiro emprego ')) {
-        $age = 'primeiro_emprego';
-    } elseif (preg_match('/ (50 mais|45 mais|60 mais|maiores de (45|50|55|60)|acima de (45|50|55|60)|(45|50|55|60) anos ou mais|a partir de (45|50|55|60) anos|idosos|terceira idade|melhor idade|profissionais maduros) /', $foldedAll) === 1
-        || preg_match('/\b(45|50|60)\s*\+/u', $original) === 1) {
-        $age = '50mais';
-    } elseif (preg_match('/ (estagio|estagios|estagiario|estagiarios|estagiaria) /', $foldedAll) === 1) {
-        $age = 'estagio';
-    }
+    $age = radar_job_age($foldedAll, $original);
     return ['region' => $region, 'state' => $state, 'city' => $city, 'age' => $age];
+}
+
+/** The age group a text announces (Portuguese or Spanish), or ''. */
+function radar_job_age(string $foldedAll, string $original): string
+{
+    if (preg_match('/ (jovem aprendiz|jovens aprendizes|menor aprendiz|vagas? de aprendiz|programa aprendiz) /', $foldedAll) === 1) {
+        return 'aprendiz';
+    }
+    if (preg_match('/ (primeiro emprego|primer empleo) /', $foldedAll) === 1) {
+        return 'primeiro_emprego';
+    }
+    if (preg_match('/ (50 mais|45 mais|60 mais|maiores de (45|50|55|60)|acima de (45|50|55|60)|(45|50|55|60) anos ou mais|a partir de (45|50|55|60) anos|idosos|terceira idade|melhor idade|profissionais maduros|mayores de (45|50|55|60)|adultos mayores|tercera edad|(45|50|55|60) anos o mas) /', $foldedAll) === 1
+        || preg_match('/\b(45|50|60)\s*\+/u', $original) === 1) {
+        return '50mais';
+    }
+    if (preg_match('/ (estagio|estagios|estagiario|estagiarios|estagiaria|pasantia|pasantias|pasante|pasantes) /', $foldedAll) === 1) {
+        return 'estagio';
+    }
+    return '';
+}
+
+/**
+ * Place of a vacancy story about Paraguay: the region is always "Paraguai"; the city and the department come from the
+ * names written in the text (a city gives its department).
+ *
+ * @return array{region:string,state:string,city:string,age:string}
+ */
+function radar_job_extract_py(string $foldedTitle, string $foldedAll, string $original): array
+{
+    $cities = radar_job_py_cities();
+    uksort($cities, static fn(string $a, string $b): int => strlen(radar_fold($b)) <=> strlen(radar_fold($a)));
+    $city = '';
+    $state = '';
+    foreach ([$foldedTitle, $foldedAll] as $haystack) {
+        foreach ($cities as $name => $code) {
+            if (str_contains($haystack, ' ' . radar_fold($name) . ' ')) {
+                [$city, $state] = [$name, $code];
+                break 2;
+            }
+        }
+    }
+    if ($state === '') {
+        // Departments that are not also an everyday word ("Central" and "Misiones" are only read in a city or after "departamento").
+        foreach (['PY-10' => 'alto parana', 'PY-16' => 'alto paraguay', 'PY-13' => 'amambay', 'PY-19' => 'boqueron', 'PY-5' => 'caaguazu', 'PY-6' => 'caazapa', 'PY-14' => 'canindeyu', 'PY-4' => 'guaira', 'PY-7' => 'itapua',
+            'PY-12' => 'neembucu', 'PY-9' => 'paraguari', 'PY-15' => 'presidente hayes', 'PY-3' => 'cordillera', 'PY-11' => 'departamento central', 'PY-ASU' => 'gran asuncion'] as $code => $name) {
+            if (str_contains($foldedAll, ' ' . $name . ' ')) {
+                $state = $code;
+                break;
+            }
+        }
+    }
+    return ['region' => 'Paraguai', 'state' => $state, 'city' => $city, 'age' => radar_job_age($foldedAll, $original)];
 }
 
 /** Read the place and the age of a stored story and save them (only for vacancy stories). */
@@ -313,13 +433,43 @@ function radar_job_sources(): array
         $feed('50+ e maiores de 50', 'vagas emprego "50+" OR "maiores de 50" OR "60+" OR "terceira idade"', 0.8),
         $feed('Mutirões e processos seletivos', 'mutirão de emprego OR "feira de empregos" OR "processo seletivo" vagas', 0.8),
     ]);
-    foreach (radar_job_regions() as $region) {
+    foreach (radar_job_paraguay_feeds() as $py) {
+        $sources[] = $py;
+    }
+    foreach (radar_job_brazil_regions() as $region) {
         $sources[] = $feed('Região ' . $region, '"vagas de emprego" região ' . $region . ' when:7d', 0.8);
     }
     foreach (radar_job_states() as $info) {
         $sources[] = $feed($info['name'], '"vagas de emprego" ' . $info['name'] . ' when:7d', 0.8);
     }
     return $sources;
+}
+
+/**
+ * Google News searches of Paraguay (Spanish, edition of Paraguay) and of Brazilians looking for work there (Portuguese).
+ *
+ * @return array<int,array{name:string,url:string,category:string,region:string,weight:float}>
+ */
+function radar_job_paraguay_feeds(): array
+{
+    $spanish = 'hl=es-419&gl=PY&ceid=PY:es-419';
+    $portuguese = 'hl=pt-BR&gl=BR&ceid=BR:pt-419';
+    $feed = static fn(string $name, string $query, string $edition): array => [
+        'name' => 'Google Notícias · Vagas · Paraguai · ' . $name, 'url' => 'https://news.google.com/rss/search?q=' . str_replace('%20', '+', rawurlencode($query)) . '&' . $edition,
+        'category' => RADAR_JOB_CATEGORY, 'region' => 'INT', 'weight' => 0.8,
+    ];
+    return [
+        $feed('Ofertas de empleo', '"ofertas de empleo" Paraguay', $spanish),
+        $feed('Vacantes', 'empleo vacantes Paraguay', $spanish),
+        $feed('Primer empleo', '"primer empleo" Paraguay', $spanish),
+        $feed('Pasantías', 'pasantías Paraguay', $spanish),
+        $feed('Ferias de empleo', 'feria de empleo Paraguay', $spanish),
+        $feed('Asunción', 'empleo Asunción vacantes', $spanish),
+        $feed('Ciudad del Este', '"Ciudad del Este" empleo vacantes', $spanish),
+        $feed('Encarnación', 'empleo Encarnación vacantes', $spanish),
+        $feed('Para brasileiros', 'vagas de emprego Paraguai', $portuguese),
+        $feed('Ciudad del Este (PT)', 'vagas emprego "Ciudad del Este"', $portuguese),
+    ];
 }
 
 /**

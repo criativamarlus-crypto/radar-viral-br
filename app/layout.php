@@ -226,7 +226,7 @@ function radar_news_card(array $n, bool $showSave = true): string
     $speaker = count(radar_characters_visible()) > 1 ? '<span class="pill">' . radar_h(radar_character_get(radar_character_for_category((string)$n['category']))['name']) . '</span>' : '';
     $jobPills = '';
     if (!empty($n['job'])) {
-        $place = implode(' · ', array_filter([$n['job']['city'], $n['job']['state'], $n['job']['region']]));
+        $place = implode(' · ', array_filter([$n['job']['city'], $n['job']['state_label'], $n['job']['region']]));
         $jobPills = ($place !== '' ? '<span class="pill">' . radar_h($place) . '</span>' : '<span class="pill">Local não informado</span>')
             . ($n['job']['age_label'] !== '' ? '<span class="pill">' . radar_h($n['job']['age_label']) . '</span>' : '');
     }

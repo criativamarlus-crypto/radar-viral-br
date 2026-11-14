@@ -6,7 +6,7 @@ check('the vacancy category exists, is a valid source category and the real job 
     $sources = radar_job_sources();
     $names = array_column($sources, 'name');
     $urls = array_column($sources, 'url');
-    return in_array(RADAR_JOB_CATEGORY, radar_category_list(), true) && radar_source_category_valid('Vagas de emprego') && count($sources) === count(radar_job_direct_feeds()) + 7 + 5 + 27 && count(array_unique($urls)) === count($urls)
+    return in_array(RADAR_JOB_CATEGORY, radar_category_list(), true) && radar_source_category_valid('Vagas de emprego') && count($sources) === count(radar_job_direct_feeds()) + count(radar_job_paraguay_feeds()) + 7 + 5 + 27 && count(array_unique($urls)) === count($urls)
         && in_array('Google Notícias · Vagas · Bahia', $names, true) && in_array('Google Notícias · Vagas · Região Nordeste', $names, true) && in_array('Google Notícias · Vagas · Jovem aprendiz', $names, true)
         && array_unique(array_column($sources, 'category')) === ['Vagas de emprego'] && str_starts_with($urls[count(radar_job_direct_feeds())], 'https://news.google.com/rss/search?q=%22vagas+de+emprego%22&hl=pt-BR');
 });
@@ -114,7 +114,7 @@ check('the direct feeds of Brazilian vacancy boards and portals are listed once,
     $urls = array_column($feeds, 'url');
     $sourceUrls = array_column(radar_job_sources(), 'url');
     foreach ($feeds as $feed) {
-        if (!str_starts_with($feed['url'], 'https://') || !in_array($feed['kind'], ['listing', 'tag'], true) || ($feed['state'] !== '' && !isset(radar_job_states()[$feed['state']])) || !in_array($feed['url'], $sourceUrls, true) || radar_feed_safe_url($feed['url']) === null) {
+        if (!str_starts_with($feed['url'], 'https://') || !in_array($feed['kind'], ['listing', 'tag'], true) || ($feed['state'] !== '' && $feed['state'] !== 'PY' && !isset(radar_job_states()[$feed['state']])) || !in_array($feed['url'], $sourceUrls, true) || radar_feed_safe_url($feed['url']) === null) {
             return false;
         }
     }
@@ -156,4 +156,50 @@ check('collection stores a vacancy-board post in the vacancy category with the p
     radar_news_reclassify();
     $again = radar_db_one('SELECT category, job_region, job_state, job_city FROM news WHERE id = 850');
     return $new === true && $row === ['category' => 'Vagas de emprego', 'job_region' => 'Sudeste', 'job_state' => 'MG', 'job_city' => 'Contagem'] && $again === ['category' => 'Vagas de emprego', 'job_region' => 'Sudeste', 'job_state' => 'MG', 'job_city' => 'Betim'];
+});check('Paraguay: Spanish and Portuguese vacancy headlines are recognised and political "vacantes" or other news are not', static function (): bool {
+    $yes = ['Informan sobre 300 vacancias laborales para Mundial de Rally en Paraguay', 'Expo Empleo ofrece más de 780 vacancias laborales en San Lorenzo y Ciudad del Este', 'Casi mil puestos vacantes se ofrecerán este viernes en nueva Feria de Empleo',
+        '¡Atención Alto Paraná! Ofrecen 200 puestos en auxiliar de producción', 'Más de 530 vacantes en ferias de empleo en Minga Guazú y Limpio', 'Primer empleo en Paraguay: 8 trabajos que podés conseguir sin experiencia', 'Feirão de empregos tem mais de 800 vagas em Ciudad del Este e região'];
+    $no = ['Vacante en la Corte Suprema será cubierta por el Senado', 'El presidente de Paraguay enfrenta un juicio de destitución en medio de protestas', 'Selección paraguaya vence a Chile en Asunción'];
+    foreach ($yes as $title) {
+        if (!radar_job_is_vacancy($title) || radar_classify($title) !== 'Vagas de emprego') {
+            fwrite(STDERR, "  should be vacancy: $title => " . radar_classify($title) . "\n");
+            return false;
+        }
+    }
+    foreach ($no as $title) {
+        if (radar_job_is_vacancy($title) || radar_classify($title) === 'Vagas de emprego') {
+            fwrite(STDERR, "  should not be vacancy: $title\n");
+            return false;
+        }
+    }
+    $google = 'https://news.google.com/rss/search?q=empleo+vacantes+Paraguay&hl=es-419&gl=PY&ceid=PY:es-419';
+    return radar_classify('Cebras PY impulsa feria de empleo en CDE para cien vacancias', '', 'Vagas de emprego', false, $google) === 'Vagas de emprego' && radar_job_feed_info($google)['state'] === 'PY'
+        && radar_job_feed_info('https://news.google.com/rss/search?q=Neymar&hl=pt-BR&gl=BR&ceid=BR:pt-419') === null && radar_job_is_listing('Empresa busca personal para atención al cliente') && !radar_job_is_listing('El gobierno convoca a elecciones');
+});
+check('Paraguay: the place is read as department and city, the region is "Paraguai", Brazilian texts are untouched and the age words work in Spanish', static function (): bool {
+    $cde = radar_job_extract('Expo Empleo ofrece más de 780 vacancias laborales en San Lorenzo y Ciudad del Este');
+    $enc = radar_job_extract('Expo Empleo en Encarnación ofrecerá más de 400 puestos para el Rally del Paraguay 2026');
+    $pt = radar_job_extract('Concurso no Paraguai tem vagas em Ciudad del Este com salários de até R$ 5,3 mil');
+    $dept = radar_job_extract('¡Atención Alto Paraná! Ofrecen 200 puestos en auxiliar de producción', '', 'PY');
+    $default = radar_job_extract('Feria Virtual de Empleo 2026: sectores con más vacantes', '', 'PY');
+    $brazil = radar_job_extract('Feirão de empregos tem mais de 800 vagas em Foz do Iguaçu (PR)');
+    $age = static fn(string $t): string => radar_job_extract($t, '', 'PY')['age'];
+    return $cde === ['region' => 'Paraguai', 'state' => 'PY-10', 'city' => 'Ciudad del Este', 'age' => ''] && $enc['state'] === 'PY-7' && $enc['city'] === 'Encarnación' && $pt['region'] === 'Paraguai' && $pt['state'] === 'PY-10' && $pt['city'] === 'Ciudad del Este'
+        && $dept['state'] === 'PY-10' && $dept['city'] === '' && $default === ['region' => 'Paraguai', 'state' => '', 'city' => '', 'age' => ''] && $brazil['region'] === 'Sul' && $brazil['state'] === 'PR' && $brazil['city'] === 'Foz do Iguaçu'
+        && $age('Primer empleo en Paraguay: 8 trabajos sin experiencia') === 'primeiro_emprego' && $age('Pasantías remuneradas para estudiantes') === 'estagio' && $age('Ofertas para adultos mayores y mayores de 50 años') === '50mais'
+        && radar_job_state_label('PY-10') === 'Alto Paraná' && radar_job_state_label('SP') === 'SP' && radar_job_all_states()['PY-ASU']['region'] === 'Paraguai' && count(radar_job_all_states()) === 27 + 18 && in_array('Paraguai', radar_job_regions(), true) && count(radar_job_brazil_regions()) === 5;
+});
+check('Paraguay: stored stories are filtered by region, department and city, and the card and the news item show the Paraguayan place', static function (): bool {
+    global $now;
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (860, 'py1', 'Última Hora', 'Expo Empleo ofrece más de 780 vacancias laborales en San Lorenzo y Ciudad del Este', 'https://ultimahora.example.com/py1', '', ?, ?, ?, 'Geral', 50, 1)", [$now - 600, $now - 600, $now - 600]);
+    radar_news_reclassify();
+    $by = static function (array $input): array {
+        $result = array_column(radar_news_query(radar_news_filters($input + ['janela' => 'tudo', 'agrupar' => '0']))['items'], 'id');
+        sort($result);
+        return $result;
+    };
+    $item = radar_news_get(860);
+    return $by(['regiao' => 'Paraguai']) === [860] && $by(['estado' => 'py-10']) === [860] && $by(['cidade' => 'Ciudad del Este']) === [860] && $by(['regiao' => 'Sudeste']) !== [860] && $item['category'] === 'Vagas de emprego'
+        && $item['job']['region'] === 'Paraguai' && $item['job']['state'] === 'PY-10' && $item['job']['state_label'] === 'Alto Paraná' && str_contains(radar_news_card($item), 'Ciudad del Este · Alto Paraná · Paraguai')
+        && radar_news_filters(['estado' => 'PY-99'])['job_state'] === '' && radar_job_facets($now - 86400)['regions']['Paraguai'] >= 1;
 });
