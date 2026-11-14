@@ -1700,7 +1700,7 @@ check('no private keys, tokens or real credentials are committed', static functi
     return true;
 });
 check('the public web root contains only entry points and assets (no app code, config or storage)', static function () use ($root): bool {
-    $allowed = ['api.php', 'assets', 'config-ia.php', 'coletas.php', 'estudio.php', 'fontes.php', 'health.php', 'index.php', 'integracoes.php', 'login.php', 'logout.php', 'mcp.php', 'media.php', 'noticia.php', 'noticias.php', 'oauth-authorize.php', 'oauth-metadata.php', 'oauth-register.php', 'oauth-token.php', 'personagem.php', 'roteiro.php', 'roteiros.php', 'salvas.php', 'vagas.php'];
+    $allowed = ['api.php', 'assets', 'config-ia.php', 'coletas.php', 'estudio.php', 'fontes.php', 'health.php', 'index.php', 'integracoes.php', 'login.php', 'logout.php', 'mcp.php', 'media.php', 'noticia.php', 'noticias.php', 'oauth-authorize.php', 'oauth-metadata.php', 'oauth-register.php', 'oauth-token.php', 'personagem.php', 'roteiro.php', 'roteiros.php', 'salvas.php'];
     $found = array_values(array_diff(scandir($root . '/public') ?: [], ['.', '..']));
     return array_diff($found, $allowed) === [] && !is_dir($root . '/public/storage') && !is_file($root . '/public/config.php');
 });
@@ -1722,7 +1722,6 @@ check('front-end code has no inline scripts or styles (strict CSP)', static func
 
 require __DIR__ . '/neymar.php';
 require __DIR__ . '/jobs.php';
-require __DIR__ . '/adzuna.php';
 require __DIR__ . '/tv.php';
 require __DIR__ . '/archive.php';
 require __DIR__ . '/http.php';

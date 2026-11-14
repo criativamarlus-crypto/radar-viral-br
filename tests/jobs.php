@@ -6,9 +6,9 @@ check('the vacancy category exists, is a valid source category and the real job 
     $sources = radar_job_sources();
     $names = array_column($sources, 'name');
     $urls = array_column($sources, 'url');
-    return in_array(RADAR_JOB_CATEGORY, radar_category_list(), true) && radar_source_category_valid('Vagas de emprego') && count($sources) === 7 + 5 + 27 && count(array_unique($urls)) === count($urls)
+    return in_array(RADAR_JOB_CATEGORY, radar_category_list(), true) && radar_source_category_valid('Vagas de emprego') && count($sources) === count(radar_job_direct_feeds()) + 7 + 5 + 27 && count(array_unique($urls)) === count($urls)
         && in_array('Google Notícias · Vagas · Bahia', $names, true) && in_array('Google Notícias · Vagas · Região Nordeste', $names, true) && in_array('Google Notícias · Vagas · Jovem aprendiz', $names, true)
-        && array_unique(array_column($sources, 'category')) === ['Vagas de emprego'] && str_starts_with($urls[0], 'https://news.google.com/rss/search?q=%22vagas+de+emprego%22&hl=pt-BR');
+        && array_unique(array_column($sources, 'category')) === ['Vagas de emprego'] && str_starts_with($urls[count(radar_job_direct_feeds())], 'https://news.google.com/rss/search?q=%22vagas+de+emprego%22&hl=pt-BR');
 });
 check('a headline that offers vacancies is a vacancy story; a football "vaga", a parking space or the jobs balance are not', static function (): bool {
     $yes = ['Prefeitura abre 300 vagas de emprego em Campinas', 'Mutirão oferece 1.200 vagas em Fortaleza para o emprego', 'Jovem aprendiz: empresa abre 4 mil vagas', 'Processo seletivo tem 100 vagas para o hospital', 'Vagas abertas para operador de caixa (SP)',
@@ -108,4 +108,52 @@ check('"Pará" is the state only when written as a name, never the word "para"',
     $belem = radar_job_extract('Vagas de emprego em Belém, no Pará', '');
     $word = radar_job_extract('Vagas de emprego para vendedor e para caixa', '');
     return $belem['state'] === 'PA' && $belem['city'] === 'Belém' && $belem['region'] === 'Norte' && $word['state'] === '' && $word['region'] === '' && radar_job_extract('VAGAS DE EMPREGO NO PARÁ')['state'] === 'PA';
+});
+check('the direct feeds of Brazilian vacancy boards and portals are listed once, with HTTPS addresses, a kind and a real state', static function (): bool {
+    $feeds = radar_job_direct_feeds();
+    $urls = array_column($feeds, 'url');
+    $sourceUrls = array_column(radar_job_sources(), 'url');
+    foreach ($feeds as $feed) {
+        if (!str_starts_with($feed['url'], 'https://') || !in_array($feed['kind'], ['listing', 'tag'], true) || ($feed['state'] !== '' && !isset(radar_job_states()[$feed['state']])) || !in_array($feed['url'], $sourceUrls, true) || radar_feed_safe_url($feed['url']) === null) {
+            return false;
+        }
+    }
+    return count($feeds) >= 20 && count(array_unique($urls)) === count($urls) && in_array('https://www.empregosmg.com.br/feed/', $urls, true) && in_array('https://g1.globo.com/rss/g1/concursos-e-emprego/', $urls, true)
+        && radar_job_feed_info('https://www.empregosmg.com.br/feed/')['state'] === 'MG' && radar_job_feed_info('https://www.empregosmg.com.br/feed/')['kind'] === 'listing' && radar_job_feed_info('https://g1.globo.com/rss/g1/economia/') === null && radar_job_feed_info('') === null;
+});
+check('a post of a vacancy board is an opening even without the word "vaga", advice posts are not, and a portal section counts only the hiring posts', static function (): bool {
+    $board = 'https://www.empregosmg.com.br/feed/';
+    $portal = 'https://g1.globo.com/rss/g1/concursos-e-emprego/';
+    $opening = 'Contabilidade contrata Analista Fiscal para Padre Eustáquio/Contagem – R$ 3.500,00';
+    return radar_classify($opening, '', 'Vagas de emprego', false, $board) === 'Vagas de emprego' && radar_classify('Operador de Acabamento – Contagem', '', 'auto', false, $board) === 'Vagas de emprego'
+        && radar_classify($opening) !== 'Vagas de emprego' && radar_classify('Como escrever uma carta de apresentação sem experiência', '', 'auto', false, $board) !== 'Vagas de emprego'
+        && radar_classify('Erros que eliminam candidatos rapidamente', '', 'auto', false, $board) !== 'Vagas de emprego' && radar_classify('Região de Ribeirão Preto contrata auxiliar de cobrança e mais 175', '', 'auto', false, $portal) === 'Vagas de emprego'
+        && radar_classify('Prefeito inaugura praça na região', '', 'auto', false, $portal) !== 'Vagas de emprego' && radar_classify('Região de Ribeirão Preto contrata auxiliar de cobrança e mais 175', '', 'auto', false, 'https://g1.globo.com/rss/g1/economia/') !== 'Vagas de emprego'
+        && radar_job_is_listing('Empresa seleciona auxiliar de limpeza') && !radar_job_is_listing('Prefeito inaugura praça') && radar_job_looks_like_advice('Como voltar ao mercado de trabalho') && !radar_job_looks_like_advice('Vendedor de loja – Recife');
+});
+check('a vacancy board of one state places its openings in that state when the text does not, and the text wins over the board', static function (): bool {
+    $mg = radar_job_extract('Contabilidade contrata Analista Fiscal para Padre Eustáquio/Contagem – R$ 3.500,00', '', 'MG');
+    $pe = radar_job_extract('Auxiliar administrativo', '', 'PE');
+    $text = radar_job_extract('Vaga para vendedor em Fortaleza (CE)', '', 'PE');
+    $natal = radar_job_extract('Atendente em Natal', '', 'RN');
+    $noBoard = radar_job_extract('Auxiliar administrativo', '', '');
+    return $mg['state'] === 'MG' && $mg['city'] === 'Contagem' && $mg['region'] === 'Sudeste' && $pe['state'] === 'PE' && $pe['region'] === 'Nordeste' && $pe['city'] === '' && $text['state'] === 'CE' && $text['city'] === 'Fortaleza'
+        && $natal['city'] === 'Natal' && $natal['state'] === 'RN' && $noBoard['state'] === '' && radar_job_extract('Atendente em Natal', '', '')['city'] === '';
+});
+check('collection stores a vacancy-board post in the vacancy category with the place of the board, and re-classification does the same for stored posts', static function (): bool {
+    global $now;
+    radar_sources_seed();
+    radar_setting_set('sources_seeded_version', '0');
+    radar_sources_seed();
+    $source = radar_db_one("SELECT id, category, url FROM sources WHERE url = 'https://www.empregosmg.com.br/feed/'");
+    if ($source === null) {
+        return false;
+    }
+    $item = ['uid' => 'board-1', 'title' => 'Contabilidade contrata Analista Fiscal para Padre Eustáquio/Contagem – R$ 3.500,00', 'url' => 'https://www.empregosmg.com.br/analista-fiscal/', 'summary' => '', 'published_at' => $now - 600, 'source_name' => 'Empregos MG', 'image_url' => null, 'image_credit' => null, 'image_note' => null, 'related' => []];
+    $new = radar_store_one($item, $source, $now);
+    $row = radar_db_one("SELECT category, job_region, job_state, job_city FROM news WHERE uid = 'board-1'");
+    radar_db_exec("INSERT INTO news (id, uid, source_id, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (850, 'board-2', ?, 'Empregos MG', 'Operador de Acabamento – Betim', 'https://www.empregosmg.com.br/operador/', '', ?, ?, ?, 'Geral', 50, 1)", [$source['id'], $now - 600, $now - 600, $now - 600]);
+    radar_news_reclassify();
+    $again = radar_db_one('SELECT category, job_region, job_state, job_city FROM news WHERE id = 850');
+    return $new === true && $row === ['category' => 'Vagas de emprego', 'job_region' => 'Sudeste', 'job_state' => 'MG', 'job_city' => 'Contagem'] && $again === ['category' => 'Vagas de emprego', 'job_region' => 'Sudeste', 'job_state' => 'MG', 'job_city' => 'Betim'];
 });

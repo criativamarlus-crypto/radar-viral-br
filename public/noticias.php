@@ -97,7 +97,6 @@ radar_page_start('Notícias em alta', 'noticias.php');
             </label>
             <button class="btn ghost small" type="submit">Filtrar</button>
         </div>
-        <p><a class="btn small" href="vagas.php">Ver as vagas reais (Adzuna) por região, cidade e idade</a></p>
         <p class="hint">São matérias reais de veículos que anunciam vagas (o link leva à matéria original, onde está como se candidatar). Região, estado, cidade e idade são lidos do texto de cada matéria; as que não dizem ficam sem local ou sem idade. Não é um site de vagas: confira a vaga na fonte.</p>
     <?php endif; ?>
 </form>

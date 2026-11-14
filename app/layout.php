@@ -16,7 +16,6 @@ function radar_nav_items(): array
         ['file' => 'noticias.php', 'label' => 'Notícias em alta', 'icon' => 'trend'],
         ['file' => 'fontes.php', 'label' => 'Fontes monitoradas', 'icon' => 'rss'],
         ['file' => 'salvas.php', 'label' => 'Notícias salvas', 'icon' => 'bookmark'],
-        ['file' => 'vagas.php', 'label' => 'Vagas (Adzuna)', 'icon' => 'script'],
         ['file' => 'estudio.php', 'label' => 'Estúdio de React', 'icon' => 'film'],
         ['file' => 'personagem.php', 'label' => 'Meu Personagem', 'icon' => 'user'],
         ['file' => 'roteiros.php', 'label' => 'Roteiros criados', 'icon' => 'script'],

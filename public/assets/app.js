@@ -251,15 +251,6 @@
   /* ---- selects that filter a list: submit the form when they change ---- */
   $$('select[data-autosubmit]').forEach((select) => select.addEventListener('change', () => { if (select.form) select.form.submit(); }));
 
-  /* ---- vacancies (Adzuna): read the next batch in the background when it is time ---- */
-  const jobsAuto = $('#jobs-auto');
-  if (jobsAuto && jobsAuto.dataset.stale === '1') {
-    api({ action: 'adzuna_refresh' }).then((result) => {
-      jobsAuto.textContent = result.message || 'Vagas atualizadas.';
-      if (result.fetched > 0) setTimeout(() => location.reload(), 1500);
-    }).catch((error) => { jobsAuto.textContent = 'Não foi possível atualizar as vagas agora: ' + error.message; });
-  }
-
   /* ---- upload forms (multipart through the API) ---- */
   $$('form[data-upload]').forEach((form) => {
     form.addEventListener('submit', async (event) => {

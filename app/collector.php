@@ -169,7 +169,7 @@ function radar_store_one(array $item, array $source, int $now, ?string $trendOri
 {
     $existing = radar_db_one('SELECT id, image_url, summary, published_at FROM news WHERE uid = ?', [$item['uid']]);
     if ($existing === null) {
-        $category = radar_classify((string)$item['title'], (string)$item['summary'], (string)$source['category'], $trendOrigin !== null);
+        $category = radar_classify((string)$item['title'], (string)$item['summary'], (string)$source['category'], $trendOrigin !== null, (string)($source['url'] ?? ''));
         radar_db_exec(
             'INSERT INTO news (uid, source_id, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, image_url, image_credit, image_note, related, trend_origin)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -180,7 +180,7 @@ function radar_store_one(array $item, array $source, int $now, ?string $trendOri
             ]
         );
         if ($category === RADAR_JOB_CATEGORY) {
-            radar_job_store((int)radar_db()->lastInsertId(), (string)$item['title'], (string)$item['summary']);
+            radar_job_store((int)radar_db()->lastInsertId(), (string)$item['title'], (string)$item['summary'], (string)($source['url'] ?? ''));
         }
         return true;
     }

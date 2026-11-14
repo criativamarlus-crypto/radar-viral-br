@@ -105,6 +105,74 @@ function radar_job_strong_phrases(): array
     ];
 }
 
+/**
+ * Public feeds of Brazilian job sites and of the vacancy sections of news portals, read like any other source of the panel.
+ * "listing": a vacancy board, every post is one opening (the state is where the board works). "tag": a news portal's
+ * vacancy section, where only the posts that offer jobs count. Every address was probed live and answered with a feed.
+ *
+ * @return array<int,array{name:string,url:string,kind:string,state:string}>
+ */
+function radar_job_direct_feeds(): array
+{
+    return [
+        ['name' => 'Empregos MG', 'url' => 'https://www.empregosmg.com.br/feed/', 'kind' => 'listing', 'state' => 'MG'],
+        ['name' => 'Vagas de Emprego SP', 'url' => 'https://www.vagasdeempregosp.com.br/feed/', 'kind' => 'listing', 'state' => 'SP'],
+        ['name' => 'Vagas PE', 'url' => 'https://www.vagaspe.com.br/feed/', 'kind' => 'listing', 'state' => 'PE'],
+        ['name' => 'Empregos PE', 'url' => 'https://www.empregope.com.br/feed/', 'kind' => 'listing', 'state' => 'PE'],
+        ['name' => 'Empregos Recife', 'url' => 'https://www.empregosrecife.com.br/feed/', 'kind' => 'listing', 'state' => 'PE'],
+        ['name' => 'Empregos ES', 'url' => 'https://www.empregoses.com.br/feed/', 'kind' => 'listing', 'state' => 'ES'],
+        ['name' => 'Vagas Floripa (SC)', 'url' => 'https://www.empregossc.com.br/feed/', 'kind' => 'listing', 'state' => 'SC'],
+        ['name' => 'Emprego em Salvador', 'url' => 'https://www.empregoemsalvador.com.br/feed/', 'kind' => 'listing', 'state' => 'BA'],
+        ['name' => 'Empregos Brasília', 'url' => 'https://www.empregosbrasilia.com.br/feed/', 'kind' => 'listing', 'state' => 'DF'],
+        ['name' => 'Vagas Curitiba', 'url' => 'https://www.vagascuritiba.com.br/feed/', 'kind' => 'listing', 'state' => 'PR'],
+        ['name' => 'g1 · Concursos e Emprego', 'url' => 'https://g1.globo.com/rss/g1/concursos-e-emprego/', 'kind' => 'tag', 'state' => ''],
+        ['name' => 'Folha Vitória · Vagas de emprego', 'url' => 'https://www.folhavitoria.com.br/tag/vagas-de-emprego/feed/', 'kind' => 'tag', 'state' => 'ES'],
+        ['name' => 'Jornal de Brasília · Vagas de emprego', 'url' => 'https://www.jornaldebrasilia.com.br/tag/vagas-de-emprego/feed/', 'kind' => 'tag', 'state' => 'DF'],
+        ['name' => 'Metrópoles · Vagas de emprego', 'url' => 'https://www.metropoles.com/tag/vagas-de-emprego/feed/', 'kind' => 'tag', 'state' => 'DF'],
+        ['name' => 'Portal de Prefeitura · Vagas de emprego', 'url' => 'https://www.portaldeprefeitura.com.br/tag/vagas-de-emprego/feed/', 'kind' => 'tag', 'state' => 'PE'],
+        ['name' => 'ac24horas · Vagas', 'url' => 'https://www.ac24horas.com/tag/vagas/feed/', 'kind' => 'tag', 'state' => 'AC'],
+        ['name' => 'Ceará Agora · Vagas', 'url' => 'https://www.cearaagora.com.br/tag/vagas/feed/', 'kind' => 'tag', 'state' => 'CE'],
+        ['name' => 'Jornal Contábil · Vagas de emprego', 'url' => 'https://www.jornalcontabil.com.br/tag/vagas-de-emprego/feed/', 'kind' => 'tag', 'state' => ''],
+        ['name' => 'BPMoney · Vagas', 'url' => 'https://www.bpmoney.com.br/tag/vagas/feed/', 'kind' => 'tag', 'state' => ''],
+        ['name' => 'Jovem Aprendiz (jovemaprendiz.org)', 'url' => 'https://www.jovemaprendiz.org/feed/', 'kind' => 'tag', 'state' => ''],
+        ['name' => 'Concursos no Brasil', 'url' => 'https://www.concursosnobrasil.com.br/feed/', 'kind' => 'tag', 'state' => ''],
+        ['name' => 'Concursos RN', 'url' => 'https://www.concursosrn.com.br/feed/', 'kind' => 'tag', 'state' => 'RN'],
+        ['name' => 'Concursos SC', 'url' => 'https://www.concursossc.com.br/feed/', 'kind' => 'tag', 'state' => 'SC'],
+    ];
+}
+
+/** What the panel knows about a source address that is one of the direct vacancy feeds, or null. @return array{name:string,url:string,kind:string,state:string}|null */
+function radar_job_feed_info(string $url): ?array
+{
+    if ($url === '') {
+        return null;
+    }
+    foreach (radar_job_direct_feeds() as $feed) {
+        if ($feed['url'] === $url) {
+            return $feed;
+        }
+    }
+    return null;
+}
+
+/** Posts of a vacancy board that are advice and not an opening ("Como escrever uma carta", "Erros na entrevista"). */
+function radar_job_looks_like_advice(string $title): bool
+{
+    $folded = ' ' . radar_fold($title) . ' ';
+    return preg_match('/^ (como|dicas?|saiba|o que|por que|porque|erros?|guia|veja como|passo a passo|confira dicas|\d+ dicas|taxa selic|salario minimo|bolsa familia) /', $folded) === 1
+        || preg_match('/ (curriculo|entrevista de emprego|carta de apresentacao|dicas de|linkedin) /', $folded) === 1 && !str_contains($folded, ' vaga ');
+}
+
+/** The broader test for a source that is already about jobs: verbs of hiring, besides the phrases of radar_job_is_vacancy(). */
+function radar_job_is_listing(string $title, string $summary = ''): bool
+{
+    if (radar_job_is_vacancy($title, $summary)) {
+        return true;
+    }
+    $text = ' ' . radar_fold($title . ' ' . $summary) . ' ';
+    return preg_match('/ (contrata|contratam|contratando|selecionam?|recruta|recrutam|admite|abre selecao|abre processo|abre oportunidades?|oferece oportunidades?|oferecem oportunidades?|vagas? para|precisa de|esta contratando|estao contratando) /', $text) === 1;
+}
+
 /** True when the headline or the summary announces job openings. */
 function radar_job_is_vacancy(string $title, string $summary = ''): bool
 {
@@ -130,7 +198,7 @@ function radar_job_is_vacancy(string $title, string $summary = ''): bool
  *
  * @return array{region:string,state:string,city:string,age:string}
  */
-function radar_job_extract(string $title, string $summary = ''): array
+function radar_job_extract(string $title, string $summary = '', string $defaultState = ''): array
 {
     $states = radar_job_states();
     $original = $title . ' ' . $summary;
@@ -159,6 +227,10 @@ function radar_job_extract(string $title, string $summary = ''): array
     }
     if ($state === '' && preg_match('/(?:[(\-–\/,]|\b(?:em|de|do|da|no|na)\b)\s*(' . implode('|', array_keys($states)) . ')\b/u', $original, $match) === 1) {
         $state = $match[1];
+    }
+    // A vacancy board of one state (Empregos MG, Vagas PE...) says where the opening is when the text does not.
+    if ($state === '' && isset($states[$defaultState])) {
+        $state = $defaultState;
     }
     // City: the longest name first; the title wins over the summary; a homonym of another state is not taken.
     $cities = radar_job_cities();
@@ -201,18 +273,18 @@ function radar_job_extract(string $title, string $summary = ''): array
 }
 
 /** Read the place and the age of a stored story and save them (only for vacancy stories). */
-function radar_job_store(int $newsId, string $title, string $summary): void
+function radar_job_store(int $newsId, string $title, string $summary, string $sourceUrl = ''): void
 {
-    $job = radar_job_extract($title, $summary);
+    $job = radar_job_extract($title, $summary, (string)(radar_job_feed_info($sourceUrl)['state'] ?? ''));
     radar_db_exec('UPDATE news SET job_region = ?, job_state = ?, job_city = ?, job_age = ? WHERE id = ?', [$job['region'], $job['state'], $job['city'], $job['age'], $newsId]);
 }
 
 /** Fill the place and the age of the vacancy stories that do not have them yet (after a re-classification). */
 function radar_job_backfill(): int
 {
-    $rows = radar_db_all("SELECT id, title, summary FROM news WHERE category = ? AND job_region = '' AND job_state = '' AND job_city = '' AND job_age = ''", [RADAR_JOB_CATEGORY]);
+    $rows = radar_db_all("SELECT n.id, n.title, n.summary, s.url AS source_url FROM news n LEFT JOIN sources s ON s.id = n.source_id WHERE n.category = ? AND n.job_region = '' AND n.job_state = '' AND n.job_city = '' AND n.job_age = ''", [RADAR_JOB_CATEGORY]);
     foreach ($rows as $row) {
-        radar_job_store((int)$row['id'], (string)$row['title'], (string)$row['summary']);
+        radar_job_store((int)$row['id'], (string)$row['title'], (string)$row['summary'], (string)($row['source_url'] ?? ''));
     }
     return count($rows);
 }
@@ -230,7 +302,11 @@ function radar_job_sources(): array
         'name' => 'Google Notícias · Vagas · ' . $name, 'url' => 'https://news.google.com/rss/search?q=' . str_replace('%20', '+', rawurlencode($query)) . '&' . $g,
         'category' => RADAR_JOB_CATEGORY, 'region' => 'BR', 'weight' => $weight,
     ];
-    $sources = [
+    $sources = [];
+    foreach (radar_job_direct_feeds() as $direct) {
+        $sources[] = ['name' => $direct['name'], 'url' => $direct['url'], 'category' => RADAR_JOB_CATEGORY, 'region' => 'BR', 'weight' => $direct['kind'] === 'listing' ? 1.0 : 0.9];
+    }
+    $sources = array_merge($sources, [
         $feed('Brasil', '"vagas de emprego"', 0.9),
         $feed('Brasil (últimas 24 h)', '"vagas de emprego" when:1d', 0.9),
         $feed('Jovem aprendiz', '"jovem aprendiz" vagas', 0.8),
@@ -238,7 +314,7 @@ function radar_job_sources(): array
         $feed('Estágio', 'vagas de estágio', 0.8),
         $feed('50+ e maiores de 50', 'vagas emprego "50+" OR "maiores de 50" OR "60+" OR "terceira idade"', 0.8),
         $feed('Mutirões e processos seletivos', 'mutirão de emprego OR "feira de empregos" OR "processo seletivo" vagas', 0.8),
-    ];
+    ]);
     foreach (radar_job_regions() as $region) {
         $sources[] = $feed('Região ' . $region, '"vagas de emprego" região ' . $region . ' when:7d', 0.8);
     }

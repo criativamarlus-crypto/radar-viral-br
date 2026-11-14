@@ -150,28 +150,3 @@ check('the news page shows region, state, age and city filters only for the vaca
     && str_contains($jobCity['body'], 'Vagas de emprego abertas em Curitiba') && !str_contains($jobCity['body'], 'Mutirão tem 1.200 vagas') && !str_contains($noJobPage['body'], 'Região das vagas') && !str_contains($noJobPage['body'], 'name="cidade"'));
 check('the API accepts the vacancy filters and gives each story its place and age group', static fn(): bool => $jobApi['status'] === 200 && count($jobApiData['items'] ?? []) === 1 && ($jobApiData['items'][0]['job']['city'] ?? '') === 'Fortaleza'
     && ($jobApiData['items'][0]['job']['state'] ?? '') === 'CE' && ($jobApiData['items'][0]['job']['region'] ?? '') === 'Nordeste' && ($jobApiData['items'][0]['job']['age'] ?? '') === '50mais' && ($jobApiData['items'][0]['category'] ?? '') === 'Vagas de emprego');
-// Adzuna page and API (the server makes no call to Adzuna here: only the pages and the saved data are tested).
-$adzunaOff = localRequest('vagas.php');
-$adzunaSave = localRequest('vagas.php', 'POST', formBody(['csrf' => $writeCsrf, 'op' => 'save', 'app_id' => 'abc12345', 'app_key' => 'chaveSecreta1234567890', 'daily_limit' => '70']), FORM);
-$adzunaBadSave = $post(['action' => 'adzuna_save', 'app_id' => 'com espaço', 'app_key' => 'x', 'daily_limit' => 70]);
-foreach ([['h1', 'Vendedor de loja em Campinas', 'Sudeste', 'SP', 'Campinas', '', 2500], ['h2', 'Jovem aprendiz administrativo', 'Nordeste', 'CE', 'Fortaleza', 'aprendiz', 900]] as [$jobExternal, $jobName, $jobRegionName, $jobUf, $jobCityName, $jobAgeKey, $jobPay]) {
-    radar_db_exec("INSERT INTO job_posts (provider, external_id, title, company, location, region, state, city, age, category, description, salary_min, salary_max, contract_type, url, created_at, fetched_at) VALUES ('adzuna', ?, ?, 'Empresa Teste', ?, ?, ?, ?, ?, 'Vendas', 'Descrição da vaga com carteira assinada.', ?, ?, 'permanent', ?, ?, ?)",
-        [$jobExternal, $jobName, $jobCityName . ', ' . $jobUf, $jobRegionName, $jobUf, $jobCityName, $jobAgeKey, $jobPay, $jobPay, 'https://www.adzuna.com.br/land/ad/' . $jobExternal, time() - 3600, time()]);
-}
-$adzunaOn = localRequest('vagas.php');
-$adzunaRegion = localRequest('vagas.php?regiao=Nordeste');
-$adzunaApi = localRequest('api.php?action=jobs&idade=aprendiz');
-$adzunaApiData = json_decode($adzunaApi['body'], true);
-$adzunaForget = $post(['action' => 'adzuna_forget']);
-$adzunaAfter = localRequest('vagas.php');
-check('the vacancies page asks for the Adzuna key first, saves it encrypted and then never shows it again', static fn(): bool => $adzunaOff['status'] === 200 && str_contains($adzunaOff['body'], 'Ligar a Adzuna') && str_contains($adzunaOff['body'], 'developer.adzuna.com') && str_contains($adzunaOff['body'], 'name="app_key" type="password"')
-    && $adzunaSave['status'] === 303 && $adzunaBadSave['status'] === 400 && str_contains($adzunaOn['body'], 'Adzuna ligada') && str_contains($adzunaOn['body'], '••••7890') && !str_contains($adzunaOn['body'], 'chaveSecreta') && str_contains($adzunaOn['body'], 'data-act="adzuna_refresh"')
-    && str_contains($adzunaOn['body'], 'id="jobs-auto" data-stale="1"') && str_contains($adzunaOn['body'], 'de 70 chamadas hoje'));
-check('the page lists the real openings with the link to the ad, "Jobs by Adzuna", salary, place and age, and the filters narrow them', static fn(): bool => str_contains($adzunaOn['body'], 'Vendedor de loja em Campinas') && str_contains($adzunaOn['body'], 'Jovem aprendiz administrativo') && str_contains($adzunaOn['body'], 'href="https://www.adzuna.com.br/land/ad/h1"')
-    && str_contains($adzunaOn['body'], 'rel="noopener noreferrer nofollow"') && str_contains($adzunaOn['body'], 'by Adzuna') && str_contains($adzunaOn['body'], 'R$ 2.500') && str_contains($adzunaOn['body'], 'Campinas · SP · Sudeste') && str_contains($adzunaOn['body'], 'Jovem aprendiz (14 a 24 anos)')
-    && str_contains($adzunaOn['body'], 'aria-label="Região"') && str_contains($adzunaOn['body'], 'name="cidade" data-autosubmit') && str_contains($adzunaOn['body'], 'Fortaleza (CE) · 1')
-    && str_contains($adzunaRegion['body'], 'Jovem aprendiz administrativo') && !str_contains($adzunaRegion['body'], 'Vendedor de loja em Campinas'));
-check('the API lists the openings with the filters and gives the attribution; removing the key brings the setup back', static fn(): bool => $adzunaApi['status'] === 200 && ($adzunaApiData['total'] ?? 0) === 1 && ($adzunaApiData['items'][0]['title'] ?? '') === 'Jovem aprendiz administrativo' && ($adzunaApiData['items'][0]['state'] ?? '') === 'CE'
-    && ($adzunaApiData['items'][0]['salary'] ?? '') === 'R$ 900' && ($adzunaApiData['items'][0]['url'] ?? '') === 'https://www.adzuna.com.br/land/ad/h2' && ($adzunaApiData['connected'] ?? false) === true && str_contains($adzunaApiData['source'] ?? '', 'Jobs by Adzuna')
-    && $adzunaForget['status'] === 200 && str_contains($adzunaAfter['body'], 'Ligar a Adzuna') && localRequest('vagas.php', 'GET', '', [], false)['status'] !== 200);
-radar_db_exec('DELETE FROM job_posts');

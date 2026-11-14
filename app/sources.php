@@ -6,7 +6,7 @@ declare(strict_types=1);
 const RADAR_TRENDS_URL = 'https://trends.google.com/trending/rss?geo=BR';
 
 /** Bumped whenever built-in sources or category keywords change (see radar_sources_seed). */
-const RADAR_SOURCES_SEED_VERSION = '5';
+const RADAR_SOURCES_SEED_VERSION = '6';
 
 /** @return array<int,string> */
 function radar_category_list(): array
@@ -265,7 +265,7 @@ function radar_category_keywords(): array
  * story or a politics outlet's market story is not forced into the outlet's own beat.
  * Returns 'Geral' (or 'Assuntos virais' when trending) when nothing matches; never a guess.
  */
-function radar_classify(string $title, string $summary = '', string $sourceCategory = 'auto', bool $trending = false): string
+function radar_classify(string $title, string $summary = '', string $sourceCategory = 'auto', bool $trending = false, string $sourceUrl = ''): string
 {
     static $compiled = null;
     if ($compiled === null) {
@@ -284,6 +284,14 @@ function radar_classify(string $title, string $summary = '', string $sourceCateg
     }
     // Job announcements: a story that says it offers vacancies belongs to the vacancy category, whatever the outlet.
     if (radar_job_is_vacancy($title, $summary)) {
+        return RADAR_JOB_CATEGORY;
+    }
+    // A vacancy board (every post is an opening, advice aside) and the vacancy sections of news portals (hiring verbs count).
+    $feed = radar_job_feed_info($sourceUrl);
+    if ($feed !== null && (($feed['kind'] === 'listing' && !radar_job_looks_like_advice($title)) || ($feed['kind'] === 'tag' && radar_job_is_listing($title, $summary)))) {
+        return RADAR_JOB_CATEGORY;
+    }
+    if ($pinned === RADAR_JOB_CATEGORY && radar_job_is_listing($title, $summary)) {
         return RADAR_JOB_CATEGORY;
     }
     $best = null;
@@ -321,13 +329,13 @@ function radar_classify(string $title, string $summary = '', string $sourceCateg
  */
 function radar_news_reclassify(): int
 {
-    $rows = radar_db_all('SELECT n.id, n.title, n.summary, n.category, n.trend_origin, COALESCE(s.category, \'auto\') AS pinned FROM news n LEFT JOIN sources s ON s.id = n.source_id');
+    $rows = radar_db_all('SELECT n.id, n.title, n.summary, n.category, n.trend_origin, COALESCE(s.category, \'auto\') AS pinned, COALESCE(s.url, \'\') AS source_url FROM news n LEFT JOIN sources s ON s.id = n.source_id');
     $changed = 0;
     $pdo = radar_db();
     $pdo->exec('BEGIN IMMEDIATE');
     try {
         foreach ($rows as $row) {
-            $category = radar_classify((string)$row['title'], (string)$row['summary'], (string)$row['pinned'], $row['trend_origin'] !== null);
+            $category = radar_classify((string)$row['title'], (string)$row['summary'], (string)$row['pinned'], $row['trend_origin'] !== null, (string)$row['source_url']);
             if ($category !== $row['category']) {
                 radar_db_exec('UPDATE news SET category = ? WHERE id = ?', [$category, (int)$row['id']]);
                 $changed++;
