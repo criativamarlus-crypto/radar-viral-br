@@ -53,6 +53,21 @@ function radar_job_cities(): array
         'Caruaru' => 'PE', 'Petrolina' => 'PE', 'Olinda' => 'PE', 'Jaboatão dos Guararapes' => 'PE', 'Paulista' => 'PE',
         'Juazeiro do Norte' => 'CE', 'Caucaia' => 'CE', 'Sobral' => 'CE', 'Campina Grande' => 'PB', 'Mossoró' => 'RN', 'Parnamirim' => 'RN', 'Imperatriz' => 'MA', 'Arapiraca' => 'AL',
         'Santarém' => 'PA', 'Marabá' => 'PA', 'Ananindeua' => 'PA', 'Parauapebas' => 'PA',
+        'São Vicente' => 'SP', 'Guarujá' => 'SP', 'Praia Grande' => 'SP', 'Taubaté' => 'SP', 'Limeira' => 'SP', 'Suzano' => 'SP', 'Taboão da Serra' => 'SP', 'Sumaré' => 'SP', 'Carapicuíba' => 'SP', 'Diadema' => 'SP',
+        'Mogi das Cruzes' => 'SP', 'Indaiatuba' => 'SP', 'Cotia' => 'SP', 'Itaquaquecetuba' => 'SP', 'Americana' => 'SP', 'Marília' => 'SP', 'Presidente Prudente' => 'SP', 'Araraquara' => 'SP', 'São Carlos' => 'SP', 'Jacareí' => 'SP',
+        'Hortolândia' => 'SP', 'Rio Claro' => 'SP', 'Araçatuba' => 'SP', 'Itapevi' => 'SP', 'Barretos' => 'SP', 'Botucatu' => 'SP', 'Atibaia' => 'SP', 'Bragança Paulista' => 'SP', 'Valinhos' => 'SP', 'Cubatão' => 'SP', 'Pindamonhangaba' => 'SP',
+        'Guaratinguetá' => 'SP', 'São Caetano do Sul' => 'SP', 'Belford Roxo' => 'RJ', 'São João de Meriti' => 'RJ', 'Itaboraí' => 'RJ', 'Cabo Frio' => 'RJ', 'Angra dos Reis' => 'RJ', 'Nova Friburgo' => 'RJ', 'Teresópolis' => 'RJ',
+        'Barra Mansa' => 'RJ', 'Resende' => 'RJ', 'Rio das Ostras' => 'RJ', 'Maricá' => 'RJ', 'Divinópolis' => 'MG', 'Poços de Caldas' => 'MG', 'Sete Lagoas' => 'MG', 'Ribeirão das Neves' => 'MG', 'Varginha' => 'MG',
+        'Pouso Alegre' => 'MG', 'Patos de Minas' => 'MG', 'Teófilo Otoni' => 'MG', 'Lavras' => 'MG', 'Itabira' => 'MG', 'Barbacena' => 'MG', 'Colatina' => 'ES', 'Guarapari' => 'ES', 'Colombo' => 'PR', 'Guarapuava' => 'PR',
+        'Paranaguá' => 'PR', 'Apucarana' => 'PR', 'Toledo' => 'PR', 'Araucária' => 'PR', 'Pinhais' => 'PR', 'Campo Largo' => 'PR', 'Umuarama' => 'PR', 'Palhoça' => 'SC', 'Lages' => 'SC', 'Jaraguá do Sul' => 'SC', 'Brusque' => 'SC', 'Tubarão' => 'SC',
+        'Passo Fundo' => 'RS', 'São Leopoldo' => 'RS', 'Alvorada' => 'RS', 'Viamão' => 'RS', 'Santa Cruz do Sul' => 'RS', 'Cachoeirinha' => 'RS', 'Bagé' => 'RS', 'Uruguaiana' => 'RS', 'Bento Gonçalves' => 'RS',
+        'Lauro de Freitas' => 'BA', 'Itabuna' => 'BA', 'Jequié' => 'BA', 'Alagoinhas' => 'BA', 'Barreiras' => 'BA', 'Teixeira de Freitas' => 'BA', 'Porto Seguro' => 'BA', 'Paulo Afonso' => 'BA', 'Eunápolis' => 'BA',
+        'Cabo de Santo Agostinho' => 'PE', 'Camaragibe' => 'PE', 'Garanhuns' => 'PE', 'Santa Cruz do Capibaribe' => 'PE', 'Abreu e Lima' => 'PE', 'Maracanaú' => 'CE', 'Itapipoca' => 'CE', 'Maranguape' => 'CE', 'Iguatu' => 'CE', 'Crato' => 'CE',
+        'Bayeux' => 'PB', 'Cabedelo' => 'PB', 'Caicó' => 'RN', 'Macaíba' => 'RN', 'Lagarto' => 'SE', 'Itabaiana' => 'SE', 'São José de Ribamar' => 'MA', 'Timon' => 'MA', 'Açailândia' => 'MA', 'Parnaíba' => 'PI', 'Picos' => 'PI',
+        'Castanhal' => 'PA', 'Abaetetuba' => 'PA', 'Itaituba' => 'PA', 'Parintins' => 'AM', 'Itacoatiara' => 'AM', 'Ji-Paraná' => 'RO', 'Ariquemes' => 'RO', 'Vilhena' => 'RO', 'Cacoal' => 'RO', 'Cruzeiro do Sul' => 'AC', 'Santana' => 'AP',
+        'Araguaína' => 'TO', 'Gurupi' => 'TO', 'Luziânia' => 'GO', 'Valparaíso de Goiás' => 'GO', 'Águas Lindas de Goiás' => 'GO', 'Trindade' => 'GO', 'Senador Canedo' => 'GO', 'Catalão' => 'GO', 'Itumbiara' => 'GO', 'Jataí' => 'GO',
+        'Tangará da Serra' => 'MT', 'Cáceres' => 'MT', 'Sorriso' => 'MT', 'Lucas do Rio Verde' => 'MT', 'Primavera do Leste' => 'MT', 'Três Lagoas' => 'MS', 'Corumbá' => 'MS', 'Ponta Porã' => 'MS', 'Naviraí' => 'MS',
+        'Ceilândia' => 'DF', 'Taguatinga' => 'DF', 'Samambaia' => 'DF',
         'Anápolis' => 'GO', 'Aparecida de Goiânia' => 'GO', 'Rio Verde' => 'GO', 'Dourados' => 'MS', 'Várzea Grande' => 'MT', 'Rondonópolis' => 'MT', 'Sinop' => 'MT',
     ];
 }
@@ -60,7 +75,7 @@ function radar_job_cities(): array
 /** Names that are also ordinary words or other things: they only count when the text also names the state. @return array<int,string> */
 function radar_job_ambiguous_cities(): array
 {
-    return ['Natal', 'Vitória', 'Palmas', 'Santos', 'Serra', 'Paulista', 'Franca', 'Juazeiro', 'Belém'];
+    return ['Natal', 'Vitória', 'Palmas', 'Santos', 'Serra', 'Paulista', 'Franca', 'Juazeiro', 'Belém', 'Toledo', 'Santana', 'Trindade', 'Americana', 'Sorriso', 'Alvorada', 'Resende', 'Itabira', 'Lavras', 'Crato', 'Picos', 'Timon', 'Cacoal', 'Gurupi'];
 }
 
 /** @return array<string,string> key => label of the age groups a story can announce */
@@ -142,7 +157,7 @@ function radar_job_extract(string $title, string $summary = ''): array
     if ($state === '' && preg_match('/(?<![\p{L}])(?:Pará|PARÁ)(?![\p{L}])/u', $original) === 1) {
         $state = 'PA';
     }
-    if ($state === '' && preg_match('/(?:[(\-–\/,]|\bem\b)\s*(' . implode('|', array_keys($states)) . ')\b/u', $original, $match) === 1) {
+    if ($state === '' && preg_match('/(?:[(\-–\/,]|\b(?:em|de|do|da|no|na)\b)\s*(' . implode('|', array_keys($states)) . ')\b/u', $original, $match) === 1) {
         $state = $match[1];
     }
     // City: the longest name first; the title wins over the summary; a homonym of another state is not taken.

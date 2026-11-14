@@ -42,6 +42,11 @@ check('the place is read from the text: city, state, region; a homonym or a Chri
         ['Empresa abre vagas de emprego em Santos', 'Unidade em Cubatão (SP).', ['region' => 'Sudeste', 'state' => 'SP', 'city' => 'Santos']],
         ['Vagas de emprego em Santos (RN)', '', ['region' => 'Nordeste', 'state' => 'RN', 'city' => '']],
         ['Vagas de emprego para todo o Brasil', '', ['region' => '', 'state' => '', 'city' => '']],
+        ['IEL reúne 660 vagas de emprego em oito municípios de MT', '', ['region' => 'Centro-Oeste', 'state' => 'MT', 'city' => '']],
+        ['São Vicente oferece 30 vagas de emprego para controlador de acesso', '', ['region' => 'Sudeste', 'state' => 'SP', 'city' => 'São Vicente']],
+        ['Vagas de emprego em Santana do Livramento', '', ['region' => '', 'state' => '', 'city' => '']],
+        ['Vagas de emprego em Toledo (PR)', '', ['region' => 'Sul', 'state' => 'PR', 'city' => 'Toledo']],
+        ['Vagas de emprego com Toledo no nome da empresa', '', ['region' => '', 'state' => '', 'city' => '']],
     ];
     foreach ($cases as [$title, $summary, $expected]) {
         $got = radar_job_extract($title, $summary);
