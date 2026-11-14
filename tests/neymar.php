@@ -26,7 +26,7 @@ check('the seed brings the three Neymar feeds, sorts the stored news again once,
     $items = radar_news_query(radar_news_filters(['categoria' => 'Neymar', 'janela' => 'tudo', 'agrupar' => '0']))['items'];
     $ids = array_column($items, 'id');
     return $added >= 3 && $again === 0 && count($feeds) === 3 && array_unique(array_column($feeds, 'category')) === ['Neymar'] && array_sum(array_column($feeds, 'active')) === 3
-        && radar_setting('sources_seeded_version') === RADAR_SOURCES_SEED_VERSION && RADAR_SOURCES_SEED_VERSION === '4'
+        && radar_setting('sources_seeded_version') === RADAR_SOURCES_SEED_VERSION && RADAR_SOURCES_SEED_VERSION === '5'
         && in_array(830, $ids, true) && in_array(831, $ids, true) && !in_array(832, $ids, true) && (radar_news_category_counts(radar_news_filters(['janela' => 'tudo', 'agrupar' => '0']))['Neymar'] ?? 0) >= 2;
 });
 check('a Neymar story is a good react candidate: interest in the category and the react-friendly list', static function (): bool {

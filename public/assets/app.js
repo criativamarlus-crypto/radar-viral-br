@@ -248,6 +248,9 @@
     if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) event.preventDefault();
   });
 
+  /* ---- selects that filter a list: submit the form when they change ---- */
+  $$('select[data-autosubmit]').forEach((select) => select.addEventListener('change', () => { if (select.form) select.form.submit(); }));
+
   /* ---- upload forms (multipart through the API) ---- */
   $$('form[data-upload]').forEach((form) => {
     form.addEventListener('submit', async (event) => {

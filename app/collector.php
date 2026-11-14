@@ -179,6 +179,9 @@ function radar_store_one(array $item, array $source, int $now, ?string $trendOri
                 json_encode($item['related'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $trendOrigin,
             ]
         );
+        if ($category === RADAR_JOB_CATEGORY) {
+            radar_job_store((int)radar_db()->lastInsertId(), (string)$item['title'], (string)$item['summary']);
+        }
         return true;
     }
     // Existing story: refresh liveness and fill gaps only; never overwrite curated data.

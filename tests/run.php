@@ -301,7 +301,7 @@ check('built-in list covers the sources the project asked for', static function 
 });
 check('seeding inserts the defaults exactly once', static function (): bool {
     $added = radar_sources_seed();
-    return $added === count(radar_default_sources()) && radar_sources_seed() === 0;
+    return $added === count(radar_default_sources()) + count(radar_job_sources()) && radar_sources_seed() === 0;
 });
 check('the finance categories exist, come first and every one is a valid source category', static function (): bool {
     $list = radar_category_list();
@@ -1721,6 +1721,7 @@ check('front-end code has no inline scripts or styles (strict CSP)', static func
 });
 
 require __DIR__ . '/neymar.php';
+require __DIR__ . '/jobs.php';
 require __DIR__ . '/tv.php';
 require __DIR__ . '/archive.php';
 require __DIR__ . '/http.php';

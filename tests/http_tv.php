@@ -131,3 +131,22 @@ check('the Studio carries the category shortcuts of every character and the char
     && str_contains($shortcutStudio['body'], '"slug":"clara"') && str_contains($shortcutStudio['body'], '"shortcuts":["Finanças","Cartão de crédito","Finanças pessoais","Economia"]') && str_contains($shortcutStudio['body'], '"shortcuts":["Famosos"')
     && $shortcutCharacter['status'] === 200 && str_contains($shortcutCharacter['body'], 'href="noticias.php?categoria=Finan%C3%A7as"') && str_contains($shortcutCharacter['body'], 'href="noticias.php?categoria=Cart%C3%A3o%20de%20cr%C3%A9dito"') && str_contains($shortcutCharacter['body'], 'Ir direto para as notícias de')
     && $shortcutNews['status'] === 200 && str_contains($shortcutNews['body'], 'aria-pressed="true"'));
+// Vacancy category on the news page and in the API (the server has its own database: the stories are created here).
+foreach ([[9101, 'Prefeitura abre 300 vagas de emprego em Campinas', 'Há vagas para jovem aprendiz.'], [9102, 'Mutirão tem 1.200 vagas de emprego em Fortaleza (CE)', 'Para maiores de 50 anos.'], [9103, 'Vagas de emprego abertas em Curitiba', '']] as [$jobId, $jobTitle, $jobSummary]) {
+    radar_db_exec("INSERT INTO news (id, uid, source_name, title, url, summary, published_at, first_seen_at, last_seen_at, category, score, source_count) VALUES (?, ?, 'G1', ?, ?, ?, ?, ?, ?, 'Geral', 50, 1)", [$jobId, 'jobh' . $jobId, $jobTitle, 'https://g1.example.com/jobh' . $jobId, $jobSummary, time() - 600, time() - 600, time() - 600]);
+}
+radar_news_reclassify();
+$jobPage = localRequest('noticias.php?categoria=' . rawurlencode('Vagas de emprego') . '&janela=tudo');
+$jobRegion = localRequest('noticias.php?categoria=' . rawurlencode('Vagas de emprego') . '&janela=tudo&regiao=Nordeste');
+$jobCity = localRequest('noticias.php?categoria=' . rawurlencode('Vagas de emprego') . '&janela=tudo&cidade=Curitiba');
+$noJobPage = localRequest('noticias.php?categoria=Futebol&janela=tudo');
+$jobApi = localRequest('api.php?action=news&categoria=' . rawurlencode('Vagas de emprego') . '&janela=tudo&regiao=Nordeste&agrupar=0');
+$jobApiData = json_decode($jobApi['body'], true);
+check('the news page shows region, state, age and city filters only for the vacancy category, keeps them in the links and drops them when the category changes', static fn(): bool => $jobPage['status'] === 200
+    && str_contains($jobPage['body'], 'aria-label="Região das vagas"') && str_contains($jobPage['body'], 'aria-label="Estado das vagas"') && str_contains($jobPage['body'], 'aria-label="Idade das vagas"') && str_contains($jobPage['body'], 'name="cidade" data-autosubmit')
+    && str_contains($jobPage['body'], 'Todo o Brasil') && str_contains($jobPage['body'], 'Jovem aprendiz (14 a 24 anos)') && str_contains($jobPage['body'], 'Fortaleza (CE)') && str_contains($jobPage['body'], 'Não é um site de vagas')
+    && str_contains($jobRegion['body'], 'Mutirão tem 1.200 vagas') && !str_contains($jobRegion['body'], 'Prefeitura abre 300 vagas') && str_contains($jobRegion['body'], 'name="regiao" value="Nordeste"') && str_contains($jobRegion['body'], 'regiao=Nordeste')
+    && !preg_match('#href="noticias\.php\?[^"]*categoria=Futebol[^"]*regiao=#', $jobRegion['body']) && !preg_match('#href="noticias\.php\?[^"]*regiao=[^"]*categoria=Futebol#', $jobRegion['body'])
+    && str_contains($jobCity['body'], 'Vagas de emprego abertas em Curitiba') && !str_contains($jobCity['body'], 'Mutirão tem 1.200 vagas') && !str_contains($noJobPage['body'], 'Região das vagas') && !str_contains($noJobPage['body'], 'name="cidade"'));
+check('the API accepts the vacancy filters and gives each story its place and age group', static fn(): bool => $jobApi['status'] === 200 && count($jobApiData['items'] ?? []) === 1 && ($jobApiData['items'][0]['job']['city'] ?? '') === 'Fortaleza'
+    && ($jobApiData['items'][0]['job']['state'] ?? '') === 'CE' && ($jobApiData['items'][0]['job']['region'] ?? '') === 'Nordeste' && ($jobApiData['items'][0]['job']['age'] ?? '') === '50mais' && ($jobApiData['items'][0]['category'] ?? '') === 'Vagas de emprego');

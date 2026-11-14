@@ -224,6 +224,12 @@ function radar_news_card(array $n, bool $showSave = true): string
     $age = $n['published_known'] ? radar_age_label($n['age_minutes']) : 'visto ' . radar_age_label($n['age_minutes']);
     $coverage = $n['source_count'] > 1 ? '<span class="pill">' . (int)$n['source_count'] . ' veículos</span>' : '';
     $speaker = count(radar_characters_visible()) > 1 ? '<span class="pill">' . radar_h(radar_character_get(radar_character_for_category((string)$n['category']))['name']) . '</span>' : '';
+    $jobPills = '';
+    if (!empty($n['job'])) {
+        $place = implode(' · ', array_filter([$n['job']['city'], $n['job']['state'], $n['job']['region']]));
+        $jobPills = ($place !== '' ? '<span class="pill">' . radar_h($place) . '</span>' : '<span class="pill">Local não informado</span>')
+            . ($n['job']['age_label'] !== '' ? '<span class="pill">' . radar_h($n['job']['age_label']) . '</span>' : '');
+    }
     $trend = $n['trend_hits'] !== [] ? '<span class="pill trend">Em alta: ' . radar_h($n['trend_hits'][0]['query']) . '</span>' : '';
     $html = '<article class="card" data-news="' . (int)$n['id'] . '">'
         . '<a class="card-media" href="noticia.php?id=' . (int)$n['id'] . '" tabindex="-1" aria-hidden="true">' . $image
@@ -231,7 +237,7 @@ function radar_news_card(array $n, bool $showSave = true): string
         . '<div class="card-body"><span class="eyebrow">' . radar_h($n['category']) . '</span>'
         . '<h3><a href="noticia.php?id=' . (int)$n['id'] . '">' . radar_h($n['title']) . '</a></h3>'
         . '<p class="meta">' . radar_h($n['source']) . ' · ' . radar_h($age) . '</p>'
-        . '<div class="pills">' . $coverage . $trend . $speaker . '</div>';
+        . '<div class="pills">' . $jobPills . $coverage . $trend . $speaker . '</div>';
     if ($n['score_summary'] !== '') {
         $html .= '<p class="why">' . radar_h($n['score_summary']) . '</p>';
     }

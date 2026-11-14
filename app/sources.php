@@ -6,12 +6,12 @@ declare(strict_types=1);
 const RADAR_TRENDS_URL = 'https://trends.google.com/trending/rss?geo=BR';
 
 /** Bumped whenever built-in sources or category keywords change (see radar_sources_seed). */
-const RADAR_SOURCES_SEED_VERSION = '4';
+const RADAR_SOURCES_SEED_VERSION = '5';
 
 /** @return array<int,string> */
 function radar_category_list(): array
 {
-    return ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia', 'Política', 'Futebol', 'Neymar', 'Esportes', 'Famosos', 'Tecnologia', 'Notícias internacionais', 'Curiosidades', 'Entretenimento', 'Assuntos virais', 'Geral'];
+    return ['Finanças', 'Cartão de crédito', 'Finanças pessoais', 'Economia', 'Vagas de emprego', 'Política', 'Futebol', 'Neymar', 'Esportes', 'Famosos', 'Tecnologia', 'Notícias internacionais', 'Curiosidades', 'Entretenimento', 'Assuntos virais', 'Geral'];
 }
 
 /** The money categories: scripts about them inform and never advise (see the AI rules and the draft). @return array<int,string> */
@@ -116,7 +116,7 @@ function radar_sources_seed(): int
     if ($seeded === RADAR_SOURCES_SEED_VERSION) {
         return 0;
     }
-    foreach (radar_default_sources() as $source) {
+    foreach (array_merge(radar_default_sources(), radar_job_sources()) as $source) {
         $exists = radar_db_value('SELECT 1 FROM sources WHERE url = ?', [$source['url']]);
         if ($exists !== null) {
             continue;
@@ -282,6 +282,10 @@ function radar_classify(string $title, string $summary = '', string $sourceCateg
     if (str_contains($haystack, ' neymar ') || ($secondary !== '' && str_contains($secondary, ' neymar '))) {
         return 'Neymar';
     }
+    // Job announcements: a story that says it offers vacancies belongs to the vacancy category, whatever the outlet.
+    if (radar_job_is_vacancy($title, $summary)) {
+        return RADAR_JOB_CATEGORY;
+    }
     $best = null;
     $bestScore = 0;
     foreach ($compiled as $category => $needles) {
@@ -303,7 +307,7 @@ function radar_classify(string $title, string $summary = '', string $sourceCateg
     }
     // A finance outlet or search feed is noisy (lottery results, politics, football): with no keyword hit the
     // headline stays general instead of being called finance just because of where it came from.
-    if ($pinned !== null && !in_array($pinned, radar_finance_categories(), true)) {
+    if ($pinned !== null && !in_array($pinned, array_merge(radar_finance_categories(), [RADAR_JOB_CATEGORY]), true)) {
         return $pinned;
     }
     return $trending ? 'Assuntos virais' : 'Geral';
@@ -334,5 +338,9 @@ function radar_news_reclassify(): int
         $pdo->exec('ROLLBACK');
         throw $error;
     }
+    // The place and the age only belong to vacancy stories.
+    radar_db_exec("UPDATE news SET job_region = '', job_state = '', job_city = '', job_age = '' WHERE category != ? AND (job_region != '' OR job_state != '' OR job_city != '' OR job_age != '')", [RADAR_JOB_CATEGORY]);
+    radar_db_exec("UPDATE news SET job_region = '', job_state = '', job_city = '', job_age = '' WHERE category = ?", [RADAR_JOB_CATEGORY]);
+    radar_job_backfill();
     return $changed;
 }

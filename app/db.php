@@ -326,6 +326,13 @@ CREATE INDEX editorial_character ON editorial_history(character_slug, created_at
 CREATE INDEX editorial_news ON editorial_history(news_id);
 CREATE INDEX editorial_script ON editorial_history(script_id);
 SQL,
+        10 => <<<'SQL'
+ALTER TABLE news ADD COLUMN job_region TEXT NOT NULL DEFAULT '';
+ALTER TABLE news ADD COLUMN job_state TEXT NOT NULL DEFAULT '';
+ALTER TABLE news ADD COLUMN job_city TEXT NOT NULL DEFAULT '';
+ALTER TABLE news ADD COLUMN job_age TEXT NOT NULL DEFAULT '';
+CREATE INDEX news_job ON news(category, job_state);
+SQL,
     ];
 }
 

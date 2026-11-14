@@ -18,7 +18,19 @@ function radar_news_filters(array $input): array
     $asked = is_array($rawCategory) ? array_map('radar_str', $rawCategory) : array_map('trim', explode(',', radar_str($rawCategory)));
     $categories = array_values(array_filter(radar_category_list(), static fn(string $c): bool => in_array($c, $asked, true)));
     $q = trim(radar_str($input['q'] ?? ''));
+    // Vacancy filters: region, state (UF), city and age group; they imply the vacancy category.
+    $jobRegion = radar_str($input['regiao'] ?? $input['job_region'] ?? '');
+    $jobState = strtoupper(radar_str($input['estado'] ?? $input['job_state'] ?? ''));
+    $jobCity = mb_substr(trim(radar_str($input['cidade'] ?? $input['job_city'] ?? '')), 0, 60);
+    $jobAge = radar_str($input['idade'] ?? $input['job_age'] ?? '');
+    $jobRegion = in_array($jobRegion, radar_job_regions(), true) ? $jobRegion : '';
+    $jobState = isset(radar_job_states()[$jobState]) ? $jobState : '';
+    $jobAge = isset(radar_job_ages()[$jobAge]) ? $jobAge : '';
+    if (($jobRegion !== '' || $jobState !== '' || $jobCity !== '' || $jobAge !== '') && $categories === []) {
+        $categories = [RADAR_JOB_CATEGORY];
+    }
     return [
+        'job_region' => $jobRegion, 'job_state' => $jobState, 'job_city' => $jobCity, 'job_age' => $jobAge,
         'window' => in_array($window, RADAR_NEWS_WINDOWS, true) ? $window : 0,
         'sort' => in_array($sort, ['viral', 'recent'], true) ? $sort : 'viral',
         'category' => implode(',', $categories),
@@ -59,6 +71,12 @@ function radar_news_where(array $filters, int $now, bool $withCategory): array
     if ($withCategory && $filters['categories'] !== []) {
         $where[] = 'category IN (' . implode(', ', array_fill(0, count($filters['categories']), '?')) . ')';
         array_push($params, ...$filters['categories']);
+    }
+    foreach (['job_region' => 'job_region', 'job_state' => 'job_state', 'job_city' => 'job_city', 'job_age' => 'job_age'] as $filter => $column) {
+        if (($filters[$filter] ?? '') !== '') {
+            $where[] = $column . ' = ?';
+            $params[] = $filters[$filter];
+        }
     }
     if ($filters['q'] !== '') {
         $where[] = '(title LIKE ? ESCAPE \'\\\' OR source_name LIKE ? ESCAPE \'\\\' OR summary LIKE ? ESCAPE \'\\\')';
@@ -151,6 +169,12 @@ function radar_news_decode(array $row, ?int $now = null): array
         'saved' => (int)$row['saved'] === 1,
         'note' => (string)$row['note'],
         'verification' => 'Conferência editorial pendente: o Radar lê manchetes e metadados, não verifica fatos.',
+        // Only vacancy stories carry a place and an age group, and only when the text names them.
+        'job' => (string)$row['category'] === RADAR_JOB_CATEGORY ? [
+            'region' => (string)($row['job_region'] ?? ''), 'state' => (string)($row['job_state'] ?? ''), 'city' => (string)($row['job_city'] ?? ''), 'age' => (string)($row['job_age'] ?? ''),
+            'age_label' => radar_job_ages()[(string)($row['job_age'] ?? '')] ?? '',
+            'note' => 'Lugar e idade lidos do texto da matéria; sem eles, a matéria não diz (confira no link original).',
+        ] : null,
     ];
 }
 
